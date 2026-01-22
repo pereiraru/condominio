@@ -9,6 +9,14 @@ export default function UnitsPage() {
   const [loading, setLoading] = useState(true);
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState<string | null>(null);
+  const [showModal, setShowModal] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [formData, setFormData] = useState({
+    code: '',
+    floor: '',
+    description: '',
+    monthlyFee: '45',
+  });
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   async function fetchUnits() {
@@ -66,6 +74,37 @@ export default function UnitsPage() {
     fileInputRef.current?.click();
   }
 
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setSaving(true);
+
+    try {
+      const res = await fetch('/api/units', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          code: formData.code,
+          floor: formData.floor ? parseInt(formData.floor) : null,
+          description: formData.description || null,
+          monthlyFee: formData.monthlyFee,
+        }),
+      });
+
+      if (res.ok) {
+        setShowModal(false);
+        setFormData({ code: '', floor: '', description: '', monthlyFee: '45' });
+        fetchUnits();
+      } else {
+        const data = await res.json();
+        alert(`Erro: ${data.error}`);
+      }
+    } catch (error) {
+      alert('Erro ao criar fraccao');
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
     <div className="flex min-h-screen bg-gray-50">
       <Sidebar />
@@ -88,7 +127,9 @@ export default function UnitsPage() {
             >
               {importing ? 'A importar...' : 'Importar Excel'}
             </button>
-            <button className="btn-primary">+ Nova Fraccao</button>
+            <button className="btn-primary" onClick={() => setShowModal(true)}>
+              + Nova Fraccao
+            </button>
           </div>
         </div>
 
@@ -135,6 +176,75 @@ export default function UnitsPage() {
         {importResult && (
           <div className={`mt-4 p-4 rounded-lg ${importResult.startsWith('Sucesso') ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
             {importResult}
+          </div>
+        )}
+
+        {/* Modal */}
+        {showModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-xl p-6 w-full max-w-md">
+              <h2 className="text-xl font-bold mb-4">Nova Fraccao</h2>
+              <form onSubmit={handleSubmit}>
+                <div className="mb-4">
+                  <label className="label">Codigo *</label>
+                  <input
+                    type="text"
+                    className="input"
+                    value={formData.code}
+                    onChange={(e) => setFormData({ ...formData, code: e.target.value })}
+                    placeholder="Ex: 1D, 2E, RCE"
+                    required
+                  />
+                </div>
+                <div className="mb-4">
+                  <label className="label">Andar</label>
+                  <input
+                    type="number"
+                    className="input"
+                    value={formData.floor}
+                    onChange={(e) => setFormData({ ...formData, floor: e.target.value })}
+                    placeholder="Ex: 1, 2, 3"
+                  />
+                </div>
+                <div className="mb-4">
+                  <label className="label">Descricao</label>
+                  <input
+                    type="text"
+                    className="input"
+                    value={formData.description}
+                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                    placeholder="Descricao opcional"
+                  />
+                </div>
+                <div className="mb-6">
+                  <label className="label">Quota Mensal (EUR) *</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    className="input"
+                    value={formData.monthlyFee}
+                    onChange={(e) => setFormData({ ...formData, monthlyFee: e.target.value })}
+                    required
+                  />
+                </div>
+                <div className="flex gap-2 justify-end">
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    onClick={() => setShowModal(false)}
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    className="btn-primary"
+                    disabled={saving}
+                  >
+                    {saving ? 'A guardar...' : 'Guardar'}
+                  </button>
+                </div>
+              </form>
+            </div>
           </div>
         )}
       </main>
