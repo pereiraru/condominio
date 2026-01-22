@@ -1,28 +1,70 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import Sidebar from '@/components/Sidebar';
 import { Unit } from '@/lib/types';
 
 export default function UnitsPage() {
   const [units, setUnits] = useState<Unit[]>([]);
   const [loading, setLoading] = useState(true);
+  const [importing, setImporting] = useState(false);
+  const [importResult, setImportResult] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  async function fetchUnits() {
+    try {
+      const res = await fetch('/api/units');
+      if (res.ok) {
+        setUnits(await res.json());
+      }
+    } catch (error) {
+      console.error('Error fetching units:', error);
+    } finally {
+      setLoading(false);
+    }
+  }
 
   useEffect(() => {
-    async function fetchUnits() {
-      try {
-        const res = await fetch('/api/units');
-        if (res.ok) {
-          setUnits(await res.json());
-        }
-      } catch (error) {
-        console.error('Error fetching units:', error);
-      } finally {
-        setLoading(false);
-      }
-    }
     fetchUnits();
   }, []);
+
+  async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setImporting(true);
+    setImportResult(null);
+
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const res = await fetch('/api/import', {
+        method: 'POST',
+        body: formData,
+      });
+
+      const data = await res.json();
+
+      if (res.ok) {
+        setImportResult(`Sucesso! ${data.message}`);
+        fetchUnits();
+      } else {
+        setImportResult(`Erro: ${data.error}`);
+      }
+    } catch (error) {
+      setImportResult('Erro ao importar ficheiro');
+    } finally {
+      setImporting(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
+  }
+
+  function handleImportClick() {
+    fileInputRef.current?.click();
+  }
 
   return (
     <div className="flex min-h-screen bg-gray-50">
@@ -31,7 +73,23 @@ export default function UnitsPage() {
       <main className="flex-1 p-8">
         <div className="flex justify-between items-center mb-6">
           <h1 className="text-2xl font-bold text-gray-900">Fraccoes</h1>
-          <button className="btn-primary">+ Nova Fraccao</button>
+          <div className="flex gap-2">
+            <input
+              type="file"
+              ref={fileInputRef}
+              onChange={handleFileChange}
+              accept=".xlsx,.xlsm,.xls"
+              className="hidden"
+            />
+            <button
+              className="btn-secondary"
+              onClick={handleImportClick}
+              disabled={importing}
+            >
+              {importing ? 'A importar...' : 'Importar Excel'}
+            </button>
+            <button className="btn-primary">+ Nova Fraccao</button>
+          </div>
         </div>
 
         {loading ? (
@@ -64,7 +122,19 @@ export default function UnitsPage() {
         {!loading && units.length === 0 && (
           <div className="card text-center py-12">
             <p className="text-gray-500 mb-4">Sem fraccoes registadas</p>
-            <button className="btn-primary">Importar do Excel</button>
+            <button
+              className="btn-primary"
+              onClick={handleImportClick}
+              disabled={importing}
+            >
+              {importing ? 'A importar...' : 'Importar do Excel'}
+            </button>
+          </div>
+        )}
+
+        {importResult && (
+          <div className={`mt-4 p-4 rounded-lg ${importResult.startsWith('Sucesso') ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+            {importResult}
           </div>
         )}
       </main>
