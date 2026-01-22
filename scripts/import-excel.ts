@@ -46,7 +46,7 @@ async function importExcel() {
   console.log(`Found ${unitCodes.size} units`);
   const unitMap: Record<string, string> = {}; // code -> id
 
-  for (const code of unitCodes) {
+  for (const code of Array.from(unitCodes)) {
     // Extract floor number if code is like "1D", "2E", etc.
     const floorMatch = code.match(/^(\d+)/);
     const floor = floorMatch ? parseInt(floorMatch[1]) : null;
