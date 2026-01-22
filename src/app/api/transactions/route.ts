@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
     const [transactions, total] = await Promise.all([
       prisma.transaction.findMany({
         where,
-        include: { unit: true },
+        include: { unit: true, creditor: true },
         orderBy: { date: 'desc' },
         take: limit,
         skip: offset,
@@ -45,22 +45,52 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
+    const months: string[] = body.months || [];
+    const totalAmount = parseFloat(body.amount);
 
-    const transaction = await prisma.transaction.create({
-      data: {
-        date: new Date(body.date),
-        valueDate: body.valueDate ? new Date(body.valueDate) : null,
-        description: body.description,
-        amount: parseFloat(body.amount),
-        balance: body.balance ? parseFloat(body.balance) : null,
-        type: body.type,
-        category: body.category,
-        unitId: body.unitId,
-      },
-      include: { unit: true },
-    });
+    if (months.length > 0) {
+      // Create one transaction per month, dividing amount equally
+      const perMonth = totalAmount / months.length;
+      const transactions = [];
 
-    return NextResponse.json(transaction, { status: 201 });
+      for (const month of months) {
+        const tx = await prisma.transaction.create({
+          data: {
+            date: new Date(body.date),
+            description: body.description,
+            amount: perMonth,
+            type: body.type,
+            category: body.category || null,
+            referenceMonth: month,
+            unitId: body.unitId || null,
+            creditorId: body.creditorId || null,
+          },
+          include: { unit: true, creditor: true },
+        });
+        transactions.push(tx);
+      }
+
+      return NextResponse.json(transactions, { status: 201 });
+    } else {
+      // Single transaction without month reference
+      const transaction = await prisma.transaction.create({
+        data: {
+          date: new Date(body.date),
+          valueDate: body.valueDate ? new Date(body.valueDate) : null,
+          description: body.description,
+          amount: totalAmount,
+          balance: body.balance ? parseFloat(body.balance) : null,
+          type: body.type,
+          category: body.category || null,
+          referenceMonth: body.referenceMonth || null,
+          unitId: body.unitId || null,
+          creditorId: body.creditorId || null,
+        },
+        include: { unit: true, creditor: true },
+      });
+
+      return NextResponse.json(transaction, { status: 201 });
+    }
   } catch (error) {
     console.error('Error creating transaction:', error);
     return NextResponse.json(

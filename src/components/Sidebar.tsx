@@ -7,6 +7,7 @@ const menuItems = [
   { href: '/dashboard', label: 'Dashboard', icon: '📊' },
   { href: '/dashboard/transactions', label: 'Transacoes', icon: '💰' },
   { href: '/dashboard/units', label: 'Fraccoes', icon: '🏠' },
+  { href: '/dashboard/creditors', label: 'Credores', icon: '🏢' },
   { href: '/dashboard/payments', label: 'Pagamentos', icon: '📋' },
   { href: '/dashboard/documents', label: 'Documentos', icon: '📄' },
   { href: '/dashboard/reports', label: 'Relatorios', icon: '📈' },

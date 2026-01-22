@@ -20,7 +20,7 @@ export default function TransactionList({ transactions }: TransactionListProps) 
           <tr className="text-left text-sm text-gray-500 border-b">
             <th className="pb-3 font-medium">Data</th>
             <th className="pb-3 font-medium">Descricao</th>
-            <th className="pb-3 font-medium">Fraccao</th>
+            <th className="pb-3 font-medium">Fraccao/Credor</th>
             <th className="pb-3 font-medium text-right">Valor</th>
           </tr>
         </thead>
@@ -32,7 +32,7 @@ export default function TransactionList({ transactions }: TransactionListProps) 
               </td>
               <td className="py-3 text-sm text-gray-900">{tx.description}</td>
               <td className="py-3 text-sm text-gray-600">
-                {tx.unit?.code ?? '-'}
+                {tx.unit?.code ?? tx.creditor?.name ?? '-'}
               </td>
               <td
                 className={`py-3 text-sm text-right font-medium ${

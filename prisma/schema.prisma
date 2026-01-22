@@ -28,28 +28,72 @@ model Unit {
   floor        Int?
   description  String?
   monthlyFee   Float         @default(45.0)
+  nib          String?
+  telefone     String?
+  email        String?
   residents    User[]
+  owners       Owner[]
   transactions Transaction[]
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
 }
 
+// Unit owners/residents (multiple per unit)
+model Owner {
+  id        String   @id @default(cuid())
+  name      String
+  unitId    String
+  unit      Unit     @relation(fields: [unitId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+}
+
+// Creditors (suppliers, service providers)
+model Creditor {
+  id          String               @id @default(cuid())
+  name        String
+  description String?
+  category    String               // "electricity", "water", "gas", "maintenance", "insurance", "cleaning", "other"
+  amountDue   Float?               // expected regular amount
+  email       String?
+  telefone    String?
+  nib         String?
+  attachments CreditorAttachment[]
+  transactions Transaction[]
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
+}
+
+// Creditor attachments (invoices, contracts)
+model CreditorAttachment {
+  id         String   @id @default(cuid())
+  creditorId String
+  creditor   Creditor @relation(fields: [creditorId], references: [id], onDelete: Cascade)
+  name       String
+  filename   String
+  mimeType   String
+  size       Int
+  uploadedAt DateTime @default(now())
+}
+
 // Financial transactions (expenses and payments)
 model Transaction {
-  id          String   @id @default(cuid())
-  date        DateTime
-  valueDate   DateTime?
-  description String
-  amount      Float    // positive = income, negative = expense
-  balance     Float?
-  type        String   // "payment", "expense", "fee", "transfer"
-  category    String?  // "electricity", "maintenance", "bank_fee", "savings", etc.
-  unitId      String?
-  unit        Unit?    @relation(fields: [unitId], references: [id])
-  documentId  String?
-  document    Document? @relation(fields: [documentId], references: [id])
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id             String    @id @default(cuid())
+  date           DateTime
+  valueDate      DateTime?
+  description    String
+  amount         Float     // positive = income, negative = expense
+  balance        Float?
+  type           String    // "payment", "expense", "fee", "transfer"
+  category       String?   // "electricity", "maintenance", "bank_fee", "savings", etc.
+  referenceMonth String?   // "YYYY-MM" - which month this payment/expense covers
+  unitId         String?
+  unit           Unit?     @relation(fields: [unitId], references: [id])
+  creditorId     String?
+  creditor       Creditor? @relation(fields: [creditorId], references: [id])
+  documentId     String?
+  document       Document? @relation(fields: [documentId], references: [id])
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 }
 
 // Documents (invoices, receipts, minutes)
