@@ -1,0 +1,17 @@
+services:
+  app:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      - DATABASE_URL=file:/app/data/condominio.db
+      - NEXTAUTH_SECRET=${NEXTAUTH_SECRET:-change-me-in-production}
+      - NEXTAUTH_URL=http://localhost:3000
+    volumes:
+      - db-data:/app/data
+      - uploads:/app/public/uploads
+    restart: unless-stopped
+
+volumes:
+  db-data:
+  uploads:

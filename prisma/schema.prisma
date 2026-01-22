@@ -1,0 +1,76 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// Users (admin and residents)
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  name         String
+  role         String   @default("resident") // "admin" or "resident"
+  unitId       String?
+  unit         Unit?    @relation(fields: [unitId], references: [id])
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+// Building units (apartments)
+model Unit {
+  id           String        @id @default(cuid())
+  code         String        @unique // e.g., "1D", "1E", "2D", "RCE", "CV"
+  floor        Int?
+  description  String?
+  monthlyFee   Float         @default(45.0)
+  residents    User[]
+  transactions Transaction[]
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+}
+
+// Financial transactions (expenses and payments)
+model Transaction {
+  id          String   @id @default(cuid())
+  date        DateTime
+  valueDate   DateTime?
+  description String
+  amount      Float    // positive = income, negative = expense
+  balance     Float?
+  type        String   // "payment", "expense", "fee", "transfer"
+  category    String?  // "electricity", "maintenance", "bank_fee", "savings", etc.
+  unitId      String?
+  unit        Unit?    @relation(fields: [unitId], references: [id])
+  documentId  String?
+  document    Document? @relation(fields: [documentId], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// Documents (invoices, receipts, minutes)
+model Document {
+  id           String        @id @default(cuid())
+  name         String
+  filename     String
+  mimeType     String
+  size         Int
+  category     String        // "invoice", "receipt", "minutes", "contract", "other"
+  description  String?
+  transactions Transaction[]
+  uploadedAt   DateTime      @default(now())
+}
+
+// Monthly fee configuration per year
+model FeeConfig {
+  id        String   @id @default(cuid())
+  year      Int
+  unitCode  String
+  amount    Float
+  createdAt DateTime @default(now())
+
+  @@unique([year, unitCode])
+}
