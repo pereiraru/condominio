@@ -292,29 +292,29 @@ export default function ReportsPage() {
   const totalExpenses = filteredMonthlyData.reduce((sum, d) => sum + d.expenses, 0);
 
   return (
-    <div className="flex min-h-screen bg-gray-50">
+    <div className="flex min-h-screen">
       <Sidebar />
 
       <main className="flex-1 p-8">
-        <h1 className="text-2xl font-bold text-gray-900 mb-6">Relatorios</h1>
+        <h1 className="text-2xl font-semibold text-gray-900 mb-6">Relatorios</h1>
 
         {/* Tabs */}
-        <div className="flex gap-4 mb-6 border-b border-gray-200">
+        <div className="flex gap-1 mb-6 bg-gray-100 p-1 rounded-xl w-fit">
           <button
-            className={`pb-3 px-1 font-medium text-sm border-b-2 transition-colors ${
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
               activeTab === 'visao'
-                ? 'border-primary-600 text-primary-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700'
+                ? 'bg-white text-gray-900 shadow-sm'
+                : 'text-gray-500 hover:text-gray-700'
             }`}
             onClick={() => setActiveTab('visao')}
           >
             Visao Geral
           </button>
           <button
-            className={`pb-3 px-1 font-medium text-sm border-b-2 transition-colors ${
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
               activeTab === 'resumo'
-                ? 'border-primary-600 text-primary-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700'
+                ? 'bg-white text-gray-900 shadow-sm'
+                : 'text-gray-500 hover:text-gray-700'
             }`}
             onClick={() => setActiveTab('resumo')}
           >
@@ -328,61 +328,79 @@ export default function ReportsPage() {
           <>
             {/* Resumo Mensal Tab */}
             {/* Year Filter */}
-            <div className="flex items-center gap-4 mb-6">
-              <label className="text-sm font-medium text-gray-700">Ano:</label>
-              <select
-                className="input w-32"
-                value={resumoYear}
-                onChange={(e) => setResumoYear(e.target.value === 'all' ? 'all' : parseInt(e.target.value))}
-              >
-                <option value="all">Todos</option>
-                {availableYears.map(year => (
-                  <option key={year} value={year}>{year}</option>
+            <div className="flex items-center gap-3 mb-6">
+              <span className="text-sm text-gray-500">Ano:</span>
+              <div className="flex gap-1 bg-gray-100 p-1 rounded-lg">
+                <button
+                  className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all ${
+                    resumoYear === 'all' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+                  }`}
+                  onClick={() => setResumoYear('all')}
+                >
+                  Todos
+                </button>
+                {availableYears.slice(0, 5).map(year => (
+                  <button
+                    key={year}
+                    className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all ${
+                      resumoYear === year ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+                    }`}
+                    onClick={() => setResumoYear(year)}
+                  >
+                    {year}
+                  </button>
                 ))}
-              </select>
+              </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
               <div className="card">
-                <h3 className="text-sm font-medium text-gray-500">Total Receitas {resumoYear !== 'all' ? resumoYear : ''}</h3>
-                <p className="text-2xl font-bold text-green-600">{totalIncome.toFixed(2)} EUR</p>
+                <h3 className="text-sm text-gray-500 mb-1">Total Receitas {resumoYear !== 'all' ? resumoYear : ''}</h3>
+                <p className="text-2xl font-semibold text-green-600">{totalIncome.toFixed(2)} EUR</p>
               </div>
               <div className="card">
-                <h3 className="text-sm font-medium text-gray-500">Total Despesas {resumoYear !== 'all' ? resumoYear : ''}</h3>
-                <p className="text-2xl font-bold text-red-600">{totalExpenses.toFixed(2)} EUR</p>
+                <h3 className="text-sm text-gray-500 mb-1">Total Despesas {resumoYear !== 'all' ? resumoYear : ''}</h3>
+                <p className="text-2xl font-semibold text-red-600">{totalExpenses.toFixed(2)} EUR</p>
               </div>
               <div className="card">
-                <h3 className="text-sm font-medium text-gray-500">Saldo Total {resumoYear !== 'all' ? resumoYear : ''}</h3>
-                <p className={`text-2xl font-bold ${totalIncome - totalExpenses >= 0 ? 'text-primary-600' : 'text-red-600'}`}>
+                <h3 className="text-sm text-gray-500 mb-1">Saldo Total {resumoYear !== 'all' ? resumoYear : ''}</h3>
+                <p className={`text-2xl font-semibold ${totalIncome - totalExpenses >= 0 ? 'text-gray-900' : 'text-red-600'}`}>
                   {(totalIncome - totalExpenses).toFixed(2)} EUR
                 </p>
               </div>
             </div>
 
             <div className="card">
-              <h2 className="text-lg font-semibold text-gray-900 mb-4">Resumo Mensal</h2>
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-semibold text-gray-900">Resumo Mensal</h2>
+              </div>
               <div className="overflow-x-auto">
                 <table className="w-full">
                   <thead>
-                    <tr className="text-left text-sm text-gray-500 border-b">
+                    <tr className="text-left text-sm text-gray-500">
                       <th
-                        className="pb-3 font-medium cursor-pointer hover:text-gray-900 select-none"
+                        className="pb-4 font-medium cursor-pointer hover:text-gray-900 select-none"
                         onClick={() => setResumoSortAsc(!resumoSortAsc)}
                       >
-                        Mes {resumoSortAsc ? '↑' : '↓'}
+                        <span className="flex items-center gap-1">
+                          Mes
+                          <svg className={`w-4 h-4 transition-transform ${resumoSortAsc ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                          </svg>
+                        </span>
                       </th>
-                      <th className="pb-3 font-medium text-right">Receitas</th>
-                      <th className="pb-3 font-medium text-right">Despesas</th>
-                      <th className="pb-3 font-medium text-right">Saldo</th>
+                      <th className="pb-4 font-medium text-right">Receitas</th>
+                      <th className="pb-4 font-medium text-right">Despesas</th>
+                      <th className="pb-4 font-medium text-right">Saldo</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {filteredMonthlyData.map((d) => (
-                      <tr key={d.month} className="hover:bg-gray-50">
-                        <td className="py-3 text-sm font-medium text-gray-900">{formatMonth(d.month)}</td>
-                        <td className="py-3 text-sm text-right text-green-600">+{d.income.toFixed(2)} EUR</td>
-                        <td className="py-3 text-sm text-right text-red-600">-{d.expenses.toFixed(2)} EUR</td>
-                        <td className={`py-3 text-sm text-right font-medium ${d.balance >= 0 ? 'text-primary-600' : 'text-red-600'}`}>
+                  <tbody>
+                    {filteredMonthlyData.map((d, i) => (
+                      <tr key={d.month} className={`hover:bg-gray-50 transition-colors ${i !== filteredMonthlyData.length - 1 ? 'border-b border-gray-100' : ''}`}>
+                        <td className="py-4 text-sm font-medium text-gray-900">{formatMonth(d.month)}</td>
+                        <td className="py-4 text-sm text-right text-green-600 font-medium">+{d.income.toFixed(2)} EUR</td>
+                        <td className="py-4 text-sm text-right text-red-500 font-medium">-{d.expenses.toFixed(2)} EUR</td>
+                        <td className={`py-4 text-sm text-right font-semibold ${d.balance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                           {d.balance >= 0 ? '+' : ''}{d.balance.toFixed(2)} EUR
                         </td>
                       </tr>
@@ -395,19 +413,23 @@ export default function ReportsPage() {
         ) : (
           <>
             {/* Visao Geral Tab */}
-            <div className="flex items-center gap-4 mb-6">
+            <div className="flex items-center gap-2 mb-6">
               <button
-                className="text-gray-500 hover:text-gray-700 px-2 py-1"
+                className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-all"
                 onClick={() => setSelectedYear(selectedYear - 1)}
               >
-                &larr;
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                </svg>
               </button>
-              <span className="font-bold text-xl text-gray-700">{selectedYear}</span>
+              <span className="font-semibold text-xl text-gray-900 min-w-[60px] text-center">{selectedYear}</span>
               <button
-                className="text-gray-500 hover:text-gray-700 px-2 py-1"
+                className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-all"
                 onClick={() => setSelectedYear(selectedYear + 1)}
               >
-                &rarr;
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
               </button>
             </div>
 
