@@ -3,7 +3,8 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Sidebar from '@/components/Sidebar';
-import { Transaction } from '@/lib/types';
+import MonthCalendar from '@/components/MonthCalendar';
+import { Transaction, MonthPaymentStatus } from '@/lib/types';
 
 interface MonthlyData {
   month: string;
@@ -64,6 +65,12 @@ export default function ReportsPage() {
   const [panelDate, setPanelDate] = useState('');
   const [panelTransactionId, setPanelTransactionId] = useState('');
   const [panelSaving, setPanelSaving] = useState(false);
+  const [panelFullAmount, setPanelFullAmount] = useState(0);
+  const [panelSelectedMonths, setPanelSelectedMonths] = useState<string[]>([]);
+  const [panelCustomAmounts, setPanelCustomAmounts] = useState<Record<string, string>>({});
+  const [panelShowCustom, setPanelShowCustom] = useState(false);
+  const [panelCalendarYear, setPanelCalendarYear] = useState(new Date().getFullYear());
+  const [panelMonthStatus, setPanelMonthStatus] = useState<MonthPaymentStatus[]>([]);
 
   // Transaction selection modal state
   const [showTxModal, setShowTxModal] = useState(false);
@@ -183,7 +190,7 @@ export default function ReportsPage() {
     setPanelOpen(true);
   };
 
-  const openEditPanel = (
+  const openEditPanel = async (
     type: 'payment' | 'expense',
     targetId: string,
     targetName: string,
@@ -199,8 +206,117 @@ export default function ReportsPage() {
     setPanelDescription(transaction.description);
     setPanelTransactionId(transaction.id);
     setPanelDate(transaction.date.split('T')[0]);
-    setPanelOpen(true);
+    setPanelShowCustom(false);
     setShowTxModal(false);
+
+    // Fetch full transaction with allocations
+    try {
+      const res = await fetch(`/api/transactions/${transaction.id}`);
+      if (res.ok) {
+        const fullTx = await res.json();
+        setPanelFullAmount(Math.abs(fullTx.amount));
+        if (fullTx.monthAllocations && fullTx.monthAllocations.length > 0) {
+          const months = fullTx.monthAllocations.map((a: { month: string }) => a.month);
+          setPanelSelectedMonths(months);
+          // Check if amounts are custom
+          const equalAmount = Math.abs(fullTx.amount) / months.length;
+          const isCustom = fullTx.monthAllocations.some(
+            (a: { amount: number }) => Math.abs(a.amount - equalAmount) > 0.01
+          );
+          if (isCustom) {
+            setPanelShowCustom(true);
+            const amounts: Record<string, string> = {};
+            fullTx.monthAllocations.forEach((a: { month: string; amount: number }) => {
+              amounts[a.month] = a.amount.toFixed(2);
+            });
+            setPanelCustomAmounts(amounts);
+          } else {
+            setPanelCustomAmounts({});
+          }
+          setPanelCalendarYear(parseInt(months[0].split('-')[0]));
+        } else {
+          setPanelSelectedMonths([month]);
+          setPanelCustomAmounts({});
+          setPanelCalendarYear(parseInt(month.split('-')[0]));
+        }
+      } else {
+        setPanelFullAmount(Math.abs(transaction.amount));
+        setPanelSelectedMonths([month]);
+        setPanelCustomAmounts({});
+        setPanelCalendarYear(parseInt(month.split('-')[0]));
+      }
+    } catch {
+      setPanelFullAmount(Math.abs(transaction.amount));
+      setPanelSelectedMonths([month]);
+      setPanelCustomAmounts({});
+      setPanelCalendarYear(parseInt(month.split('-')[0]));
+    }
+
+    // Fetch monthly status for the target
+    fetchPanelMonthlyStatus(targetId, type, parseInt(month.split('-')[0]));
+    setPanelOpen(true);
+  };
+
+  const fetchPanelMonthlyStatus = async (targetId: string, type: 'payment' | 'expense', year: number) => {
+    const paramName = type === 'payment' ? 'unitId' : 'creditorId';
+    try {
+      const res = await fetch(`/api/monthly-status?${paramName}=${targetId}&year=${year}`);
+      if (res.ok) {
+        const data = await res.json();
+        setPanelMonthStatus(data.months);
+      }
+    } catch (error) {
+      console.error('Error fetching monthly status:', error);
+    }
+  };
+
+  // Refetch panel monthly status when calendar year changes
+  useEffect(() => {
+    if (panelOpen && panelTargetId && panelMode === 'edit') {
+      fetchPanelMonthlyStatus(panelTargetId, panelType, panelCalendarYear);
+    }
+  }, [panelCalendarYear]);
+
+  const handlePanelToggleMonth = (month: string) => {
+    setPanelSelectedMonths((prev) => {
+      const next = prev.includes(month)
+        ? prev.filter((m) => m !== month)
+        : [...prev, month].sort();
+
+      if (!prev.includes(month) && !panelCustomAmounts[month]) {
+        const equalAmount = panelFullAmount / (next.length || 1);
+        if (!panelShowCustom) {
+          const amounts: Record<string, string> = {};
+          next.forEach((m) => { amounts[m] = equalAmount.toFixed(2); });
+          setPanelCustomAmounts(amounts);
+        } else {
+          setPanelCustomAmounts((ca) => ({ ...ca, [month]: equalAmount.toFixed(2) }));
+        }
+      } else if (prev.includes(month)) {
+        setPanelCustomAmounts((ca) => {
+          const copy = { ...ca };
+          delete copy[month];
+          return copy;
+        });
+      }
+      return next;
+    });
+  };
+
+  const getPanelAllocations = (): { month: string; amount: number }[] => {
+    if (panelSelectedMonths.length === 0) return [];
+    if (panelShowCustom) {
+      return panelSelectedMonths.map((month) => ({
+        month,
+        amount: parseFloat(panelCustomAmounts[month] || '0'),
+      }));
+    }
+    const perMonth = panelFullAmount / panelSelectedMonths.length;
+    return panelSelectedMonths.map((month) => ({ month, amount: perMonth }));
+  };
+
+  const getPanelAllocationTotal = (): number => {
+    return getPanelAllocations().reduce((sum, a) => sum + a.amount, 0);
   };
 
   const closePanel = () => {
@@ -222,14 +338,15 @@ export default function ReportsPage() {
       const finalAmount = panelType === 'expense' ? -Math.abs(amount) : Math.abs(amount);
 
       if (panelMode === 'edit' && panelTransactionId) {
-        // Update existing transaction
+        // Update existing transaction with new allocations
+        const allocations = getPanelAllocations();
         const res = await fetch(`/api/transactions/${panelTransactionId}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             unitId: panelType === 'payment' ? panelTargetId : null,
             creditorId: panelType === 'expense' ? panelTargetId : null,
-            monthAllocations: [{ month: panelMonth, amount: Math.abs(parseFloat(panelAmount)) }],
+            monthAllocations: allocations,
           }),
         });
 
@@ -679,20 +796,81 @@ export default function ReportsPage() {
 
                         {panelMode === 'edit' ? (
                           <>
-                            <div>
-                              <label className="label">Valor</label>
-                              <p className="font-medium text-gray-900">{panelAmount}€</p>
+                            <div className="p-3 bg-gray-50 rounded-lg">
+                              <p className="text-xs text-gray-500 mb-1">Valor da transação</p>
+                              <p className="text-lg font-bold text-gray-900">{panelFullAmount.toFixed(2)} EUR</p>
+                              <p className="text-xs text-gray-500 mt-1">{panelDescription}</p>
+                              <p className="text-xs text-gray-400">{new Date(panelDate).toLocaleDateString('pt-PT')}</p>
                             </div>
+
                             <div>
-                              <label className="label">Descrição</label>
-                              <p className="font-medium text-gray-900">{panelDescription}</p>
+                              <label className="label mb-2">Meses de referência</label>
+                              <MonthCalendar
+                                year={panelCalendarYear}
+                                onYearChange={setPanelCalendarYear}
+                                monthStatus={panelMonthStatus}
+                                selectedMonths={panelSelectedMonths}
+                                onToggleMonth={handlePanelToggleMonth}
+                              />
                             </div>
-                            <div>
-                              <label className="label">Data</label>
-                              <p className="font-medium text-gray-900">{new Date(panelDate).toLocaleDateString('pt-PT')}</p>
-                            </div>
+
+                            {panelSelectedMonths.length > 0 && (
+                              <div className="space-y-2">
+                                <div className="flex items-center justify-between">
+                                  <span className="text-sm text-gray-600">
+                                    {panelSelectedMonths.length} mês(es) &mdash; {(panelFullAmount / panelSelectedMonths.length).toFixed(2)} EUR/mês
+                                  </span>
+                                  <button
+                                    type="button"
+                                    className={`text-xs px-2 py-1 rounded ${panelShowCustom ? 'bg-primary-100 text-primary-700' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                                    onClick={() => {
+                                      setPanelShowCustom(!panelShowCustom);
+                                      if (!panelShowCustom) {
+                                        const perMonth = panelFullAmount / panelSelectedMonths.length;
+                                        const amounts: Record<string, string> = {};
+                                        panelSelectedMonths.forEach((m) => { amounts[m] = perMonth.toFixed(2); });
+                                        setPanelCustomAmounts(amounts);
+                                      }
+                                    }}
+                                  >
+                                    Personalizar
+                                  </button>
+                                </div>
+
+                                {panelShowCustom && (
+                                  <div className="space-y-1 p-2 bg-gray-50 rounded-lg">
+                                    {panelSelectedMonths.map((month) => (
+                                      <div key={month} className="flex items-center gap-2">
+                                        <span className="text-xs text-gray-500 w-16">{month}</span>
+                                        <input
+                                          type="number"
+                                          step="0.01"
+                                          className="input text-sm py-1 flex-1"
+                                          value={panelCustomAmounts[month] || ''}
+                                          onChange={(e) => setPanelCustomAmounts({ ...panelCustomAmounts, [month]: e.target.value })}
+                                        />
+                                        <span className="text-xs text-gray-400">EUR</span>
+                                      </div>
+                                    ))}
+                                    <div className={`text-xs mt-1 ${getPanelAllocationTotal() > panelFullAmount + 0.01 ? 'text-red-500' : 'text-gray-500'}`}>
+                                      Total: {getPanelAllocationTotal().toFixed(2)} / {panelFullAmount.toFixed(2)} EUR
+                                      {getPanelAllocationTotal() > panelFullAmount + 0.01 && ' (excede o valor!)'}
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+
                             <button
-                              className="btn-secondary w-full"
+                              className="btn-primary w-full"
+                              onClick={handleSaveTransaction}
+                              disabled={panelSaving || panelSelectedMonths.length === 0 || getPanelAllocationTotal() > panelFullAmount + 0.01}
+                            >
+                              {panelSaving ? 'A guardar...' : 'Guardar'}
+                            </button>
+
+                            <button
+                              className="btn-secondary w-full text-sm"
                               onClick={() => router.push(`/dashboard/transactions?id=${panelTransactionId}`)}
                             >
                               Ver Transação Completa

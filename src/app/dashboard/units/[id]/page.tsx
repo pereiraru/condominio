@@ -36,6 +36,18 @@ export default function UnitDetailPage() {
   const [pastYearsDebt, setPastYearsDebt] = useState(0);
   const [paymentHistory, setPaymentHistory] = useState<Record<string, number>>({});
 
+  // History edit panel state
+  const [historyPanelOpen, setHistoryPanelOpen] = useState(false);
+  const [historyPanelMonth, setHistoryPanelMonth] = useState('');
+  const [historyPanelTransactions, setHistoryPanelTransactions] = useState<Transaction[]>([]);
+  const [historyPanelSelectedTx, setHistoryPanelSelectedTx] = useState<Transaction | null>(null);
+  const [historyPanelSelectedMonths, setHistoryPanelSelectedMonths] = useState<string[]>([]);
+  const [historyPanelCustomAmounts, setHistoryPanelCustomAmounts] = useState<Record<string, string>>({});
+  const [historyPanelShowCustom, setHistoryPanelShowCustom] = useState(false);
+  const [historyPanelCalendarYear, setHistoryPanelCalendarYear] = useState(new Date().getFullYear());
+  const [historyPanelMonthStatus, setHistoryPanelMonthStatus] = useState<MonthPaymentStatus[]>([]);
+  const [historyPanelSaving, setHistoryPanelSaving] = useState(false);
+
   useEffect(() => {
     fetchUnit();
     fetchPaymentHistory();
@@ -116,6 +128,159 @@ export default function UnitDetailPage() {
     } catch (error) {
       console.error('Error fetching payment history:', error);
     }
+  }
+
+  async function handleHistoryCellClick(month: string) {
+    setHistoryPanelMonth(month);
+    setHistoryPanelCalendarYear(parseInt(month.split('-')[0]));
+    setHistoryPanelSelectedTx(null);
+    setHistoryPanelSelectedMonths([]);
+    setHistoryPanelCustomAmounts({});
+    setHistoryPanelShowCustom(false);
+
+    try {
+      // Fetch transactions allocated to this month
+      const res = await fetch(`/api/units/${id}/month-transactions?month=${month}`);
+      if (res.ok) {
+        const data = await res.json();
+        setHistoryPanelTransactions(data.transactions);
+        // If single transaction, auto-select it
+        if (data.transactions.length === 1) {
+          selectHistoryPanelTransaction(data.transactions[0]);
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching month transactions:', error);
+    }
+
+    // Fetch monthly status
+    fetchHistoryPanelMonthStatus(parseInt(month.split('-')[0]));
+    setHistoryPanelOpen(true);
+  }
+
+  function selectHistoryPanelTransaction(tx: Transaction) {
+    setHistoryPanelSelectedTx(tx);
+    if (tx.monthAllocations && tx.monthAllocations.length > 0) {
+      const months = tx.monthAllocations.map((a) => a.month);
+      setHistoryPanelSelectedMonths(months);
+      const equalAmount = Math.abs(tx.amount) / months.length;
+      const isCustom = tx.monthAllocations.some(
+        (a) => Math.abs(a.amount - equalAmount) > 0.01
+      );
+      if (isCustom) {
+        setHistoryPanelShowCustom(true);
+        const amounts: Record<string, string> = {};
+        tx.monthAllocations.forEach((a) => {
+          amounts[a.month] = a.amount.toFixed(2);
+        });
+        setHistoryPanelCustomAmounts(amounts);
+      } else {
+        setHistoryPanelShowCustom(false);
+        setHistoryPanelCustomAmounts({});
+      }
+      setHistoryPanelCalendarYear(parseInt(months[0].split('-')[0]));
+    } else {
+      setHistoryPanelSelectedMonths([historyPanelMonth]);
+      setHistoryPanelCustomAmounts({});
+      setHistoryPanelShowCustom(false);
+    }
+  }
+
+  async function fetchHistoryPanelMonthStatus(year: number) {
+    try {
+      const res = await fetch(`/api/monthly-status?unitId=${id}&year=${year}`);
+      if (res.ok) {
+        const data = await res.json();
+        setHistoryPanelMonthStatus(data.months);
+      }
+    } catch (error) {
+      console.error('Error fetching monthly status:', error);
+    }
+  }
+
+  useEffect(() => {
+    if (historyPanelOpen && historyPanelSelectedTx) {
+      fetchHistoryPanelMonthStatus(historyPanelCalendarYear);
+    }
+  }, [historyPanelCalendarYear]);
+
+  function handleHistoryPanelToggleMonth(month: string) {
+    if (!historyPanelSelectedTx) return;
+    const txAmount = Math.abs(historyPanelSelectedTx.amount);
+
+    setHistoryPanelSelectedMonths((prev) => {
+      const next = prev.includes(month)
+        ? prev.filter((m) => m !== month)
+        : [...prev, month].sort();
+
+      if (!prev.includes(month) && !historyPanelCustomAmounts[month]) {
+        const equalAmount = txAmount / (next.length || 1);
+        if (!historyPanelShowCustom) {
+          const amounts: Record<string, string> = {};
+          next.forEach((m) => { amounts[m] = equalAmount.toFixed(2); });
+          setHistoryPanelCustomAmounts(amounts);
+        } else {
+          setHistoryPanelCustomAmounts((ca) => ({ ...ca, [month]: equalAmount.toFixed(2) }));
+        }
+      } else if (prev.includes(month)) {
+        setHistoryPanelCustomAmounts((ca) => {
+          const copy = { ...ca };
+          delete copy[month];
+          return copy;
+        });
+      }
+      return next;
+    });
+  }
+
+  function getHistoryPanelAllocations(): { month: string; amount: number }[] {
+    if (!historyPanelSelectedTx || historyPanelSelectedMonths.length === 0) return [];
+    const txAmount = Math.abs(historyPanelSelectedTx.amount);
+    if (historyPanelShowCustom) {
+      return historyPanelSelectedMonths.map((month) => ({
+        month,
+        amount: parseFloat(historyPanelCustomAmounts[month] || '0'),
+      }));
+    }
+    const perMonth = txAmount / historyPanelSelectedMonths.length;
+    return historyPanelSelectedMonths.map((month) => ({ month, amount: perMonth }));
+  }
+
+  function getHistoryPanelAllocationTotal(): number {
+    return getHistoryPanelAllocations().reduce((sum, a) => sum + a.amount, 0);
+  }
+
+  async function handleHistoryPanelSave() {
+    if (!historyPanelSelectedTx) return;
+    setHistoryPanelSaving(true);
+    try {
+      const allocations = getHistoryPanelAllocations();
+      const res = await fetch(`/api/transactions/${historyPanelSelectedTx.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ monthAllocations: allocations }),
+      });
+
+      if (res.ok) {
+        setHistoryPanelOpen(false);
+        fetchPaymentHistory();
+        fetchUnit();
+        fetchMonthlyStatus();
+      } else {
+        const data = await res.json();
+        alert(`Erro: ${data.error}`);
+      }
+    } catch {
+      alert('Erro ao guardar');
+    } finally {
+      setHistoryPanelSaving(false);
+    }
+  }
+
+  function closeHistoryPanel() {
+    setHistoryPanelOpen(false);
+    setHistoryPanelSelectedTx(null);
+    setHistoryPanelTransactions([]);
   }
 
   async function fetchUnit() {
@@ -520,94 +685,243 @@ export default function UnitDetailPage() {
           </div>
         ) : (
           /* Histórico Tab */
-          <div>
-            {/* Summary Cards */}
-            {(() => {
-              const currentYear = new Date().getFullYear();
-              const totalAllTime = Object.values(paymentHistory).reduce((sum, v) => sum + v, 0);
-              const totalCurrentYear = Object.entries(paymentHistory)
-                .filter(([k]) => k.startsWith(`${currentYear}-`))
-                .reduce((sum, [, v]) => sum + v, 0);
-              const monthsWithPayments = Object.keys(paymentHistory).length;
+          <div className={`flex gap-6`}>
+            <div className={`flex-1 ${historyPanelOpen ? 'max-w-[calc(100%-340px)]' : ''}`}>
+              {/* Summary Cards */}
+              {(() => {
+                const currentYear = new Date().getFullYear();
+                const totalAllTime = Object.values(paymentHistory).reduce((sum, v) => sum + v, 0);
+                const totalCurrentYear = Object.entries(paymentHistory)
+                  .filter(([k]) => k.startsWith(`${currentYear}-`))
+                  .reduce((sum, [, v]) => sum + v, 0);
 
-              return (
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-                  <div className="card">
-                    <h3 className="text-sm text-gray-500 mb-1">Quota Mensal</h3>
-                    <p className="text-2xl font-semibold text-gray-900">{unit.monthlyFee.toFixed(2)} EUR</p>
+                return (
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                    <div className="card">
+                      <h3 className="text-sm text-gray-500 mb-1">Quota Mensal</h3>
+                      <p className="text-2xl font-semibold text-gray-900">{unit.monthlyFee.toFixed(2)} EUR</p>
+                    </div>
+                    <div className="card">
+                      <h3 className="text-sm text-gray-500 mb-1">Pago em {currentYear}</h3>
+                      <p className="text-2xl font-semibold text-green-600">{totalCurrentYear.toFixed(2)} EUR</p>
+                    </div>
+                    <div className="card">
+                      <h3 className="text-sm text-gray-500 mb-1">Total Histórico</h3>
+                      <p className="text-2xl font-semibold text-gray-900">{totalAllTime.toFixed(2)} EUR</p>
+                    </div>
+                    <div className="card">
+                      <h3 className="text-sm text-gray-500 mb-1">Dívida Total</h3>
+                      <p className={`text-2xl font-semibold ${pastYearsDebt > 0 ? 'text-red-500' : 'text-green-600'}`}>
+                        {pastYearsDebt.toFixed(2)} EUR
+                      </p>
+                    </div>
                   </div>
-                  <div className="card">
-                    <h3 className="text-sm text-gray-500 mb-1">Pago em {currentYear}</h3>
-                    <p className="text-2xl font-semibold text-green-600">{totalCurrentYear.toFixed(2)} EUR</p>
-                  </div>
-                  <div className="card">
-                    <h3 className="text-sm text-gray-500 mb-1">Total Histórico</h3>
-                    <p className="text-2xl font-semibold text-gray-900">{totalAllTime.toFixed(2)} EUR</p>
-                  </div>
-                  <div className="card">
-                    <h3 className="text-sm text-gray-500 mb-1">Dívida Total</h3>
-                    <p className={`text-2xl font-semibold ${pastYearsDebt > 0 ? 'text-red-500' : 'text-green-600'}`}>
-                      {pastYearsDebt.toFixed(2)} EUR
-                    </p>
-                  </div>
+                );
+              })()}
+
+              {/* Payment History Table */}
+              <div className="card">
+                <h2 className="text-lg font-semibold mb-4">Histórico de Pagamentos</h2>
+                <p className="text-xs text-gray-500 mb-4">Clique numa célula para editar a alocação de meses</p>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="text-left text-gray-500 border-b">
+                        <th className="pb-2 pr-3 font-medium sticky left-0 bg-white"></th>
+                        {['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'].map((m) => (
+                          <th key={m} className="pb-2 px-2 font-medium text-center min-w-[60px]">{m}</th>
+                        ))}
+                        <th className="pb-2 px-2 font-medium text-right">Total</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {Array.from({ length: new Date().getFullYear() - 2011 + 1 }, (_, i) => new Date().getFullYear() - i).map((year) => {
+                        const yearTotal = Array.from({ length: 12 }, (_, m) => {
+                          const monthStr = `${year}-${(m + 1).toString().padStart(2, '0')}`;
+                          return paymentHistory[monthStr] || 0;
+                        }).reduce((sum, v) => sum + v, 0);
+
+                        return (
+                          <tr key={year}>
+                            <td className="py-2 pr-3 font-semibold text-gray-900 sticky left-0 bg-white text-right">
+                              {year}
+                            </td>
+                            {Array.from({ length: 12 }, (_, m) => {
+                              const monthStr = `${year}-${(m + 1).toString().padStart(2, '0')}`;
+                              const amount = paymentHistory[monthStr] || 0;
+                              const isSelected = historyPanelOpen && historyPanelMonth === monthStr;
+                              return (
+                                <td
+                                  key={monthStr}
+                                  className={`py-2 px-2 text-center cursor-pointer transition-colors ${
+                                    isSelected
+                                      ? 'bg-primary-100 ring-2 ring-primary-500'
+                                      : amount > 0
+                                        ? 'bg-green-50 text-green-700 hover:bg-green-100'
+                                        : 'hover:bg-gray-50'
+                                  }`}
+                                  onClick={() => handleHistoryCellClick(monthStr)}
+                                >
+                                  {amount > 0 ? (
+                                    <span className="text-sm font-medium">
+                                      {Number.isInteger(amount) ? amount : amount.toFixed(2)}
+                                    </span>
+                                  ) : (
+                                    <span className="text-sm text-gray-300">-</span>
+                                  )}
+                                </td>
+                              );
+                            })}
+                            <td className="py-2 px-2 text-right font-semibold text-gray-900">
+                              {yearTotal > 0 ? `${yearTotal.toFixed(2)}` : '-'}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
                 </div>
-              );
-            })()}
-
-            {/* Payment History Table */}
-            <div className="card">
-              <h2 className="text-lg font-semibold mb-4">Histórico de Pagamentos</h2>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="text-left text-gray-500 border-b">
-                      <th className="pb-2 pr-3 font-medium sticky left-0 bg-white"></th>
-                      {['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'].map((m) => (
-                        <th key={m} className="pb-2 px-2 font-medium text-center min-w-[60px]">{m}</th>
-                      ))}
-                      <th className="pb-2 px-2 font-medium text-right">Total</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {Array.from({ length: new Date().getFullYear() - 2011 + 1 }, (_, i) => new Date().getFullYear() - i).map((year) => {
-                      const yearTotal = Array.from({ length: 12 }, (_, m) => {
-                        const monthStr = `${year}-${(m + 1).toString().padStart(2, '0')}`;
-                        return paymentHistory[monthStr] || 0;
-                      }).reduce((sum, v) => sum + v, 0);
-
-                      return (
-                        <tr key={year}>
-                          <td className="py-2 pr-3 font-semibold text-gray-900 sticky left-0 bg-white text-right">
-                            {year}
-                          </td>
-                          {Array.from({ length: 12 }, (_, m) => {
-                            const monthStr = `${year}-${(m + 1).toString().padStart(2, '0')}`;
-                            const amount = paymentHistory[monthStr] || 0;
-                            return (
-                              <td
-                                key={monthStr}
-                                className={`py-2 px-2 text-center ${amount > 0 ? 'bg-green-50 text-green-700' : ''}`}
-                              >
-                                {amount > 0 ? (
-                                  <span className="text-sm font-medium">
-                                    {Number.isInteger(amount) ? amount : amount.toFixed(2)}
-                                  </span>
-                                ) : (
-                                  <span className="text-sm text-gray-300">-</span>
-                                )}
-                              </td>
-                            );
-                          })}
-                          <td className="py-2 px-2 text-right font-semibold text-gray-900">
-                            {yearTotal > 0 ? `${yearTotal.toFixed(2)}` : '-'}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
               </div>
             </div>
+
+            {/* History Edit Side Panel */}
+            {historyPanelOpen && (
+              <div className="w-80 shrink-0">
+                <div className="card sticky top-8 max-h-[calc(100vh-4rem)] overflow-y-auto">
+                  <div className="flex justify-between items-center mb-4">
+                    <h3 className="text-lg font-bold text-gray-900">
+                      Editar Alocação
+                    </h3>
+                    <button
+                      className="p-1 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-all"
+                      onClick={closeHistoryPanel}
+                    >
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+
+                  <div className="mb-4">
+                    <p className="text-sm text-gray-500">Mês selecionado:</p>
+                    <p className="font-medium text-gray-900">{historyPanelMonth}</p>
+                  </div>
+
+                  {historyPanelTransactions.length === 0 ? (
+                    <p className="text-gray-400 text-sm">Nenhum pagamento alocado a este mês.</p>
+                  ) : historyPanelTransactions.length > 1 && !historyPanelSelectedTx ? (
+                    <div className="space-y-2">
+                      <p className="text-sm text-gray-500 mb-2">
+                        {historyPanelTransactions.length} transações encontradas:
+                      </p>
+                      {historyPanelTransactions.map((tx) => (
+                        <button
+                          key={tx.id}
+                          className="w-full text-left p-3 rounded-lg border border-gray-200 hover:border-primary-500 hover:bg-primary-50 transition-colors"
+                          onClick={() => selectHistoryPanelTransaction(tx)}
+                        >
+                          <div className="flex justify-between items-center">
+                            <span className="font-medium">{Math.abs(tx.amount).toFixed(2)}€</span>
+                            <span className="text-sm text-gray-500">
+                              {new Date(tx.date).toLocaleDateString('pt-PT')}
+                            </span>
+                          </div>
+                          <p className="text-sm text-gray-600 truncate">{tx.description}</p>
+                        </button>
+                      ))}
+                    </div>
+                  ) : historyPanelSelectedTx ? (
+                    <div className="space-y-4">
+                      {historyPanelTransactions.length > 1 && (
+                        <button
+                          className="text-sm text-primary-600 hover:text-primary-700"
+                          onClick={() => setHistoryPanelSelectedTx(null)}
+                        >
+                          ← Voltar à lista
+                        </button>
+                      )}
+
+                      <div className="p-3 bg-gray-50 rounded-lg">
+                        <p className="text-xs text-gray-500 mb-1">Valor da transação</p>
+                        <p className="text-lg font-bold text-green-600">
+                          {Math.abs(historyPanelSelectedTx.amount).toFixed(2)} EUR
+                        </p>
+                        <p className="text-xs text-gray-500 mt-1">{historyPanelSelectedTx.description}</p>
+                        <p className="text-xs text-gray-400">
+                          {new Date(historyPanelSelectedTx.date).toLocaleDateString('pt-PT')}
+                        </p>
+                      </div>
+
+                      <div>
+                        <label className="label mb-2">Meses de referência</label>
+                        <MonthCalendar
+                          year={historyPanelCalendarYear}
+                          onYearChange={setHistoryPanelCalendarYear}
+                          monthStatus={historyPanelMonthStatus}
+                          selectedMonths={historyPanelSelectedMonths}
+                          onToggleMonth={handleHistoryPanelToggleMonth}
+                        />
+                      </div>
+
+                      {historyPanelSelectedMonths.length > 0 && (
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm text-gray-600">
+                              {historyPanelSelectedMonths.length} mês(es) &mdash; {(Math.abs(historyPanelSelectedTx.amount) / historyPanelSelectedMonths.length).toFixed(2)} EUR/mês
+                            </span>
+                            <button
+                              type="button"
+                              className={`text-xs px-2 py-1 rounded ${historyPanelShowCustom ? 'bg-primary-100 text-primary-700' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                              onClick={() => {
+                                setHistoryPanelShowCustom(!historyPanelShowCustom);
+                                if (!historyPanelShowCustom) {
+                                  const perMonth = Math.abs(historyPanelSelectedTx.amount) / historyPanelSelectedMonths.length;
+                                  const amounts: Record<string, string> = {};
+                                  historyPanelSelectedMonths.forEach((m) => { amounts[m] = perMonth.toFixed(2); });
+                                  setHistoryPanelCustomAmounts(amounts);
+                                }
+                              }}
+                            >
+                              Personalizar
+                            </button>
+                          </div>
+
+                          {historyPanelShowCustom && (
+                            <div className="space-y-1 p-2 bg-gray-50 rounded-lg">
+                              {historyPanelSelectedMonths.map((month) => (
+                                <div key={month} className="flex items-center gap-2">
+                                  <span className="text-xs text-gray-500 w-16">{month}</span>
+                                  <input
+                                    type="number"
+                                    step="0.01"
+                                    className="input text-sm py-1 flex-1"
+                                    value={historyPanelCustomAmounts[month] || ''}
+                                    onChange={(e) => setHistoryPanelCustomAmounts({ ...historyPanelCustomAmounts, [month]: e.target.value })}
+                                  />
+                                  <span className="text-xs text-gray-400">EUR</span>
+                                </div>
+                              ))}
+                              <div className={`text-xs mt-1 ${getHistoryPanelAllocationTotal() > Math.abs(historyPanelSelectedTx.amount) + 0.01 ? 'text-red-500' : 'text-gray-500'}`}>
+                                Total: {getHistoryPanelAllocationTotal().toFixed(2)} / {Math.abs(historyPanelSelectedTx.amount).toFixed(2)} EUR
+                                {getHistoryPanelAllocationTotal() > Math.abs(historyPanelSelectedTx.amount) + 0.01 && ' (excede o valor!)'}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      <button
+                        className="btn-primary w-full"
+                        onClick={handleHistoryPanelSave}
+                        disabled={historyPanelSaving || historyPanelSelectedMonths.length === 0 || getHistoryPanelAllocationTotal() > Math.abs(historyPanelSelectedTx.amount) + 0.01}
+                      >
+                        {historyPanelSaving ? 'A guardar...' : 'Guardar'}
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+            )}
           </div>
         )}
       </main>
