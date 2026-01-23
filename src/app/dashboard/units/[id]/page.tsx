@@ -29,9 +29,11 @@ export default function UnitDetailPage() {
   const [calendarYear, setCalendarYear] = useState(new Date().getFullYear());
   const [monthStatus, setMonthStatus] = useState<MonthPaymentStatus[]>([]);
   const [pastYearsDebt, setPastYearsDebt] = useState(0);
+  const [paymentHistory, setPaymentHistory] = useState<Record<string, number>>({});
 
   useEffect(() => {
     fetchUnit();
+    fetchPaymentHistory();
   }, [id]);
 
   // Fetch monthly status when unit loads or year changes
@@ -63,6 +65,18 @@ export default function UnitDetailPage() {
       }
     } catch (error) {
       console.error('Error fetching past years debt:', error);
+    }
+  }
+
+  async function fetchPaymentHistory() {
+    try {
+      const res = await fetch(`/api/units/${id}/payment-history`);
+      if (res.ok) {
+        const data = await res.json();
+        setPaymentHistory(data.payments);
+      }
+    } catch (error) {
+      console.error('Error fetching payment history:', error);
     }
   }
 
@@ -286,6 +300,50 @@ export default function UnitDetailPage() {
                   </button>
                 </div>
               </form>
+            </div>
+
+            {/* Payment History Table */}
+            <div className="card mt-4">
+              <h2 className="text-lg font-semibold mb-4">Histórico de Pagamentos</h2>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-left text-gray-500 border-b">
+                      <th className="pb-2 pr-2 font-medium sticky left-0 bg-white"></th>
+                      {['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'].map((m) => (
+                        <th key={m} className="pb-2 px-1 font-medium text-center min-w-[55px]">{m}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {Array.from({ length: new Date().getFullYear() - 2011 + 1 }, (_, i) => new Date().getFullYear() - i).map((year) => (
+                      <tr key={year}>
+                        <td className="py-1.5 pr-2 font-medium text-gray-900 sticky left-0 bg-white text-right">
+                          {year}
+                        </td>
+                        {Array.from({ length: 12 }, (_, m) => {
+                          const monthStr = `${year}-${(m + 1).toString().padStart(2, '0')}`;
+                          const amount = paymentHistory[monthStr] || 0;
+                          return (
+                            <td
+                              key={monthStr}
+                              className={`py-1.5 px-1 text-center ${amount > 0 ? 'bg-green-100 text-green-700' : ''}`}
+                            >
+                              {amount > 0 ? (
+                                <span className="text-xs font-medium">
+                                  {Number.isInteger(amount) ? amount : amount.toFixed(2)}
+                                </span>
+                              ) : (
+                                <span className="text-xs text-gray-300">-</span>
+                              )}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
 
             {/* Transactions */}
