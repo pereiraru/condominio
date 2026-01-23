@@ -49,6 +49,8 @@ export default function ReportsPage() {
   const [overviewData, setOverviewData] = useState<OverviewData | null>(null);
   const [loading, setLoading] = useState(true);
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+  const [resumoYear, setResumoYear] = useState<number | 'all'>(new Date().getFullYear());
+  const [resumoSortAsc, setResumoSortAsc] = useState(false);
 
   // Side panel state
   const [panelOpen, setPanelOpen] = useState(false);
@@ -111,8 +113,7 @@ export default function ReportsPage() {
             income,
             expenses,
             balance: income - expenses,
-          }))
-          .sort((a, b) => a.month.localeCompare(b.month));
+          }));
 
         setMonthlyData(data);
       }
@@ -279,8 +280,16 @@ export default function ReportsPage() {
     return 'bg-red-100 hover:bg-red-200 text-red-700';
   };
 
-  const totalIncome = monthlyData.reduce((sum, d) => sum + d.income, 0);
-  const totalExpenses = monthlyData.reduce((sum, d) => sum + d.expenses, 0);
+  // Get available years from monthlyData
+  const availableYears = Array.from(new Set(monthlyData.map(d => parseInt(d.month.split('-')[0])))).sort((a, b) => b - a);
+
+  // Filter and sort monthly data
+  const filteredMonthlyData = monthlyData
+    .filter(d => resumoYear === 'all' || d.month.startsWith(`${resumoYear}-`))
+    .sort((a, b) => resumoSortAsc ? a.month.localeCompare(b.month) : b.month.localeCompare(a.month));
+
+  const totalIncome = filteredMonthlyData.reduce((sum, d) => sum + d.income, 0);
+  const totalExpenses = filteredMonthlyData.reduce((sum, d) => sum + d.expenses, 0);
 
   return (
     <div className="flex min-h-screen bg-gray-50">
@@ -318,17 +327,32 @@ export default function ReportsPage() {
         ) : activeTab === 'resumo' ? (
           <>
             {/* Resumo Mensal Tab */}
+            {/* Year Filter */}
+            <div className="flex items-center gap-4 mb-6">
+              <label className="text-sm font-medium text-gray-700">Ano:</label>
+              <select
+                className="input w-32"
+                value={resumoYear}
+                onChange={(e) => setResumoYear(e.target.value === 'all' ? 'all' : parseInt(e.target.value))}
+              >
+                <option value="all">Todos</option>
+                {availableYears.map(year => (
+                  <option key={year} value={year}>{year}</option>
+                ))}
+              </select>
+            </div>
+
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
               <div className="card">
-                <h3 className="text-sm font-medium text-gray-500">Total Receitas</h3>
+                <h3 className="text-sm font-medium text-gray-500">Total Receitas {resumoYear !== 'all' ? resumoYear : ''}</h3>
                 <p className="text-2xl font-bold text-green-600">{totalIncome.toFixed(2)} EUR</p>
               </div>
               <div className="card">
-                <h3 className="text-sm font-medium text-gray-500">Total Despesas</h3>
+                <h3 className="text-sm font-medium text-gray-500">Total Despesas {resumoYear !== 'all' ? resumoYear : ''}</h3>
                 <p className="text-2xl font-bold text-red-600">{totalExpenses.toFixed(2)} EUR</p>
               </div>
               <div className="card">
-                <h3 className="text-sm font-medium text-gray-500">Saldo Total</h3>
+                <h3 className="text-sm font-medium text-gray-500">Saldo Total {resumoYear !== 'all' ? resumoYear : ''}</h3>
                 <p className={`text-2xl font-bold ${totalIncome - totalExpenses >= 0 ? 'text-primary-600' : 'text-red-600'}`}>
                   {(totalIncome - totalExpenses).toFixed(2)} EUR
                 </p>
@@ -341,14 +365,19 @@ export default function ReportsPage() {
                 <table className="w-full">
                   <thead>
                     <tr className="text-left text-sm text-gray-500 border-b">
-                      <th className="pb-3 font-medium">Mes</th>
+                      <th
+                        className="pb-3 font-medium cursor-pointer hover:text-gray-900 select-none"
+                        onClick={() => setResumoSortAsc(!resumoSortAsc)}
+                      >
+                        Mes {resumoSortAsc ? '↑' : '↓'}
+                      </th>
                       <th className="pb-3 font-medium text-right">Receitas</th>
                       <th className="pb-3 font-medium text-right">Despesas</th>
                       <th className="pb-3 font-medium text-right">Saldo</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
-                    {monthlyData.map((d) => (
+                    {filteredMonthlyData.map((d) => (
                       <tr key={d.month} className="hover:bg-gray-50">
                         <td className="py-3 text-sm font-medium text-gray-900">{formatMonth(d.month)}</td>
                         <td className="py-3 text-sm text-right text-green-600">+{d.income.toFixed(2)} EUR</td>
