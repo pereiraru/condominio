@@ -1,0 +1,23 @@
+
+name: Deploy to Proxmox
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build-and-deploy:
+    runs-on: self-hosted
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Create .env file for Docker Compose
+        run: |
+          echo "NEXTAUTH_SECRET=${{ secrets.NEXTAUTH_SECRET }}" > .env
+
+      - name: Build and Deploy with Docker Compose
+        run: |
+          docker compose up --build -d
