@@ -266,7 +266,7 @@ export default function ReportsPage() {
         }
       }
     } catch {
-      alert('Erro ao guardar transacao');
+      alert('Erro ao guardar transação');
     } finally {
       setPanelSaving(false);
     }
@@ -296,7 +296,7 @@ export default function ReportsPage() {
       <Sidebar />
 
       <main className="flex-1 p-8">
-        <h1 className="text-2xl font-semibold text-gray-900 mb-6">Relatorios</h1>
+        <h1 className="text-2xl font-semibold text-gray-900 mb-6">Relatórios</h1>
 
         {/* Tabs */}
         <div className="flex gap-1 mb-6 bg-gray-100 p-1 rounded-xl w-fit">
@@ -308,7 +308,7 @@ export default function ReportsPage() {
             }`}
             onClick={() => setActiveTab('visao')}
           >
-            Visao Geral
+            Visão Geral
           </button>
           <button
             className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
@@ -383,7 +383,7 @@ export default function ReportsPage() {
                         onClick={() => setResumoSortAsc(!resumoSortAsc)}
                       >
                         <span className="flex items-center gap-1">
-                          Mes
+                          Mês
                           <svg className={`w-4 h-4 transition-transform ${resumoSortAsc ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                           </svg>
@@ -456,12 +456,12 @@ export default function ReportsPage() {
 
                   {/* Receitas Table */}
                   <div className="card">
-                    <h2 className="text-lg font-semibold text-gray-900 mb-4">Receitas (Fraccoes)</h2>
+                    <h2 className="text-lg font-semibold text-gray-900 mb-4">Receitas (Frações)</h2>
                     <div className="overflow-x-auto">
                       <table className="w-full text-sm">
                         <thead>
                           <tr className="text-left text-gray-500 border-b">
-                            <th className="pb-2 pr-2 font-medium sticky left-0 bg-white">Fraccao</th>
+                            <th className="pb-2 pr-2 font-medium sticky left-0 bg-white">Fração</th>
                             <th className="pb-2 px-1 font-medium text-center min-w-[70px] text-orange-600">Div.Ant.</th>
                             {MONTH_NAMES.map((m) => (
                               <th key={m} className="pb-2 px-1 font-medium text-center min-w-[55px]">{m}</th>
@@ -667,13 +667,13 @@ export default function ReportsPage() {
                       <div className="space-y-4">
                         <div>
                           <label className="label">
-                            {panelType === 'payment' ? 'Fraccao' : 'Credor'}
+                            {panelType === 'payment' ? 'Fração' : 'Credor'}
                           </label>
                           <p className="font-medium text-gray-900">{panelTargetName}</p>
                         </div>
 
                         <div>
-                          <label className="label">Mes de Referencia</label>
+                          <label className="label">Mês de Referência</label>
                           <p className="font-medium text-gray-900">{formatMonth(panelMonth)}</p>
                         </div>
 
@@ -684,7 +684,7 @@ export default function ReportsPage() {
                               <p className="font-medium text-gray-900">{panelAmount}€</p>
                             </div>
                             <div>
-                              <label className="label">Descricao</label>
+                              <label className="label">Descrição</label>
                               <p className="font-medium text-gray-900">{panelDescription}</p>
                             </div>
                             <div>
@@ -695,7 +695,7 @@ export default function ReportsPage() {
                               className="btn-secondary w-full"
                               onClick={() => router.push(`/dashboard/transactions?id=${panelTransactionId}`)}
                             >
-                              Ver Transacao Completa
+                              Ver Transação Completa
                             </button>
                           </>
                         ) : (
@@ -726,7 +726,7 @@ export default function ReportsPage() {
                             </div>
 
                             <div>
-                              <label className="label">Descricao</label>
+                              <label className="label">Descrição</label>
                               <input
                                 type="text"
                                 className="input"
@@ -758,9 +758,9 @@ export default function ReportsPage() {
         {showTxModal && txModalContext && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
             <div className="bg-white rounded-xl p-6 w-full max-w-md">
-              <h2 className="text-lg font-bold mb-4">Selecionar Transacao</h2>
+              <h2 className="text-lg font-bold mb-4">Selecionar Transação</h2>
               <p className="text-sm text-gray-500 mb-4">
-                Existem {txModalTransactions.length} transacoes para {txModalContext.targetName} em {formatMonth(txModalContext.month)}:
+                Existem {txModalTransactions.length} transações para {txModalContext.targetName} em {formatMonth(txModalContext.month)}:
               </p>
               <div className="space-y-2 max-h-60 overflow-y-auto">
                 {txModalTransactions.map((tx) => (

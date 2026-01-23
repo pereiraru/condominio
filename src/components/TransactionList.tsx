@@ -10,7 +10,7 @@ export default function TransactionList({ transactions, onRowClick, selectedId }
   if (transactions.length === 0) {
     return (
       <p className="text-gray-400 text-center py-8">
-        Sem transacoes para mostrar
+        Sem transações para mostrar
       </p>
     );
   }
@@ -21,8 +21,8 @@ export default function TransactionList({ transactions, onRowClick, selectedId }
         <thead>
           <tr className="text-left text-sm text-gray-400">
             <th className="pb-4 font-medium">Data</th>
-            <th className="pb-4 font-medium">Descricao</th>
-            <th className="pb-4 font-medium">Fraccao/Credor</th>
+            <th className="pb-4 font-medium">Descrição</th>
+            <th className="pb-4 font-medium">Fração/Credor</th>
             <th className="pb-4 font-medium text-right">Valor</th>
           </tr>
         </thead>

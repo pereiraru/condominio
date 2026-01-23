@@ -139,7 +139,7 @@ export default function UnitsPage() {
         alert(`Erro: ${data.error}`);
       }
     } catch (error) {
-      alert('Erro ao criar fraccao');
+      alert('Erro ao criar fração');
     } finally {
       setSaving(false);
     }
@@ -151,7 +151,7 @@ export default function UnitsPage() {
 
       <main className="flex-1 p-8">
         <div className="flex justify-between items-center mb-6">
-          <h1 className="text-2xl font-semibold text-gray-900">Fraccoes</h1>
+          <h1 className="text-2xl font-semibold text-gray-900">Frações</h1>
           <div className="flex gap-2">
             <input
               type="file"
@@ -168,7 +168,7 @@ export default function UnitsPage() {
               {importing ? 'A importar...' : 'Importar Excel'}
             </button>
             <button className="btn-primary" onClick={() => setShowModal(true)}>
-              + Nova Fraccao
+              + Nova Fração
             </button>
           </div>
         </div>
@@ -195,7 +195,7 @@ export default function UnitsPage() {
 
                 {unit.owners && unit.owners.length > 0 && (
                   <div className="mt-3">
-                    <p className="text-xs text-gray-400 uppercase tracking-wide">Proprietarios</p>
+                    <p className="text-xs text-gray-400 uppercase tracking-wide">Proprietários</p>
                     <p className="text-gray-700 mt-0.5">{unit.owners.map(o => o.name).join(', ')}</p>
                   </div>
                 )}
@@ -252,10 +252,10 @@ export default function UnitsPage() {
         {showModal && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
             <div className="bg-white rounded-xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
-              <h2 className="text-xl font-bold mb-4">Nova Fraccao</h2>
+              <h2 className="text-xl font-bold mb-4">Nova Fração</h2>
               <form onSubmit={handleSubmit}>
                 <div className="mb-4">
-                  <label className="label">Codigo *</label>
+                  <label className="label">Código *</label>
                   <input
                     type="text"
                     className="input"
@@ -295,7 +295,7 @@ export default function UnitsPage() {
                         className="input flex-1"
                         value={owner}
                         onChange={(e) => updateOwner(index, e.target.value)}
-                        placeholder="Nome do proprietario"
+                        placeholder="Nome do proprietário"
                       />
                       {owners.length > 1 && (
                         <button
@@ -344,13 +344,13 @@ export default function UnitsPage() {
                 </div>
 
                 <div className="mb-4">
-                  <label className="label">Descricao</label>
+                  <label className="label">Descrição</label>
                   <input
                     type="text"
                     className="input"
                     value={formData.description}
                     onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                    placeholder="Descricao opcional"
+                    placeholder="Descrição opcional"
                   />
                 </div>
 

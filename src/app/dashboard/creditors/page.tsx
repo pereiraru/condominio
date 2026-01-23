@@ -6,14 +6,14 @@ import Sidebar from '@/components/Sidebar';
 import { Creditor } from '@/lib/types';
 
 const CATEGORIES = [
-  { value: 'electricity', label: 'Electricidade' },
-  { value: 'water', label: 'Agua' },
-  { value: 'gas', label: 'Gas' },
-  { value: 'maintenance', label: 'Manutencao' },
+  { value: 'electricity', label: 'Eletricidade' },
+  { value: 'water', label: 'Água' },
+  { value: 'gas', label: 'Gás' },
+  { value: 'maintenance', label: 'Manutenção' },
   { value: 'insurance', label: 'Seguro' },
   { value: 'cleaning', label: 'Limpeza' },
   { value: 'elevator', label: 'Elevador' },
-  { value: 'bank_fee', label: 'Taxa Bancaria' },
+  { value: 'bank_fee', label: 'Taxa Bancária' },
   { value: 'other', label: 'Outro' },
 ];
 
@@ -190,7 +190,7 @@ export default function CreditorsPage() {
                     </span>
                   </div>
                   <div>
-                    <span className="text-gray-400">Media/mes: </span>
+                    <span className="text-gray-400">Média/mês: </span>
                     <span className="font-medium text-gray-700">
                       {(creditor.avgMonthly ?? 0).toFixed(2)} EUR
                     </span>
@@ -275,13 +275,13 @@ export default function CreditorsPage() {
                 </div>
 
                 <div className="mb-4">
-                  <label className="label">Descricao</label>
+                  <label className="label">Descrição</label>
                   <input
                     type="text"
                     className="input"
                     value={formData.description}
                     onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                    placeholder="Descricao do servico"
+                    placeholder="Descrição do serviço"
                   />
                 </div>
 
@@ -315,7 +315,7 @@ export default function CreditorsPage() {
                     className="input"
                     value={formData.telefone}
                     onChange={(e) => setFormData({ ...formData, telefone: e.target.value })}
-                    placeholder="Numero de telefone"
+                    placeholder="Número de telefone"
                   />
                 </div>
 
@@ -326,7 +326,7 @@ export default function CreditorsPage() {
                     className="input"
                     value={formData.nib}
                     onChange={(e) => setFormData({ ...formData, nib: e.target.value })}
-                    placeholder="NIB bancario"
+                    placeholder="NIB bancário"
                   />
                 </div>
 

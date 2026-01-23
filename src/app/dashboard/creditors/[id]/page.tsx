@@ -7,14 +7,14 @@ import MonthCalendar from '@/components/MonthCalendar';
 import { Creditor, Transaction, MonthPaymentStatus } from '@/lib/types';
 
 const CATEGORIES = [
-  { value: 'electricity', label: 'Electricidade' },
-  { value: 'water', label: 'Agua' },
-  { value: 'gas', label: 'Gas' },
-  { value: 'maintenance', label: 'Manutencao' },
+  { value: 'electricity', label: 'Eletricidade' },
+  { value: 'water', label: 'Água' },
+  { value: 'gas', label: 'Gás' },
+  { value: 'maintenance', label: 'Manutenção' },
   { value: 'insurance', label: 'Seguro' },
   { value: 'cleaning', label: 'Limpeza' },
   { value: 'elevator', label: 'Elevador' },
-  { value: 'bank_fee', label: 'Taxa Bancaria' },
+  { value: 'bank_fee', label: 'Taxa Bancária' },
   { value: 'other', label: 'Outro' },
 ];
 
@@ -237,7 +237,7 @@ export default function CreditorDetailPage() {
                     />
                   </div>
                   <div className="md:col-span-2">
-                    <label className="label">Descricao</label>
+                    <label className="label">Descrição</label>
                     <input
                       type="text"
                       className="input"
@@ -263,8 +263,8 @@ export default function CreditorDetailPage() {
                     <thead>
                       <tr className="text-left text-sm text-gray-400">
                         <th className="pb-4 font-medium">Data</th>
-                        <th className="pb-4 font-medium">Mes Ref.</th>
-                        <th className="pb-4 font-medium">Descricao</th>
+                        <th className="pb-4 font-medium">Mês Ref.</th>
+                        <th className="pb-4 font-medium">Descrição</th>
                         <th className="pb-4 font-medium text-right">Valor</th>
                       </tr>
                     </thead>
@@ -289,7 +289,7 @@ export default function CreditorDetailPage() {
                   </table>
                 </div>
               ) : (
-                <p className="text-gray-400 text-center py-4">Sem transacoes registadas</p>
+                <p className="text-gray-400 text-center py-4">Sem transações registadas</p>
               )}
             </div>
           </div>

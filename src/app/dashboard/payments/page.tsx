@@ -86,7 +86,7 @@ export default function PaymentsPage() {
         <div className="card mb-6">
           <div className="flex flex-wrap items-center gap-6">
             <div>
-              <label className="label">Mes</label>
+              <label className="label">Mês</label>
               <input
                 type="month"
                 value={selectedMonth}

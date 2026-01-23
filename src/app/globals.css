@@ -22,7 +22,7 @@ body {
   }
 
   .btn-secondary {
-    @apply bg-white text-gray-700 px-5 py-2.5 rounded-xl hover:bg-gray-50 transition-all font-medium border border-gray-200 shadow-sm;
+    @apply bg-white text-gray-700 px-5 py-2.5 rounded-xl hover:bg-gray-50 transition-all font-medium border border-gray-200 shadow-sm h-[42px];
   }
 
   .btn-ghost {
@@ -38,7 +38,7 @@ body {
   }
 
   .input {
-    @apply w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-gray-900 focus:border-gray-900 focus:bg-white outline-none transition-all;
+    @apply w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-gray-900 focus:border-gray-900 focus:bg-white outline-none transition-all h-[42px];
   }
 
   .label {

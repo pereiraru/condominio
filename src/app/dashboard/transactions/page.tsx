@@ -296,7 +296,7 @@ export default function TransactionsPage() {
       });
       if (res.ok) {
         const data = await res.json();
-        alert(`Mapping guardado. ${data.updatedCount} transacoes atualizadas.`);
+        alert(`Mapping guardado. ${data.updatedCount} transações atualizadas.`);
         closePanel();
         fetchTransactions();
         fetchMappings();
@@ -366,7 +366,7 @@ export default function TransactionsPage() {
         alert(`Erro: ${data.error}`);
       }
     } catch {
-      alert('Erro ao criar transacao');
+      alert('Erro ao criar transação');
     } finally {
       setSaving(false);
     }
@@ -409,7 +409,7 @@ export default function TransactionsPage() {
                 value={mappingForm.type}
                 onChange={(e) => setMappingForm({ ...mappingForm, type: e.target.value as 'unit' | 'creditor', targetId: '' })}
               >
-                <option value="unit">Fraccao</option>
+                <option value="unit">Fração</option>
                 <option value="creditor">Credor</option>
               </select>
               <select
@@ -485,7 +485,7 @@ export default function TransactionsPage() {
       <main className="flex-1 p-8">
         <div className="flex justify-between items-center mb-6">
           <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-semibold text-gray-900">Transacoes</h1>
+            <h1 className="text-2xl font-semibold text-gray-900">Transações</h1>
             <button
               className={`text-sm px-3 py-1.5 rounded-lg transition-all ${showMappingsPanel ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
               onClick={() => setShowMappingsPanel(!showMappingsPanel)}
@@ -494,7 +494,7 @@ export default function TransactionsPage() {
             </button>
           </div>
           <button className="btn-primary" onClick={() => setShowModal(true)}>
-            + Nova Transacao
+            + Nova Transação
           </button>
         </div>
 
@@ -515,15 +515,15 @@ export default function TransactionsPage() {
               </select>
             </div>
             <div>
-              <label className="label">Fraccao/Credor</label>
+              <label className="label">Fração/Credor</label>
               <select
                 value={filter.entityFilter}
                 onChange={(e) => setFilter({ ...filter, entityFilter: e.target.value })}
                 className="input"
               >
                 <option value="">Todos</option>
-                <option value="unassigned">Sem atribuicao</option>
-                <optgroup label="Fraccoes">
+                <option value="unassigned">Sem atribuição</option>
+                <optgroup label="Frações">
                   {units.map((u) => (
                     <option key={u.id} value={`unit:${u.id}`}>{u.code}</option>
                   ))}
@@ -536,7 +536,7 @@ export default function TransactionsPage() {
               </select>
             </div>
             <div>
-              <label className="label">Data Inicio</label>
+              <label className="label">Data Início</label>
               <input
                 type="date"
                 value={filter.startDate}
@@ -620,7 +620,7 @@ export default function TransactionsPage() {
                 </div>
 
                 <div className="mb-3">
-                  <p className="text-xs text-gray-500">Descricao:</p>
+                  <p className="text-xs text-gray-500">Descrição:</p>
                   <p className="text-sm font-medium text-gray-800 break-words">
                     {selectedTx.description}
                   </p>
@@ -653,14 +653,14 @@ export default function TransactionsPage() {
                       setPanelCreditorId('');
                     }}
                   >
-                    <option value="unit">Fraccao</option>
+                    <option value="unit">Fração</option>
                     <option value="creditor">Credor</option>
                   </select>
                 </div>
 
                 {panelAssignType === 'unit' && (
                   <div className="mb-3">
-                    <label className="label">Fraccao</label>
+                    <label className="label">Fração</label>
                     <select
                       className="input"
                       value={panelUnitId}
@@ -704,7 +704,7 @@ export default function TransactionsPage() {
                   />
                   {panelMatchCount > 0 && (
                     <p className="text-xs text-blue-600 mt-1">
-                      {panelMatchCount} transacoes correspondem a este padrao
+                      {panelMatchCount} transações correspondem a este padrão
                     </p>
                   )}
                 </div>
@@ -714,18 +714,18 @@ export default function TransactionsPage() {
                   onClick={handleApplyMapping}
                   disabled={panelSaving || (!panelUnitId && !panelCreditorId) || !panelPattern}
                 >
-                  {panelSaving ? 'A aplicar...' : `Aplicar a ${panelMatchCount} transacoes`}
+                  {panelSaving ? 'A aplicar...' : `Aplicar a ${panelMatchCount} transações`}
                 </button>
               </div>
             </div>
           )}
         </div>
 
-        {/* Modal Nova Transacao */}
+        {/* Modal Nova Transação */}
         {showModal && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
             <div className="bg-white rounded-xl p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto">
-              <h2 className="text-xl font-bold mb-4">Nova Transacao</h2>
+              <h2 className="text-xl font-bold mb-4">Nova Transação</h2>
               <form onSubmit={handleSubmit}>
                 <div className="grid grid-cols-2 gap-4 mb-4">
                   <div>
@@ -758,7 +758,7 @@ export default function TransactionsPage() {
 
                 {formData.type === 'payment' && (
                   <div className="mb-4">
-                    <label className="label">Fraccao *</label>
+                    <label className="label">Fração *</label>
                     <select
                       className="input"
                       value={formData.unitId}
@@ -768,7 +768,7 @@ export default function TransactionsPage() {
                       }}
                       required
                     >
-                      <option value="">-- Selecionar fraccao --</option>
+                      <option value="">-- Selecionar fração --</option>
                       {units.map((unit) => (
                         <option key={unit.id} value={unit.id}>
                           {unit.code} {unit.owners && unit.owners.length > 0 ? `(${unit.owners[0].name})` : ''} - {unit.monthlyFee} EUR/mes
@@ -818,13 +818,13 @@ export default function TransactionsPage() {
                     />
                   </div>
                   <div>
-                    <label className="label">Descricao *</label>
+                    <label className="label">Descrição *</label>
                     <input
                       type="text"
                       className="input"
                       value={formData.description}
                       onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                      placeholder="Descricao"
+                      placeholder="Descrição"
                       required
                     />
                   </div>

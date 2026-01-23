@@ -122,7 +122,7 @@ export default function DocumentsPage() {
                 </select>
               </div>
               <div className="md:col-span-2">
-                <label className="label">Descricao (opcional)</label>
+                <label className="label">Descrição (opcional)</label>
                 <input
                   type="text"
                   value={uploadData.description}

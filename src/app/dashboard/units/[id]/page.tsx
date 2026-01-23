@@ -168,18 +168,18 @@ export default function UnitDetailPage() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
           </button>
-          <h1 className="text-2xl font-semibold text-gray-900">Fraccao {unit.code}</h1>
+          <h1 className="text-2xl font-semibold text-gray-900">Fração {unit.code}</h1>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           {/* Edit Form */}
           <div className="lg:col-span-2">
             <div className="card">
-              <h2 className="text-lg font-semibold mb-4">Dados da Fraccao</h2>
+              <h2 className="text-lg font-semibold mb-4">Dados da Fração</h2>
               <form onSubmit={handleSave}>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <label className="label">Codigo *</label>
+                    <label className="label">Código *</label>
                     <input
                       type="text"
                       className="input"
@@ -236,7 +236,7 @@ export default function UnitDetailPage() {
                     />
                   </div>
                   <div className="md:col-span-2">
-                    <label className="label">Descricao</label>
+                    <label className="label">Descrição</label>
                     <input
                       type="text"
                       className="input"
@@ -249,7 +249,7 @@ export default function UnitDetailPage() {
                 {/* Owners */}
                 <div className="mt-4">
                   <div className="flex justify-between items-center mb-2">
-                    <label className="label mb-0">Proprietario(s)</label>
+                    <label className="label mb-0">Proprietário(s)</label>
                     <button
                       type="button"
                       className="text-primary-600 hover:text-primary-800 text-sm font-medium"
@@ -265,7 +265,7 @@ export default function UnitDetailPage() {
                         className="input flex-1"
                         value={owner}
                         onChange={(e) => updateOwner(index, e.target.value)}
-                        placeholder="Nome do proprietario"
+                        placeholder="Nome do proprietário"
                       />
                       {owners.length > 1 && (
                         <button
@@ -282,7 +282,7 @@ export default function UnitDetailPage() {
 
                 <div className="mt-4 flex justify-end">
                   <button type="submit" className="btn-primary" disabled={saving}>
-                    {saving ? 'A guardar...' : 'Guardar alteracoes'}
+                    {saving ? 'A guardar...' : 'Guardar alterações'}
                   </button>
                 </div>
               </form>
@@ -297,8 +297,8 @@ export default function UnitDetailPage() {
                     <thead>
                       <tr className="text-left text-sm text-gray-400">
                         <th className="pb-4 font-medium">Data</th>
-                        <th className="pb-4 font-medium">Mes Ref.</th>
-                        <th className="pb-4 font-medium">Descricao</th>
+                        <th className="pb-4 font-medium">Mês Ref.</th>
+                        <th className="pb-4 font-medium">Descrição</th>
                         <th className="pb-4 font-medium text-right">Valor</th>
                       </tr>
                     </thead>

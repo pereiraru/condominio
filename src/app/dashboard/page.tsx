@@ -51,12 +51,12 @@ export default function Dashboard() {
                 trend={stats?.balanceTrend}
               />
               <StatsCard
-                title="Receitas (Mes)"
+                title="Receitas (Mês)"
                 value={`${stats?.monthlyIncome?.toFixed(2) ?? '0.00'} EUR`}
                 color="green"
               />
               <StatsCard
-                title="Despesas (Mes)"
+                title="Despesas (Mês)"
                 value={`${Math.abs(stats?.monthlyExpenses ?? 0).toFixed(2)} EUR`}
                 color="red"
               />
@@ -69,7 +69,7 @@ export default function Dashboard() {
 
             <div className="card">
               <h2 className="text-lg font-semibold text-gray-900 mb-4">
-                Ultimas Transacoes
+                Últimas Transações
               </h2>
               <TransactionList transactions={transactions} />
             </div>
