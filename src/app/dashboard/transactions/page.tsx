@@ -553,7 +553,8 @@ export default function TransactionsPage() {
                 className="input"
               />
             </div>
-            <div className="flex items-end">
+            <div>
+              <label className="label">&nbsp;</label>
               <button type="submit" className="btn-secondary w-full">
                 Filtrar
               </button>
