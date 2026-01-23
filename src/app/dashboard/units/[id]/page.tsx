@@ -342,22 +342,22 @@ export default function UnitDetailPage() {
                 let expectedYTD = 0;
                 let expectedLabel = '';
 
-                // Define o valor esperado com base no ano.
+                // Use per-month expected values from monthStatus (historical fees)
                 if (calendarYear < currentYear) {
-                  expectedYTD = unit.monthlyFee * 12;
+                  expectedYTD = monthStatus.reduce((sum, s) => sum + s.expected, 0);
                   expectedLabel = '12 meses';
                 } else if (calendarYear === currentYear) {
-                  expectedYTD = unit.monthlyFee * currentMonth;
+                  expectedYTD = monthStatus
+                    .filter((_, i) => i < currentMonth)
+                    .reduce((sum, s) => sum + s.expected, 0);
                   expectedLabel = `até ao ${currentMonth}º mês`;
-                } else { // Ano futuro
-                  expectedYTD = 0; // Nada é esperado para um ano futuro.
+                } else {
+                  expectedYTD = 0;
                   expectedLabel = 'N/A';
                 }
 
-                // A dívida do ano é o esperado menos o que foi pago (mínimo de 0).
                 const yearDebt = Math.max(0, expectedYTD - paidYTD);
-                
-                // Para clareza, o valor "Esperado" deve mostrar o valor pago se for adiantado.
+
                 const displayExpected = Math.max(expectedYTD, paidYTD);
                 if (paidYTD > expectedYTD && calendarYear >= currentYear) {
                     expectedLabel = `Pago adiantado`;

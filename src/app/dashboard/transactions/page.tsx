@@ -6,14 +6,47 @@ import TransactionList from '@/components/TransactionList';
 import MonthCalendar from '@/components/MonthCalendar';
 import { Transaction, Unit, Creditor, MonthPaymentStatus } from '@/lib/types';
 
+interface DescriptionMapping {
+  id: string;
+  pattern: string;
+  unitId: string | null;
+  creditorId: string | null;
+  unit?: { code: string } | null;
+  creditor?: { name: string } | null;
+}
+
+const PAGE_SIZE = 50;
+
 export default function TransactionsPage() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [totalTransactions, setTotalTransactions] = useState(0);
+  const [currentPage, setCurrentPage] = useState(1);
   const [units, setUnits] = useState<Unit[]>([]);
   const [creditors, setCreditors] = useState<Creditor[]>([]);
+  const [mappings, setMappings] = useState<DescriptionMapping[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [filter, setFilter] = useState({ type: '', startDate: '', endDate: '' });
+  const [filter, setFilter] = useState({
+    type: '',
+    startDate: '',
+    endDate: '',
+    entityFilter: '', // 'unit:id', 'creditor:id', 'unassigned', or ''
+  });
+
+  // Mappings panel state
+  const [showMappingsPanel, setShowMappingsPanel] = useState(false);
+  const [editingMapping, setEditingMapping] = useState<DescriptionMapping | null>(null);
+  const [mappingForm, setMappingForm] = useState({ pattern: '', type: 'unit' as 'unit' | 'creditor', targetId: '' });
+
+  // Side panel state
+  const [selectedTx, setSelectedTx] = useState<Transaction | null>(null);
+  const [panelPattern, setPanelPattern] = useState('');
+  const [panelAssignType, setPanelAssignType] = useState<'unit' | 'creditor'>('unit');
+  const [panelUnitId, setPanelUnitId] = useState('');
+  const [panelCreditorId, setPanelCreditorId] = useState('');
+  const [panelMatchCount, setPanelMatchCount] = useState(0);
+  const [panelSaving, setPanelSaving] = useState(false);
 
   // Form state
   const [formData, setFormData] = useState({
@@ -30,10 +63,14 @@ export default function TransactionsPage() {
   const [expectedAmount, setExpectedAmount] = useState(0);
 
   useEffect(() => {
-    fetchTransactions();
     fetchUnits();
     fetchCreditors();
+    fetchMappings();
   }, []);
+
+  useEffect(() => {
+    fetchTransactions();
+  }, [currentPage]);
 
   // Fetch monthly status when unit/creditor or year changes
   useEffect(() => {
@@ -56,7 +93,6 @@ export default function TransactionsPage() {
     const numMonths = Math.round(amount / expectedAmount);
     if (numMonths <= 0) return;
 
-    // Find unpaid months (oldest first)
     const unpaidMonths = monthStatus
       .filter((s) => !s.isPaid)
       .sort((a, b) => a.month.localeCompare(b.month))
@@ -72,14 +108,25 @@ export default function TransactionsPage() {
     setLoading(true);
     try {
       const params = new URLSearchParams();
+      params.set('limit', PAGE_SIZE.toString());
+      params.set('offset', ((currentPage - 1) * PAGE_SIZE).toString());
       if (filter.type) params.set('type', filter.type);
       if (filter.startDate) params.set('startDate', filter.startDate);
       if (filter.endDate) params.set('endDate', filter.endDate);
+
+      if (filter.entityFilter === 'unassigned') {
+        params.set('unassigned', 'true');
+      } else if (filter.entityFilter.startsWith('unit:')) {
+        params.set('unitId', filter.entityFilter.replace('unit:', ''));
+      } else if (filter.entityFilter.startsWith('creditor:')) {
+        params.set('creditorId', filter.entityFilter.replace('creditor:', ''));
+      }
 
       const res = await fetch(`/api/transactions?${params}`);
       if (res.ok) {
         const data = await res.json();
         setTransactions(data.transactions || []);
+        setTotalTransactions(data.total || 0);
       }
     } catch (error) {
       console.error('Error fetching transactions:', error);
@@ -106,6 +153,15 @@ export default function TransactionsPage() {
     }
   };
 
+  const fetchMappings = async () => {
+    try {
+      const res = await fetch('/api/mappings');
+      if (res.ok) setMappings(await res.json());
+    } catch (error) {
+      console.error('Error fetching mappings:', error);
+    }
+  };
+
   const fetchMonthlyStatus = async (id: string, paramName: string) => {
     try {
       const res = await fetch(`/api/monthly-status?${paramName}=${id}&year=${calendarYear}`);
@@ -121,8 +177,139 @@ export default function TransactionsPage() {
 
   const handleFilter = (e: React.FormEvent) => {
     e.preventDefault();
+    setCurrentPage(1);
     fetchTransactions();
   };
+
+  const totalPages = Math.ceil(totalTransactions / PAGE_SIZE);
+
+  // Mapping functions
+  const handleEditMapping = (mapping: DescriptionMapping) => {
+    setEditingMapping(mapping);
+    setMappingForm({
+      pattern: mapping.pattern,
+      type: mapping.unitId ? 'unit' : 'creditor',
+      targetId: mapping.unitId || mapping.creditorId || '',
+    });
+  };
+
+  const handleDeleteMapping = async (id: string) => {
+    if (!confirm('Tem certeza que deseja eliminar este mapeamento?')) return;
+    try {
+      const res = await fetch(`/api/mappings/${id}`, { method: 'DELETE' });
+      if (res.ok) {
+        fetchMappings();
+      }
+    } catch (error) {
+      console.error('Error deleting mapping:', error);
+    }
+  };
+
+  const handleSaveMapping = async () => {
+    if (!mappingForm.pattern || !mappingForm.targetId) return;
+    try {
+      const body = {
+        pattern: mappingForm.pattern,
+        unitId: mappingForm.type === 'unit' ? mappingForm.targetId : null,
+        creditorId: mappingForm.type === 'creditor' ? mappingForm.targetId : null,
+      };
+
+      if (editingMapping) {
+        const res = await fetch(`/api/mappings/${editingMapping.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        if (res.ok) {
+          setEditingMapping(null);
+          setMappingForm({ pattern: '', type: 'unit', targetId: '' });
+          fetchMappings();
+        }
+      } else {
+        const res = await fetch('/api/mappings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        if (res.ok) {
+          setMappingForm({ pattern: '', type: 'unit', targetId: '' });
+          fetchMappings();
+          fetchTransactions();
+        }
+      }
+    } catch (error) {
+      console.error('Error saving mapping:', error);
+    }
+  };
+
+  // Side panel logic
+  function suggestPattern(description: string): string {
+    let pattern = description.replace(/-\d{4}-\d{2}-\d{2}$/, '').trim();
+    pattern = pattern.replace(/-\d{4}-\d{2}$/, '').trim();
+    return pattern;
+  }
+
+  async function fetchMatchCount(pattern: string) {
+    if (!pattern) { setPanelMatchCount(0); return; }
+    try {
+      const res = await fetch(`/api/mappings/match-count?pattern=${encodeURIComponent(pattern)}`);
+      if (res.ok) {
+        const data = await res.json();
+        setPanelMatchCount(data.count);
+      }
+    } catch { setPanelMatchCount(0); }
+  }
+
+  function openPanel(tx: Transaction) {
+    setSelectedTx(tx);
+    const suggested = suggestPattern(tx.description);
+    setPanelPattern(suggested);
+    setPanelAssignType(tx.amount >= 0 ? 'unit' : 'creditor');
+    setPanelUnitId(tx.unitId || '');
+    setPanelCreditorId(tx.creditorId || '');
+    fetchMatchCount(suggested);
+  }
+
+  function closePanel() {
+    setSelectedTx(null);
+    setPanelPattern('');
+    setPanelMatchCount(0);
+  }
+
+  async function handlePatternChange(newPattern: string) {
+    setPanelPattern(newPattern);
+    fetchMatchCount(newPattern);
+  }
+
+  async function handleApplyMapping() {
+    if (!panelPattern) return;
+    setPanelSaving(true);
+    try {
+      const res = await fetch('/api/mappings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          pattern: panelPattern,
+          unitId: panelAssignType === 'unit' ? panelUnitId : null,
+          creditorId: panelAssignType === 'creditor' ? panelCreditorId : null,
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        alert(`Mapping guardado. ${data.updatedCount} transacoes atualizadas.`);
+        closePanel();
+        fetchTransactions();
+        fetchMappings();
+      } else {
+        const data = await res.json();
+        alert(`Erro: ${data.error}`);
+      }
+    } catch {
+      alert('Erro ao guardar mapping');
+    } finally {
+      setPanelSaving(false);
+    }
+  }
 
   function resetForm() {
     setFormData({
@@ -178,7 +365,7 @@ export default function TransactionsPage() {
         const data = await res.json();
         alert(`Erro: ${data.error}`);
       }
-    } catch (error) {
+    } catch {
       alert('Erro ao criar transacao');
     } finally {
       setSaving(false);
@@ -189,16 +376,128 @@ export default function TransactionsPage() {
     <div className="flex min-h-screen bg-gray-50">
       <Sidebar />
 
+      {/* Mappings Panel */}
+      {showMappingsPanel && (
+        <div className="w-80 bg-white border-r border-gray-200 p-4 overflow-y-auto">
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-lg font-bold text-gray-900">Mapeamentos</h2>
+            <button
+              className="text-gray-400 hover:text-gray-600"
+              onClick={() => setShowMappingsPanel(false)}
+            >
+              x
+            </button>
+          </div>
+
+          {/* Add/Edit Mapping Form */}
+          <div className="mb-4 p-3 bg-gray-50 rounded-lg">
+            <h3 className="text-sm font-medium text-gray-700 mb-2">
+              {editingMapping ? 'Editar Mapeamento' : 'Novo Mapeamento'}
+            </h3>
+            <div className="space-y-2">
+              <input
+                type="text"
+                className="input text-sm"
+                placeholder="Padrao (ex: DD-OTIS)"
+                value={mappingForm.pattern}
+                onChange={(e) => setMappingForm({ ...mappingForm, pattern: e.target.value })}
+              />
+              <select
+                className="input text-sm"
+                value={mappingForm.type}
+                onChange={(e) => setMappingForm({ ...mappingForm, type: e.target.value as 'unit' | 'creditor', targetId: '' })}
+              >
+                <option value="unit">Fraccao</option>
+                <option value="creditor">Credor</option>
+              </select>
+              <select
+                className="input text-sm"
+                value={mappingForm.targetId}
+                onChange={(e) => setMappingForm({ ...mappingForm, targetId: e.target.value })}
+              >
+                <option value="">-- Selecionar --</option>
+                {mappingForm.type === 'unit'
+                  ? units.map((u) => (
+                      <option key={u.id} value={u.id}>{u.code}</option>
+                    ))
+                  : creditors.map((c) => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
+                    ))}
+              </select>
+              <div className="flex gap-2">
+                <button
+                  className="btn-primary text-sm flex-1"
+                  onClick={handleSaveMapping}
+                  disabled={!mappingForm.pattern || !mappingForm.targetId}
+                >
+                  {editingMapping ? 'Guardar' : 'Adicionar'}
+                </button>
+                {editingMapping && (
+                  <button
+                    className="btn-secondary text-sm"
+                    onClick={() => {
+                      setEditingMapping(null);
+                      setMappingForm({ pattern: '', type: 'unit', targetId: '' });
+                    }}
+                  >
+                    Cancelar
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Mappings List */}
+          <div className="space-y-2">
+            {mappings.map((m) => (
+              <div key={m.id} className="p-2 bg-white border border-gray-200 rounded-lg text-sm">
+                <div className="font-medium text-gray-900 truncate" title={m.pattern}>
+                  {m.pattern}
+                </div>
+                <div className="text-gray-500 text-xs">
+                  → {m.unit?.code || m.creditor?.name || 'N/A'}
+                </div>
+                <div className="flex gap-2 mt-1">
+                  <button
+                    className="text-xs text-primary-600 hover:underline"
+                    onClick={() => handleEditMapping(m)}
+                  >
+                    Editar
+                  </button>
+                  <button
+                    className="text-xs text-red-600 hover:underline"
+                    onClick={() => handleDeleteMapping(m.id)}
+                  >
+                    Eliminar
+                  </button>
+                </div>
+              </div>
+            ))}
+            {mappings.length === 0 && (
+              <p className="text-sm text-gray-500 text-center py-4">Sem mapeamentos</p>
+            )}
+          </div>
+        </div>
+      )}
+
       <main className="flex-1 p-8">
         <div className="flex justify-between items-center mb-6">
-          <h1 className="text-2xl font-bold text-gray-900">Transacoes</h1>
+          <div className="flex items-center gap-4">
+            <h1 className="text-2xl font-bold text-gray-900">Transacoes</h1>
+            <button
+              className={`text-sm px-3 py-1 rounded-lg border ${showMappingsPanel ? 'bg-primary-50 border-primary-300 text-primary-700' : 'border-gray-300 text-gray-600 hover:bg-gray-50'}`}
+              onClick={() => setShowMappingsPanel(!showMappingsPanel)}
+            >
+              {showMappingsPanel ? 'Fechar Mapeamentos' : 'Mapeamentos'}
+            </button>
+          </div>
           <button className="btn-primary" onClick={() => setShowModal(true)}>
             + Nova Transacao
           </button>
         </div>
 
         <form onSubmit={handleFilter} className="card mb-6">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
             <div>
               <label className="label">Tipo</label>
               <select
@@ -214,13 +513,32 @@ export default function TransactionsPage() {
               </select>
             </div>
             <div>
+              <label className="label">Fraccao/Credor</label>
+              <select
+                value={filter.entityFilter}
+                onChange={(e) => setFilter({ ...filter, entityFilter: e.target.value })}
+                className="input"
+              >
+                <option value="">Todos</option>
+                <option value="unassigned">Sem atribuicao</option>
+                <optgroup label="Fraccoes">
+                  {units.map((u) => (
+                    <option key={u.id} value={`unit:${u.id}`}>{u.code}</option>
+                  ))}
+                </optgroup>
+                <optgroup label="Credores">
+                  {creditors.map((c) => (
+                    <option key={c.id} value={`creditor:${c.id}`}>{c.name}</option>
+                  ))}
+                </optgroup>
+              </select>
+            </div>
+            <div>
               <label className="label">Data Inicio</label>
               <input
                 type="date"
                 value={filter.startDate}
-                onChange={(e) =>
-                  setFilter({ ...filter, startDate: e.target.value })
-                }
+                onChange={(e) => setFilter({ ...filter, startDate: e.target.value })}
                 className="input"
               />
             </div>
@@ -229,9 +547,7 @@ export default function TransactionsPage() {
               <input
                 type="date"
                 value={filter.endDate}
-                onChange={(e) =>
-                  setFilter({ ...filter, endDate: e.target.value })
-                }
+                onChange={(e) => setFilter({ ...filter, endDate: e.target.value })}
                 className="input"
               />
             </div>
@@ -243,11 +559,162 @@ export default function TransactionsPage() {
           </div>
         </form>
 
-        <div className="card">
-          {loading ? (
-            <p className="text-gray-500">A carregar...</p>
-          ) : (
-            <TransactionList transactions={transactions} />
+        <div className={`${selectedTx ? 'flex gap-6' : ''}`}>
+          <div className={`card ${selectedTx ? 'flex-1' : ''}`}>
+            {loading ? (
+              <p className="text-gray-500">A carregar...</p>
+            ) : (
+              <>
+                <TransactionList
+                  transactions={transactions}
+                  onRowClick={openPanel}
+                  selectedId={selectedTx?.id}
+                />
+
+                {/* Pagination */}
+                {totalPages > 1 && (
+                  <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-200">
+                    <p className="text-sm text-gray-500">
+                      A mostrar {(currentPage - 1) * PAGE_SIZE + 1} a {Math.min(currentPage * PAGE_SIZE, totalTransactions)} de {totalTransactions}
+                    </p>
+                    <div className="flex gap-2">
+                      <button
+                        className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                        onClick={() => setCurrentPage(currentPage - 1)}
+                        disabled={currentPage === 1}
+                      >
+                        Anterior
+                      </button>
+                      <span className="px-3 py-1 text-sm">
+                        {currentPage} / {totalPages}
+                      </span>
+                      <button
+                        className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                        onClick={() => setCurrentPage(currentPage + 1)}
+                        disabled={currentPage === totalPages}
+                      >
+                        Seguinte
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+
+          {/* Side Panel */}
+          {selectedTx && (
+            <div className="w-80 shrink-0">
+              <div className="card sticky top-8">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-lg font-bold">Atribuir</h3>
+                  <button
+                    className="text-gray-400 hover:text-gray-600 text-xl"
+                    onClick={closePanel}
+                  >
+                    x
+                  </button>
+                </div>
+
+                <div className="mb-3">
+                  <p className="text-xs text-gray-500">Descricao:</p>
+                  <p className="text-sm font-medium text-gray-800 break-words">
+                    {selectedTx.description}
+                  </p>
+                </div>
+
+                <div className="mb-3">
+                  <p className="text-xs text-gray-500">Valor:</p>
+                  <p className={`text-sm font-medium ${selectedTx.amount >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                    {selectedTx.amount.toFixed(2)} EUR
+                  </p>
+                </div>
+
+                <div className="mb-3">
+                  <p className="text-xs text-gray-500">Atual:</p>
+                  <p className="text-sm text-gray-700">
+                    {selectedTx.unit?.code ?? selectedTx.creditor?.name ?? 'Nao atribuido'}
+                  </p>
+                </div>
+
+                <hr className="my-4" />
+
+                <div className="mb-3">
+                  <label className="label">Tipo</label>
+                  <select
+                    className="input"
+                    value={panelAssignType}
+                    onChange={(e) => {
+                      setPanelAssignType(e.target.value as 'unit' | 'creditor');
+                      setPanelUnitId('');
+                      setPanelCreditorId('');
+                    }}
+                  >
+                    <option value="unit">Fraccao</option>
+                    <option value="creditor">Credor</option>
+                  </select>
+                </div>
+
+                {panelAssignType === 'unit' && (
+                  <div className="mb-3">
+                    <label className="label">Fraccao</label>
+                    <select
+                      className="input"
+                      value={panelUnitId}
+                      onChange={(e) => setPanelUnitId(e.target.value)}
+                    >
+                      <option value="">-- Selecionar --</option>
+                      {units.map((u) => (
+                        <option key={u.id} value={u.id}>
+                          {u.code} {u.owners?.[0]?.name ? `(${u.owners[0].name})` : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                {panelAssignType === 'creditor' && (
+                  <div className="mb-3">
+                    <label className="label">Credor</label>
+                    <select
+                      className="input"
+                      value={panelCreditorId}
+                      onChange={(e) => setPanelCreditorId(e.target.value)}
+                    >
+                      <option value="">-- Selecionar --</option>
+                      {creditors.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                <div className="mb-3">
+                  <label className="label">Padrao (contains)</label>
+                  <input
+                    type="text"
+                    className="input text-sm"
+                    value={panelPattern}
+                    onChange={(e) => handlePatternChange(e.target.value)}
+                  />
+                  {panelMatchCount > 0 && (
+                    <p className="text-xs text-blue-600 mt-1">
+                      {panelMatchCount} transacoes correspondem a este padrao
+                    </p>
+                  )}
+                </div>
+
+                <button
+                  className="btn-primary w-full"
+                  onClick={handleApplyMapping}
+                  disabled={panelSaving || (!panelUnitId && !panelCreditorId) || !panelPattern}
+                >
+                  {panelSaving ? 'A aplicar...' : `Aplicar a ${panelMatchCount} transacoes`}
+                </button>
+              </div>
+            </div>
           )}
         </div>
 
@@ -341,7 +808,7 @@ export default function TransactionsPage() {
                       value={formData.amount}
                       onChange={(e) => {
                         setFormData({ ...formData, amount: e.target.value });
-                        setSelectedMonths([]); // Reset to trigger auto-suggest
+                        setSelectedMonths([]);
                       }}
                       placeholder="0.00"
                       required

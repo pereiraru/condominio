@@ -1,28 +1,64 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { getFeeForMonth } from '@/lib/feeHistory';
 
 export async function GET() {
   try {
     const now = new Date();
-    const currentMonth = `${now.getFullYear()}-${(now.getMonth() + 1).toString().padStart(2, '0')}`;
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth() + 1;
 
     const units = await prisma.unit.findMany({
       orderBy: { code: 'asc' },
       include: {
         owners: true,
+        feeHistory: { orderBy: { effectiveFrom: 'asc' } },
         transactions: {
-          where: {
-            type: 'payment',
-            referenceMonth: currentMonth,
-          },
-          select: { amount: true },
+          where: { type: 'payment' },
+          select: { amount: true, referenceMonth: true },
         },
       },
     });
 
     const result = units.map((unit) => {
-      const totalPaid = unit.transactions.reduce((sum, t) => sum + Math.abs(t.amount), 0);
-      const totalOwed = Math.max(0, unit.monthlyFee - totalPaid);
+      // Calculate expected YTD (current year, up to current month)
+      let expectedYTD = 0;
+      for (let m = 1; m <= currentMonth; m++) {
+        const monthStr = `${currentYear}-${m.toString().padStart(2, '0')}`;
+        expectedYTD += getFeeForMonth(unit.feeHistory, monthStr, unit.monthlyFee);
+      }
+
+      // Calculate paid YTD (current year)
+      const paidYTD = unit.transactions
+        .filter((t) => t.referenceMonth && t.referenceMonth.startsWith(`${currentYear}-`))
+        .reduce((sum, t) => sum + Math.abs(t.amount), 0);
+
+      // Calculate past years debt
+      const pastMonths = new Set<string>();
+      unit.transactions.forEach((t) => {
+        if (t.referenceMonth && !t.referenceMonth.startsWith(`${currentYear}-`)) {
+          const year = parseInt(t.referenceMonth.split('-')[0]);
+          if (year < currentYear) pastMonths.add(t.referenceMonth.split('-')[0]);
+        }
+      });
+
+      let pastYearsDebt = 0;
+      for (const yearStr of Array.from(pastMonths)) {
+        const year = parseInt(yearStr);
+        let expectedForYear = 0;
+        for (let m = 1; m <= 12; m++) {
+          const monthStr = `${year}-${m.toString().padStart(2, '0')}`;
+          expectedForYear += getFeeForMonth(unit.feeHistory, monthStr, unit.monthlyFee);
+        }
+        const paidForYear = unit.transactions
+          .filter((t) => t.referenceMonth?.startsWith(`${year}-`))
+          .reduce((sum, t) => sum + Math.abs(t.amount), 0);
+        pastYearsDebt += Math.max(0, expectedForYear - paidForYear);
+      }
+
+      const yearDebt = Math.max(0, expectedYTD - paidYTD);
+      const totalOwed = yearDebt + pastYearsDebt;
+
       return {
         id: unit.id,
         code: unit.code,
@@ -33,7 +69,7 @@ export async function GET() {
         telefone: unit.telefone,
         email: unit.email,
         owners: unit.owners,
-        totalPaid,
+        totalPaid: paidYTD,
         totalOwed,
       };
     });

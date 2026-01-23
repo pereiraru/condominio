@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { getFeeForMonth } from '@/lib/feeHistory';
 
 export async function GET(
   request: NextRequest,
@@ -13,6 +14,9 @@ export async function GET(
           where: { type: 'payment' },
           select: { amount: true, referenceMonth: true, date: true },
         },
+        feeHistory: {
+          orderBy: { effectiveFrom: 'asc' },
+        },
       },
     });
 
@@ -21,9 +25,6 @@ export async function GET(
     }
 
     const currentYear = new Date().getFullYear();
-
-    // Calculate debt from past years
-    // We need to find the earliest transaction or use a reasonable start year
     const transactions = unit.transactions;
 
     // Get all unique years from transactions
@@ -42,15 +43,17 @@ export async function GET(
       }
     });
 
-    // Also check for years where there should have been payments
-    // For simplicity, we'll calculate from the unit creation or earliest transaction
     const earliestYear = Math.min(...Array.from(years), currentYear - 1);
 
     let pastYearsDebt = 0;
 
     for (let year = earliestYear; year < currentYear; year++) {
-      // Expected: 12 months * monthly fee
-      const expectedForYear = unit.monthlyFee * 12;
+      // Calculate expected per month using historical fees
+      let expectedForYear = 0;
+      for (let m = 1; m <= 12; m++) {
+        const monthStr = `${year}-${m.toString().padStart(2, '0')}`;
+        expectedForYear += getFeeForMonth(unit.feeHistory, monthStr, unit.monthlyFee);
+      }
 
       // Paid: sum of payments with referenceMonth in that year
       const paidForYear = transactions

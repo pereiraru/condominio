@@ -212,7 +212,7 @@ export default function UnitsPage() {
 
                 <div className="mt-3 pt-3 border-t border-gray-100 flex justify-between text-sm">
                   <div>
-                    <span className="text-gray-500">Pago: </span>
+                    <span className="text-gray-500">Pago {new Date().getFullYear()}: </span>
                     <span className="font-medium text-green-600">
                       {(unit.totalPaid ?? 0).toFixed(2)} EUR
                     </span>

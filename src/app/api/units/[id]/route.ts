@@ -50,6 +50,21 @@ export async function PUT(
 ) {
   try {
     const body = await request.json();
+    const newFee = parseFloat(body.monthlyFee ?? '45');
+
+    // Check if monthlyFee has changed
+    const existingUnit = await prisma.unit.findUnique({ where: { id: params.id } });
+    if (existingUnit && existingUnit.monthlyFee !== newFee) {
+      const now = new Date();
+      const effectiveFrom = `${now.getFullYear()}-${(now.getMonth() + 1).toString().padStart(2, '0')}`;
+      await prisma.feeHistory.create({
+        data: {
+          unitId: params.id,
+          amount: newFee,
+          effectiveFrom,
+        },
+      });
+    }
 
     // Update unit fields
     const unit = await prisma.unit.update({
@@ -58,7 +73,7 @@ export async function PUT(
         code: body.code,
         floor: body.floor != null ? parseInt(body.floor) : null,
         description: body.description || null,
-        monthlyFee: parseFloat(body.monthlyFee ?? '45'),
+        monthlyFee: newFee,
         nib: body.nib || null,
         telefone: body.telefone || null,
         email: body.email || null,

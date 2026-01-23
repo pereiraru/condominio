@@ -31,11 +31,13 @@ model Unit {
   nib          String?
   telefone     String?
   email        String?
-  residents    User[]
-  owners       Owner[]
-  transactions Transaction[]
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
+  residents           User[]
+  owners              Owner[]
+  transactions        Transaction[]
+  feeHistory          FeeHistory[]
+  descriptionMappings DescriptionMapping[]
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
 }
 
 // Unit owners/residents (multiple per unit)
@@ -57,10 +59,12 @@ model Creditor {
   email       String?
   telefone    String?
   nib         String?
-  attachments CreditorAttachment[]
-  transactions Transaction[]
-  createdAt   DateTime             @default(now())
-  updatedAt   DateTime             @updatedAt
+  attachments         CreditorAttachment[]
+  transactions        Transaction[]
+  feeHistory          FeeHistory[]
+  descriptionMappings DescriptionMapping[]
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
 }
 
 // Creditor attachments (invoices, contracts)
@@ -109,13 +113,27 @@ model Document {
   uploadedAt   DateTime      @default(now())
 }
 
-// Monthly fee configuration per year
-model FeeConfig {
-  id        String   @id @default(cuid())
-  year      Int
-  unitCode  String
-  amount    Float
-  createdAt DateTime @default(now())
+// Description pattern mapping for auto-assigning transactions
+model DescriptionMapping {
+  id         String   @id @default(cuid())
+  pattern    String   @unique // substring to match in transaction descriptions
+  unitId     String?
+  creditorId String?
+  createdAt  DateTime @default(now())
 
-  @@unique([year, unitCode])
+  unit     Unit?     @relation(fields: [unitId], references: [id], onDelete: Cascade)
+  creditor Creditor? @relation(fields: [creditorId], references: [id], onDelete: Cascade)
+}
+
+// Fee history - tracks fee changes with effective dates
+model FeeHistory {
+  id            String    @id @default(cuid())
+  unitId        String?
+  creditorId    String?
+  amount        Float
+  effectiveFrom String    // "YYYY-MM" format
+  createdAt     DateTime  @default(now())
+
+  unit     Unit?     @relation(fields: [unitId], references: [id], onDelete: Cascade)
+  creditor Creditor? @relation(fields: [creditorId], references: [id], onDelete: Cascade)
 }

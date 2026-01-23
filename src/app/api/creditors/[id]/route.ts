@@ -53,6 +53,21 @@ export async function PUT(
 ) {
   try {
     const body = await request.json();
+    const newAmountDue = body.amountDue ? parseFloat(body.amountDue) : null;
+
+    // Check if amountDue has changed
+    const existing = await prisma.creditor.findUnique({ where: { id: params.id } });
+    if (existing && existing.amountDue !== newAmountDue && newAmountDue != null) {
+      const now = new Date();
+      const effectiveFrom = `${now.getFullYear()}-${(now.getMonth() + 1).toString().padStart(2, '0')}`;
+      await prisma.feeHistory.create({
+        data: {
+          creditorId: params.id,
+          amount: newAmountDue,
+          effectiveFrom,
+        },
+      });
+    }
 
     const creditor = await prisma.creditor.update({
       where: { id: params.id },
@@ -60,7 +75,7 @@ export async function PUT(
         name: body.name,
         description: body.description || null,
         category: body.category,
-        amountDue: body.amountDue ? parseFloat(body.amountDue) : null,
+        amountDue: newAmountDue,
         email: body.email || null,
         telefone: body.telefone || null,
         nib: body.nib || null,

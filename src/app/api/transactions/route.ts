@@ -11,9 +11,18 @@ export async function GET(request: NextRequest) {
     const startDate = searchParams.get('startDate');
     const endDate = searchParams.get('endDate');
 
+    const creditorId = searchParams.get('creditorId');
+    const unassigned = searchParams.get('unassigned');
+
     const where: Record<string, unknown> = {};
 
-    if (unitId) where.unitId = unitId;
+    if (unassigned === 'true') {
+      where.unitId = null;
+      where.creditorId = null;
+    } else {
+      if (unitId) where.unitId = unitId;
+      if (creditorId) where.creditorId = creditorId;
+    }
     if (type) where.type = type;
     if (startDate || endDate) {
       where.date = {};

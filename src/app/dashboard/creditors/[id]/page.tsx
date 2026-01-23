@@ -304,7 +304,10 @@ export default function CreditorDetailPage() {
                 const isCurrentYear = calendarYear === currentYear;
                 const monthsToCount = isCurrentYear ? currentMonth : 12;
                 const expectedPerMonth = creditor.amountDue || 0;
-                const expectedYTD = expectedPerMonth * monthsToCount;
+                // Use per-month expected values from monthStatus (historical fees)
+                const expectedYTD = monthStatus
+                  .filter((_, i) => i < monthsToCount)
+                  .reduce((sum, s) => sum + s.expected, 0);
                 const paidYTD = monthStatus
                   .filter((s) => {
                     const monthNum = parseInt(s.month.split('-')[1]);

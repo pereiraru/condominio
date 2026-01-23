@@ -2,9 +2,11 @@ import { Transaction } from '@/lib/types';
 
 interface TransactionListProps {
   transactions: Transaction[];
+  onRowClick?: (tx: Transaction) => void;
+  selectedId?: string;
 }
 
-export default function TransactionList({ transactions }: TransactionListProps) {
+export default function TransactionList({ transactions, onRowClick, selectedId }: TransactionListProps) {
   if (transactions.length === 0) {
     return (
       <p className="text-gray-500 text-center py-8">
@@ -26,7 +28,11 @@ export default function TransactionList({ transactions }: TransactionListProps) 
         </thead>
         <tbody className="divide-y divide-gray-100">
           {transactions.map((tx) => (
-            <tr key={tx.id} className="hover:bg-gray-50">
+            <tr
+              key={tx.id}
+              className={`hover:bg-gray-50 ${onRowClick ? 'cursor-pointer' : ''} ${selectedId === tx.id ? 'bg-blue-50' : ''}`}
+              onClick={() => onRowClick?.(tx)}
+            >
               <td className="py-3 text-sm text-gray-600">
                 {new Date(tx.date).toLocaleDateString('pt-PT')}
               </td>
