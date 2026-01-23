@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import Sidebar from '@/components/Sidebar';
 import TransactionList from '@/components/TransactionList';
+import TransactionEditPanel from '@/components/TransactionEditPanel';
 import MonthCalendar from '@/components/MonthCalendar';
 import { Transaction, Unit, Creditor, MonthPaymentStatus } from '@/lib/types';
 
@@ -41,12 +42,6 @@ export default function TransactionsPage() {
 
   // Side panel state
   const [selectedTx, setSelectedTx] = useState<Transaction | null>(null);
-  const [panelPattern, setPanelPattern] = useState('');
-  const [panelAssignType, setPanelAssignType] = useState<'unit' | 'creditor'>('unit');
-  const [panelUnitId, setPanelUnitId] = useState('');
-  const [panelCreditorId, setPanelCreditorId] = useState('');
-  const [panelMatchCount, setPanelMatchCount] = useState(0);
-  const [panelSaving, setPanelSaving] = useState(false);
 
   // Form state
   const [formData, setFormData] = useState({
@@ -243,72 +238,23 @@ export default function TransactionsPage() {
   };
 
   // Side panel logic
-  function suggestPattern(description: string): string {
-    let pattern = description.replace(/-\d{4}-\d{2}-\d{2}$/, '').trim();
-    pattern = pattern.replace(/-\d{4}-\d{2}$/, '').trim();
-    return pattern;
-  }
-
-  async function fetchMatchCount(pattern: string) {
-    if (!pattern) { setPanelMatchCount(0); return; }
+  async function openPanel(tx: Transaction) {
+    // Fetch full transaction with allocations
     try {
-      const res = await fetch(`/api/mappings/match-count?pattern=${encodeURIComponent(pattern)}`);
+      const res = await fetch(`/api/transactions/${tx.id}`);
       if (res.ok) {
-        const data = await res.json();
-        setPanelMatchCount(data.count);
+        const fullTx = await res.json();
+        setSelectedTx(fullTx);
+      } else {
+        setSelectedTx(tx);
       }
-    } catch { setPanelMatchCount(0); }
-  }
-
-  function openPanel(tx: Transaction) {
-    setSelectedTx(tx);
-    const suggested = suggestPattern(tx.description);
-    setPanelPattern(suggested);
-    setPanelAssignType(tx.amount >= 0 ? 'unit' : 'creditor');
-    setPanelUnitId(tx.unitId || '');
-    setPanelCreditorId(tx.creditorId || '');
-    fetchMatchCount(suggested);
+    } catch {
+      setSelectedTx(tx);
+    }
   }
 
   function closePanel() {
     setSelectedTx(null);
-    setPanelPattern('');
-    setPanelMatchCount(0);
-  }
-
-  async function handlePatternChange(newPattern: string) {
-    setPanelPattern(newPattern);
-    fetchMatchCount(newPattern);
-  }
-
-  async function handleApplyMapping() {
-    if (!panelPattern) return;
-    setPanelSaving(true);
-    try {
-      const res = await fetch('/api/mappings', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          pattern: panelPattern,
-          unitId: panelAssignType === 'unit' ? panelUnitId : null,
-          creditorId: panelAssignType === 'creditor' ? panelCreditorId : null,
-        }),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        alert(`Mapping guardado. ${data.updatedCount} transações atualizadas.`);
-        closePanel();
-        fetchTransactions();
-        fetchMappings();
-      } else {
-        const data = await res.json();
-        alert(`Erro: ${data.error}`);
-      }
-    } catch {
-      alert('Erro ao guardar mapping');
-    } finally {
-      setPanelSaving(false);
-    }
   }
 
   function resetForm() {
@@ -607,117 +553,14 @@ export default function TransactionsPage() {
 
           {/* Side Panel */}
           {selectedTx && (
-            <div className="w-80 shrink-0">
-              <div className="card sticky top-8">
-                <div className="flex justify-between items-center mb-4">
-                  <h3 className="text-lg font-bold">Atribuir</h3>
-                  <button
-                    className="text-gray-400 hover:text-gray-600 text-xl"
-                    onClick={closePanel}
-                  >
-                    x
-                  </button>
-                </div>
-
-                <div className="mb-3">
-                  <p className="text-xs text-gray-500">Descrição:</p>
-                  <p className="text-sm font-medium text-gray-800 break-words">
-                    {selectedTx.description}
-                  </p>
-                </div>
-
-                <div className="mb-3">
-                  <p className="text-xs text-gray-500">Valor:</p>
-                  <p className={`text-sm font-medium ${selectedTx.amount >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                    {selectedTx.amount.toFixed(2)} EUR
-                  </p>
-                </div>
-
-                <div className="mb-3">
-                  <p className="text-xs text-gray-500">Atual:</p>
-                  <p className="text-sm text-gray-700">
-                    {selectedTx.unit?.code ?? selectedTx.creditor?.name ?? 'Nao atribuido'}
-                  </p>
-                </div>
-
-                <hr className="my-4" />
-
-                <div className="mb-3">
-                  <label className="label">Tipo</label>
-                  <select
-                    className="input"
-                    value={panelAssignType}
-                    onChange={(e) => {
-                      setPanelAssignType(e.target.value as 'unit' | 'creditor');
-                      setPanelUnitId('');
-                      setPanelCreditorId('');
-                    }}
-                  >
-                    <option value="unit">Fração</option>
-                    <option value="creditor">Credor</option>
-                  </select>
-                </div>
-
-                {panelAssignType === 'unit' && (
-                  <div className="mb-3">
-                    <label className="label">Fração</label>
-                    <select
-                      className="input"
-                      value={panelUnitId}
-                      onChange={(e) => setPanelUnitId(e.target.value)}
-                    >
-                      <option value="">-- Selecionar --</option>
-                      {units.map((u) => (
-                        <option key={u.id} value={u.id}>
-                          {u.code} {u.owners?.[0]?.name ? `(${u.owners[0].name})` : ''}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                )}
-
-                {panelAssignType === 'creditor' && (
-                  <div className="mb-3">
-                    <label className="label">Credor</label>
-                    <select
-                      className="input"
-                      value={panelCreditorId}
-                      onChange={(e) => setPanelCreditorId(e.target.value)}
-                    >
-                      <option value="">-- Selecionar --</option>
-                      {creditors.map((c) => (
-                        <option key={c.id} value={c.id}>
-                          {c.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                )}
-
-                <div className="mb-3">
-                  <label className="label">Padrao (contains)</label>
-                  <input
-                    type="text"
-                    className="input text-sm"
-                    value={panelPattern}
-                    onChange={(e) => handlePatternChange(e.target.value)}
-                  />
-                  {panelMatchCount > 0 && (
-                    <p className="text-xs text-blue-600 mt-1">
-                      {panelMatchCount} transações correspondem a este padrão
-                    </p>
-                  )}
-                </div>
-
-                <button
-                  className="btn-primary w-full"
-                  onClick={handleApplyMapping}
-                  disabled={panelSaving || (!panelUnitId && !panelCreditorId) || !panelPattern}
-                >
-                  {panelSaving ? 'A aplicar...' : `Aplicar a ${panelMatchCount} transações`}
-                </button>
-              </div>
-            </div>
+            <TransactionEditPanel
+              transaction={selectedTx}
+              units={units}
+              creditors={creditors}
+              onSave={() => { closePanel(); fetchTransactions(); }}
+              onDelete={() => { closePanel(); fetchTransactions(); }}
+              onClose={closePanel}
+            />
           )}
         </div>
 

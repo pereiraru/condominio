@@ -75,9 +75,15 @@ export default function MonthCalendar({
           const content = (
             <>
               <div>{name}</div>
-              {status && status.expected > 0 && !isSelected && (
+              {status && !isSelected && (
                 <div className="text-xs mt-0.5 opacity-75">
-                  {Number.isInteger(status.expected) ? status.expected : status.expected.toFixed(2)}€
+                  {status.paid > 0 && status.paid < status.expected
+                    ? `${status.paid.toFixed(0)}/${status.expected.toFixed(0)}€`
+                    : status.expected > 0
+                      ? `${Number.isInteger(status.expected) ? status.expected : status.expected.toFixed(2)}€`
+                      : status.paid > 0
+                        ? `${status.paid.toFixed(0)}€`
+                        : null}
                 </div>
               )}
             </>

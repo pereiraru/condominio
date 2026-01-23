@@ -13,6 +13,7 @@ export async function GET(
         transactions: {
           orderBy: { date: 'desc' },
           take: 50,
+          include: { monthAllocations: true },
         },
       },
     });
@@ -24,10 +25,12 @@ export async function GET(
     const now = new Date();
     const currentMonth = `${now.getFullYear()}-${(now.getMonth() + 1).toString().padStart(2, '0')}`;
 
-    const monthlyPayments = unit.transactions.filter(
-      (t) => t.type === 'payment' && t.referenceMonth === currentMonth
-    );
-    const totalPaid = monthlyPayments.reduce((sum, t) => sum + Math.abs(t.amount), 0);
+    // Calculate paid for current month using monthAllocations
+    const totalPaid = unit.transactions
+      .filter((t) => t.type === 'payment')
+      .flatMap((t) => t.monthAllocations)
+      .filter((a) => a.month === currentMonth)
+      .reduce((sum, a) => sum + a.amount, 0);
     const totalOwed = Math.max(0, unit.monthlyFee - totalPaid);
 
     return NextResponse.json({

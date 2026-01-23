@@ -15,12 +15,17 @@ export async function GET() {
         feeHistory: { orderBy: { effectiveFrom: 'asc' } },
         transactions: {
           where: { type: 'payment' },
-          select: { amount: true, referenceMonth: true },
+          select: {
+            monthAllocations: { select: { month: true, amount: true } },
+          },
         },
       },
     });
 
     const result = units.map((unit) => {
+      // Flatten all month allocations for this unit
+      const allAllocations = unit.transactions.flatMap((t) => t.monthAllocations);
+
       // Calculate expected YTD (current year, up to current month)
       let expectedYTD = 0;
       for (let m = 1; m <= currentMonth; m++) {
@@ -29,30 +34,27 @@ export async function GET() {
       }
 
       // Calculate paid YTD (current year)
-      const paidYTD = unit.transactions
-        .filter((t) => t.referenceMonth && t.referenceMonth.startsWith(`${currentYear}-`))
-        .reduce((sum, t) => sum + Math.abs(t.amount), 0);
+      const paidYTD = allAllocations
+        .filter((a) => a.month.startsWith(`${currentYear}-`))
+        .reduce((sum, a) => sum + a.amount, 0);
 
       // Calculate past years debt
-      const pastMonths = new Set<string>();
-      unit.transactions.forEach((t) => {
-        if (t.referenceMonth && !t.referenceMonth.startsWith(`${currentYear}-`)) {
-          const year = parseInt(t.referenceMonth.split('-')[0]);
-          if (year < currentYear) pastMonths.add(t.referenceMonth.split('-')[0]);
-        }
+      const pastYears = new Set<number>();
+      allAllocations.forEach((a) => {
+        const year = parseInt(a.month.split('-')[0]);
+        if (year < currentYear) pastYears.add(year);
       });
 
       let pastYearsDebt = 0;
-      for (const yearStr of Array.from(pastMonths)) {
-        const year = parseInt(yearStr);
+      for (const year of Array.from(pastYears)) {
         let expectedForYear = 0;
         for (let m = 1; m <= 12; m++) {
           const monthStr = `${year}-${m.toString().padStart(2, '0')}`;
           expectedForYear += getFeeForMonth(unit.feeHistory, monthStr, unit.monthlyFee);
         }
-        const paidForYear = unit.transactions
-          .filter((t) => t.referenceMonth?.startsWith(`${year}-`))
-          .reduce((sum, t) => sum + Math.abs(t.amount), 0);
+        const paidForYear = allAllocations
+          .filter((a) => a.month.startsWith(`${year}-`))
+          .reduce((sum, a) => sum + a.amount, 0);
         pastYearsDebt += Math.max(0, expectedForYear - paidForYear);
       }
 

@@ -33,7 +33,7 @@ export async function GET(request: NextRequest) {
     const [transactions, total] = await Promise.all([
       prisma.transaction.findMany({
         where,
-        include: { unit: true, creditor: true },
+        include: { unit: true, creditor: true, monthAllocations: true },
         orderBy: { date: 'desc' },
         take: limit,
         skip: offset,
@@ -57,49 +57,40 @@ export async function POST(request: NextRequest) {
     const months: string[] = body.months || [];
     const totalAmount = parseFloat(body.amount);
 
+    // Create a single transaction
+    const transaction = await prisma.transaction.create({
+      data: {
+        date: new Date(body.date),
+        valueDate: body.valueDate ? new Date(body.valueDate) : null,
+        description: body.description,
+        amount: totalAmount,
+        balance: body.balance ? parseFloat(body.balance) : null,
+        type: body.type,
+        category: body.category || null,
+        referenceMonth: months.length === 1 ? months[0] : (body.referenceMonth || null),
+        unitId: body.unitId || null,
+        creditorId: body.creditorId || null,
+      },
+    });
+
+    // Create month allocations if months specified
     if (months.length > 0) {
-      // Create one transaction per month, dividing amount equally
-      const perMonth = totalAmount / months.length;
-      const transactions = [];
-
-      for (const month of months) {
-        const tx = await prisma.transaction.create({
-          data: {
-            date: new Date(body.date),
-            description: body.description,
-            amount: perMonth,
-            type: body.type,
-            category: body.category || null,
-            referenceMonth: month,
-            unitId: body.unitId || null,
-            creditorId: body.creditorId || null,
-          },
-          include: { unit: true, creditor: true },
-        });
-        transactions.push(tx);
-      }
-
-      return NextResponse.json(transactions, { status: 201 });
-    } else {
-      // Single transaction without month reference
-      const transaction = await prisma.transaction.create({
-        data: {
-          date: new Date(body.date),
-          valueDate: body.valueDate ? new Date(body.valueDate) : null,
-          description: body.description,
-          amount: totalAmount,
-          balance: body.balance ? parseFloat(body.balance) : null,
-          type: body.type,
-          category: body.category || null,
-          referenceMonth: body.referenceMonth || null,
-          unitId: body.unitId || null,
-          creditorId: body.creditorId || null,
-        },
-        include: { unit: true, creditor: true },
+      const perMonth = Math.abs(totalAmount) / months.length;
+      await prisma.transactionMonth.createMany({
+        data: months.map((month) => ({
+          transactionId: transaction.id,
+          month,
+          amount: perMonth,
+        })),
       });
-
-      return NextResponse.json(transaction, { status: 201 });
     }
+
+    const result = await prisma.transaction.findUnique({
+      where: { id: transaction.id },
+      include: { unit: true, creditor: true, monthAllocations: true },
+    });
+
+    return NextResponse.json(result, { status: 201 });
   } catch (error) {
     console.error('Error creating transaction:', error);
     return NextResponse.json(

@@ -51,6 +51,13 @@ export interface CreditorAttachment {
   uploadedAt: string;
 }
 
+export interface TransactionMonth {
+  id: string;
+  transactionId: string;
+  month: string; // "YYYY-MM"
+  amount: number;
+}
+
 export interface Transaction {
   id: string;
   date: string;
@@ -60,11 +67,12 @@ export interface Transaction {
   balance?: number;
   type: 'payment' | 'expense' | 'fee' | 'transfer';
   category?: string;
-  referenceMonth?: string; // "YYYY-MM"
+  referenceMonth?: string; // "YYYY-MM" (legacy)
   unitId?: string;
   unit?: Unit;
   creditorId?: string;
   creditor?: Creditor;
+  monthAllocations?: TransactionMonth[];
 }
 
 export interface MonthPaymentStatus {

@@ -229,7 +229,7 @@ export default function ReportsPage() {
           body: JSON.stringify({
             unitId: panelType === 'payment' ? panelTargetId : null,
             creditorId: panelType === 'expense' ? panelTargetId : null,
-            referenceMonth: panelMonth,
+            monthAllocations: [{ month: panelMonth, amount: Math.abs(parseFloat(panelAmount)) }],
           }),
         });
 

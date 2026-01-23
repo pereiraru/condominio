@@ -6,25 +6,26 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
-    const transactions = await prisma.transaction.findMany({
+    // Query TransactionMonth entries for all transactions of this unit
+    const allocations = await prisma.transactionMonth.findMany({
       where: {
-        unitId: params.id,
-        referenceMonth: { not: null },
+        transaction: {
+          unitId: params.id,
+        },
       },
       select: {
-        referenceMonth: true,
+        month: true,
         amount: true,
       },
     });
 
-    // Group payments by referenceMonth
+    // Group by month
     const payments: Record<string, number> = {};
-    for (const tx of transactions) {
-      if (!tx.referenceMonth) continue;
-      if (!payments[tx.referenceMonth]) {
-        payments[tx.referenceMonth] = 0;
+    for (const alloc of allocations) {
+      if (!payments[alloc.month]) {
+        payments[alloc.month] = 0;
       }
-      payments[tx.referenceMonth] += Math.abs(tx.amount);
+      payments[alloc.month] += alloc.amount;
     }
 
     return NextResponse.json({ payments });

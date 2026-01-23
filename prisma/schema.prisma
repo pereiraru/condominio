@@ -81,23 +81,34 @@ model CreditorAttachment {
 
 // Financial transactions (expenses and payments)
 model Transaction {
-  id             String    @id @default(cuid())
-  date           DateTime
-  valueDate      DateTime?
-  description    String
-  amount         Float     // positive = income, negative = expense
-  balance        Float?
-  type           String    // "payment", "expense", "fee", "transfer"
-  category       String?   // "electricity", "maintenance", "bank_fee", "savings", etc.
-  referenceMonth String?   // "YYYY-MM" - which month this payment/expense covers
-  unitId         String?
-  unit           Unit?     @relation(fields: [unitId], references: [id])
-  creditorId     String?
-  creditor       Creditor? @relation(fields: [creditorId], references: [id])
-  documentId     String?
-  document       Document? @relation(fields: [documentId], references: [id])
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  id               String             @id @default(cuid())
+  date             DateTime
+  valueDate        DateTime?
+  description      String
+  amount           Float              // positive = income, negative = expense
+  balance          Float?
+  type             String             // "payment", "expense", "fee", "transfer"
+  category         String?            // "electricity", "maintenance", "bank_fee", "savings", etc.
+  referenceMonth   String?            // "YYYY-MM" - legacy, kept for compatibility
+  unitId           String?
+  unit             Unit?              @relation(fields: [unitId], references: [id])
+  creditorId       String?
+  creditor         Creditor?          @relation(fields: [creditorId], references: [id])
+  documentId       String?
+  document         Document?          @relation(fields: [documentId], references: [id])
+  monthAllocations TransactionMonth[]
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+}
+
+// Month allocations for transactions (split a single transaction across multiple months)
+model TransactionMonth {
+  id            String      @id @default(cuid())
+  transactionId String
+  transaction   Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  month         String      // "YYYY-MM"
+  amount        Float       // amount allocated to this month
+  createdAt     DateTime    @default(now())
 }
 
 // Documents (invoices, receipts, minutes)

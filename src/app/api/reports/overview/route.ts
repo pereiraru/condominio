@@ -25,54 +25,51 @@ export async function GET(request: NextRequest) {
       orderBy: { name: 'asc' },
     });
 
-    // Get all transactions for the year (with referenceMonth)
-    const transactions = await prisma.transaction.findMany({
+    // Get all TransactionMonth allocations for the year, including transaction data
+    const yearAllocations = await prisma.transactionMonth.findMany({
       where: {
-        referenceMonth: {
+        month: {
           gte: `${year}-01`,
           lte: `${year}-12`,
         },
       },
-      orderBy: { date: 'desc' },
-    });
-
-    // Get all transactions before the selected year (for past years debt calculation)
-    const pastTransactions = await prisma.transaction.findMany({
-      where: {
-        referenceMonth: {
-          lt: `${year}-01`,
+      include: {
+        transaction: {
+          select: { id: true, unitId: true, creditorId: true, amount: true, date: true, description: true },
         },
       },
     });
 
-    // Calculate past years debt for each unit
+    // Get all allocations before the selected year (for past years debt)
+    const pastAllocations = await prisma.transactionMonth.findMany({
+      where: {
+        month: {
+          lt: `${year}-01`,
+        },
+      },
+      include: {
+        transaction: {
+          select: { unitId: true, creditorId: true, amount: true },
+        },
+      },
+    });
+
+    // Calculate past years debt for each entity
     const calculatePastYearsDebt = (
       entityId: string,
       entityType: 'unit' | 'creditor',
       feeHistory: { amount: number; effectiveFrom: string }[],
       defaultFee: number
     ) => {
-      // Get all unique months from past transactions for this entity
-      const entityTxs = pastTransactions.filter((t) =>
-        entityType === 'unit' ? t.unitId === entityId : t.creditorId === entityId
+      const entityAllocs = pastAllocations.filter((a) =>
+        entityType === 'unit' ? a.transaction.unitId === entityId : a.transaction.creditorId === entityId
       );
 
-      // Get the earliest transaction date to know when to start counting
-      const allTxs = [...entityTxs, ...transactions.filter((t) =>
-        entityType === 'unit' ? t.unitId === entityId : t.creditorId === entityId
-      )];
+      if (entityAllocs.length === 0) return 0;
 
-      if (allTxs.length === 0) return 0;
-
-      // Find the earliest month with any transaction
-      const earliestMonth = allTxs
-        .filter((t) => t.referenceMonth)
-        .map((t) => t.referenceMonth!)
-        .sort()[0];
-
+      const earliestMonth = entityAllocs.map((a) => a.month).sort()[0];
       if (!earliestMonth) return 0;
 
-      // Calculate expected vs paid for all months up to end of previous year
       let totalExpected = 0;
       let totalPaid = 0;
 
@@ -81,20 +78,12 @@ export async function GET(request: NextRequest) {
 
       for (let y = earliestYear; y <= endYear; y++) {
         const startMonth = y === earliestYear ? earliestM : 1;
-        const endMonth = 12;
-
-        for (let m = startMonth; m <= endMonth; m++) {
+        for (let m = startMonth; m <= 12; m++) {
           const monthStr = `${y}-${m.toString().padStart(2, '0')}`;
           const expected = getFeeForMonth(feeHistory, monthStr, defaultFee);
-          const monthTxs = pastTransactions.filter(
-            (t) =>
-              (entityType === 'unit' ? t.unitId === entityId : t.creditorId === entityId) &&
-              t.referenceMonth === monthStr
-          );
-          const paid =
-            entityType === 'unit'
-              ? monthTxs.filter((t) => t.amount > 0).reduce((sum, t) => sum + t.amount, 0)
-              : Math.abs(monthTxs.filter((t) => t.amount < 0).reduce((sum, t) => sum + t.amount, 0));
+          const paid = entityAllocs
+            .filter((a) => a.month === monthStr)
+            .reduce((sum, a) => sum + a.amount, 0);
 
           totalExpected += expected;
           totalPaid += paid;
@@ -115,20 +104,20 @@ export async function GET(request: NextRequest) {
 
       for (let m = 1; m <= 12; m++) {
         const monthStr = `${year}-${m.toString().padStart(2, '0')}`;
-        const monthTxs = transactions.filter(
-          (t) => t.unitId === unit.id && t.referenceMonth === monthStr && t.amount > 0
+        const monthAllocs = yearAllocations.filter(
+          (a) => a.transaction.unitId === unit.id && a.month === monthStr && a.transaction.amount > 0
         );
-        const paid = monthTxs.reduce((sum, t) => sum + t.amount, 0);
+        const paid = monthAllocs.reduce((sum, a) => sum + a.amount, 0);
         const expected = getFeeForMonth(unit.feeHistory, monthStr, unit.monthlyFee);
 
         months[monthStr] = {
           paid,
           expected,
-          transactions: monthTxs.map((t) => ({
-            id: t.id,
-            amount: t.amount,
-            date: t.date.toISOString(),
-            description: t.description,
+          transactions: monthAllocs.map((a) => ({
+            id: a.transaction.id,
+            amount: a.amount,
+            date: a.transaction.date.toISOString(),
+            description: a.transaction.description,
           })),
         };
         totalPaid += paid;
@@ -164,20 +153,20 @@ export async function GET(request: NextRequest) {
 
       for (let m = 1; m <= 12; m++) {
         const monthStr = `${year}-${m.toString().padStart(2, '0')}`;
-        const monthTxs = transactions.filter(
-          (t) => t.creditorId === creditor.id && t.referenceMonth === monthStr && t.amount < 0
+        const monthAllocs = yearAllocations.filter(
+          (a) => a.transaction.creditorId === creditor.id && a.month === monthStr && a.transaction.amount < 0
         );
-        const paid = Math.abs(monthTxs.reduce((sum, t) => sum + t.amount, 0));
+        const paid = monthAllocs.reduce((sum, a) => sum + a.amount, 0);
         const expected = getFeeForMonth(creditor.feeHistory, monthStr, creditor.amountDue ?? 0);
 
         months[monthStr] = {
           paid,
           expected,
-          transactions: monthTxs.map((t) => ({
-            id: t.id,
-            amount: Math.abs(t.amount),
-            date: t.date.toISOString(),
-            description: t.description,
+          transactions: monthAllocs.map((a) => ({
+            id: a.transaction.id,
+            amount: a.amount,
+            date: a.transaction.date.toISOString(),
+            description: a.transaction.description,
           })),
         };
         totalPaid += paid;

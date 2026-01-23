@@ -36,23 +36,27 @@ export async function GET(request: NextRequest) {
       feeHistory = creditor?.feeHistory ?? [];
     }
 
-    // Get all transactions for this unit/creditor in the year with referenceMonth
+    // Query TransactionMonth entries for the year
     const where: Record<string, unknown> = {};
     if (unitId) where.unitId = unitId;
     if (creditorId) where.creditorId = creditorId;
-    where.referenceMonth = {
-      gte: `${year}-01`,
-      lte: `${year}-12`,
-    };
 
-    const transactions = await prisma.transaction.findMany({ where });
+    const allocations = await prisma.transactionMonth.findMany({
+      where: {
+        transaction: where,
+        month: {
+          gte: `${year}-01`,
+          lte: `${year}-12`,
+        },
+      },
+    });
 
-    // Build month status with per-month expected values
+    // Build month status
     const months = [];
     for (let m = 1; m <= 12; m++) {
       const monthStr = `${year}-${m.toString().padStart(2, '0')}`;
-      const monthTxs = transactions.filter((t) => t.referenceMonth === monthStr);
-      const paid = monthTxs.reduce((sum, t) => sum + Math.abs(t.amount), 0);
+      const monthAllocs = allocations.filter((a) => a.month === monthStr);
+      const paid = monthAllocs.reduce((sum, a) => sum + a.amount, 0);
       const expected = getFeeForMonth(feeHistory, monthStr, defaultFee);
 
       months.push({

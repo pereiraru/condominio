@@ -4,7 +4,8 @@ import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Sidebar from '@/components/Sidebar';
 import MonthCalendar from '@/components/MonthCalendar';
-import { Unit, Transaction, MonthPaymentStatus } from '@/lib/types';
+import TransactionEditPanel from '@/components/TransactionEditPanel';
+import { Unit, Transaction, Creditor, MonthPaymentStatus } from '@/lib/types';
 
 export default function UnitDetailPage() {
   const params = useParams();
@@ -25,6 +26,9 @@ export default function UnitDetailPage() {
   });
   const [owners, setOwners] = useState<string[]>(['']);
   const [activeTab, setActiveTab] = useState<'dados' | 'historico'>('dados');
+  const [selectedTx, setSelectedTx] = useState<Transaction | null>(null);
+  const [allUnits, setAllUnits] = useState<Unit[]>([]);
+  const [creditors, setCreditors] = useState<Creditor[]>([]);
 
   // Calendar and summary state
   const [calendarYear, setCalendarYear] = useState(new Date().getFullYear());
@@ -35,6 +39,8 @@ export default function UnitDetailPage() {
   useEffect(() => {
     fetchUnit();
     fetchPaymentHistory();
+    fetchAllUnits();
+    fetchCreditors();
   }, [id]);
 
   // Fetch monthly status when unit loads or year changes
@@ -44,6 +50,37 @@ export default function UnitDetailPage() {
       fetchPastYearsDebt();
     }
   }, [id, calendarYear]);
+
+  async function fetchAllUnits() {
+    try {
+      const res = await fetch('/api/units');
+      if (res.ok) setAllUnits(await res.json());
+    } catch (error) {
+      console.error('Error fetching units:', error);
+    }
+  }
+
+  async function fetchCreditors() {
+    try {
+      const res = await fetch('/api/creditors');
+      if (res.ok) setCreditors(await res.json());
+    } catch (error) {
+      console.error('Error fetching creditors:', error);
+    }
+  }
+
+  async function openTxPanel(tx: Transaction) {
+    try {
+      const res = await fetch(`/api/transactions/${tx.id}`);
+      if (res.ok) {
+        setSelectedTx(await res.json());
+      } else {
+        setSelectedTx(tx);
+      }
+    } catch {
+      setSelectedTx(tx);
+    }
+  }
 
   async function fetchMonthlyStatus() {
     try {
@@ -332,35 +369,55 @@ export default function UnitDetailPage() {
               <div className="card mt-4">
                 <h2 className="text-lg font-semibold mb-4">Últimas Transações</h2>
                 {unit.transactions && unit.transactions.length > 0 ? (
-                  <div className="overflow-x-auto">
-                    <table className="w-full">
-                      <thead>
-                        <tr className="text-left text-sm text-gray-400">
-                          <th className="pb-4 font-medium">Data</th>
-                          <th className="pb-4 font-medium">Mês Ref.</th>
-                          <th className="pb-4 font-medium">Descrição</th>
-                          <th className="pb-4 font-medium text-right">Valor</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {unit.transactions.map((tx: Transaction, i: number) => (
-                          <tr key={tx.id} className={`hover:bg-gray-50 transition-colors ${i !== (unit.transactions?.length ?? 0) - 1 ? 'border-b border-gray-100' : ''}`}>
-                            <td className="py-4 text-sm text-gray-500">
-                              {new Date(tx.date).toLocaleDateString('pt-PT')}
-                            </td>
-                            <td className="py-4 text-sm text-gray-400">
-                              {tx.referenceMonth || '-'}
-                            </td>
-                            <td className="py-4 text-sm text-gray-900 font-medium">
-                              {tx.description}
-                            </td>
-                            <td className={`py-4 text-sm text-right font-semibold ${tx.amount >= 0 ? 'text-green-600' : 'text-red-500'}`}>
-                              {tx.amount >= 0 ? '+' : ''}{Math.abs(tx.amount).toFixed(2)} EUR
-                            </td>
+                  <div className={`${selectedTx ? 'flex gap-4' : ''}`}>
+                    <div className={`overflow-x-auto ${selectedTx ? 'flex-1' : ''}`}>
+                      <table className="w-full">
+                        <thead>
+                          <tr className="text-left text-sm text-gray-400">
+                            <th className="pb-4 font-medium">Data</th>
+                            <th className="pb-4 font-medium">Mês Ref.</th>
+                            <th className="pb-4 font-medium">Descrição</th>
+                            <th className="pb-4 font-medium text-right">Valor</th>
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                        </thead>
+                        <tbody>
+                          {unit.transactions.map((tx: Transaction, i: number) => (
+                            <tr
+                              key={tx.id}
+                              className={`hover:bg-gray-50 transition-colors cursor-pointer ${
+                                selectedTx?.id === tx.id ? 'bg-primary-50' : ''
+                              } ${i !== (unit.transactions?.length ?? 0) - 1 ? 'border-b border-gray-100' : ''}`}
+                              onClick={() => openTxPanel(tx)}
+                            >
+                              <td className="py-4 text-sm text-gray-500">
+                                {new Date(tx.date).toLocaleDateString('pt-PT')}
+                              </td>
+                              <td className="py-4 text-sm text-gray-400">
+                                {tx.monthAllocations && tx.monthAllocations.length > 0
+                                  ? tx.monthAllocations.map((a) => a.month).join(', ')
+                                  : tx.referenceMonth || '-'}
+                              </td>
+                              <td className="py-4 text-sm text-gray-900 font-medium">
+                                {tx.description}
+                              </td>
+                              <td className={`py-4 text-sm text-right font-semibold ${tx.amount >= 0 ? 'text-green-600' : 'text-red-500'}`}>
+                                {tx.amount >= 0 ? '+' : ''}{Math.abs(tx.amount).toFixed(2)} EUR
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    {selectedTx && (
+                      <TransactionEditPanel
+                        transaction={selectedTx}
+                        units={allUnits}
+                        creditors={creditors}
+                        onSave={() => { setSelectedTx(null); fetchUnit(); fetchMonthlyStatus(); fetchPaymentHistory(); }}
+                        onDelete={() => { setSelectedTx(null); fetchUnit(); fetchMonthlyStatus(); fetchPaymentHistory(); }}
+                        onClose={() => setSelectedTx(null)}
+                      />
+                    )}
                   </div>
                 ) : (
                   <p className="text-gray-400 text-center py-4">Sem pagamentos registados</p>

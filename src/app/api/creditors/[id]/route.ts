@@ -13,6 +13,7 @@ export async function GET(
         transactions: {
           orderBy: { date: 'desc' },
           take: 50,
+          include: { monthAllocations: true },
         },
       },
     });

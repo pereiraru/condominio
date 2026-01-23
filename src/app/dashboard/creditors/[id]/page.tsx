@@ -275,7 +275,9 @@ export default function CreditorDetailPage() {
                             {new Date(tx.date).toLocaleDateString('pt-PT')}
                           </td>
                           <td className="py-4 text-sm text-gray-400">
-                            {tx.referenceMonth || '-'}
+                            {tx.monthAllocations && tx.monthAllocations.length > 0
+                              ? tx.monthAllocations.map((a: { month: string }) => a.month).join(', ')
+                              : tx.referenceMonth || '-'}
                           </td>
                           <td className="py-4 text-sm text-gray-900 font-medium">
                             {tx.description}
