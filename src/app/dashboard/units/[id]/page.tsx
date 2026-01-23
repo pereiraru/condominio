@@ -24,6 +24,7 @@ export default function UnitDetailPage() {
     email: '',
   });
   const [owners, setOwners] = useState<string[]>(['']);
+  const [activeTab, setActiveTab] = useState<'dados' | 'historico'>('dados');
 
   // Calendar and summary state
   const [calendarYear, setCalendarYear] = useState(new Date().getFullYear());
@@ -173,7 +174,7 @@ export default function UnitDetailPage() {
       <Sidebar />
 
       <main className="flex-1 p-8">
-        <div className="flex items-center gap-4 mb-6">
+        <div className="flex items-center gap-4 mb-4">
           <button
             className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-all"
             onClick={() => router.push('/dashboard/units')}
@@ -185,303 +186,373 @@ export default function UnitDetailPage() {
           <h1 className="text-2xl font-semibold text-gray-900">Fração {unit.code}</h1>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          {/* Edit Form */}
-          <div className="lg:col-span-2">
-            <div className="card">
-              <h2 className="text-lg font-semibold mb-4">Dados da Fração</h2>
-              <form onSubmit={handleSave}>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="label">Código *</label>
-                    <input
-                      type="text"
-                      className="input"
-                      value={formData.code}
-                      onChange={(e) => setFormData({ ...formData, code: e.target.value })}
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="label">Andar</label>
-                    <input
-                      type="number"
-                      className="input"
-                      value={formData.floor}
-                      onChange={(e) => setFormData({ ...formData, floor: e.target.value })}
-                    />
-                  </div>
-                  <div>
-                    <label className="label">Quota Mensal (EUR) *</label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      className="input"
-                      value={formData.monthlyFee}
-                      onChange={(e) => setFormData({ ...formData, monthlyFee: e.target.value })}
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="label">Email</label>
-                    <input
-                      type="email"
-                      className="input"
-                      value={formData.email}
-                      onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                    />
-                  </div>
-                  <div>
-                    <label className="label">Telefone</label>
-                    <input
-                      type="text"
-                      className="input"
-                      value={formData.telefone}
-                      onChange={(e) => setFormData({ ...formData, telefone: e.target.value })}
-                    />
-                  </div>
-                  <div>
-                    <label className="label">NIB</label>
-                    <input
-                      type="text"
-                      className="input"
-                      value={formData.nib}
-                      onChange={(e) => setFormData({ ...formData, nib: e.target.value })}
-                    />
-                  </div>
-                  <div className="md:col-span-2">
-                    <label className="label">Descrição</label>
-                    <input
-                      type="text"
-                      className="input"
-                      value={formData.description}
-                      onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                    />
-                  </div>
-                </div>
+        {/* Tabs */}
+        <div className="flex gap-1 mb-6 bg-gray-100 p-1 rounded-xl w-fit">
+          <button
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+              activeTab === 'dados'
+                ? 'bg-white text-gray-900 shadow-sm'
+                : 'text-gray-500 hover:text-gray-700'
+            }`}
+            onClick={() => setActiveTab('dados')}
+          >
+            Dados
+          </button>
+          <button
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+              activeTab === 'historico'
+                ? 'bg-white text-gray-900 shadow-sm'
+                : 'text-gray-500 hover:text-gray-700'
+            }`}
+            onClick={() => setActiveTab('historico')}
+          >
+            Histórico
+          </button>
+        </div>
 
-                {/* Owners */}
-                <div className="mt-4">
-                  <div className="flex justify-between items-center mb-2">
-                    <label className="label mb-0">Proprietário(s)</label>
-                    <button
-                      type="button"
-                      className="text-primary-600 hover:text-primary-800 text-sm font-medium"
-                      onClick={addOwner}
-                    >
-                      + Adicionar
-                    </button>
-                  </div>
-                  {owners.map((owner, index) => (
-                    <div key={index} className="flex gap-2 mb-2">
+        {activeTab === 'dados' ? (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            {/* Edit Form */}
+            <div className="lg:col-span-2">
+              <div className="card">
+                <h2 className="text-lg font-semibold mb-4">Dados da Fração</h2>
+                <form onSubmit={handleSave}>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="label">Código *</label>
                       <input
                         type="text"
-                        className="input flex-1"
-                        value={owner}
-                        onChange={(e) => updateOwner(index, e.target.value)}
-                        placeholder="Nome do proprietário"
+                        className="input"
+                        value={formData.code}
+                        onChange={(e) => setFormData({ ...formData, code: e.target.value })}
+                        required
                       />
-                      {owners.length > 1 && (
-                        <button
-                          type="button"
-                          className="text-red-500 hover:text-red-700 px-2"
-                          onClick={() => removeOwner(index)}
-                        >
-                          x
-                        </button>
-                      )}
                     </div>
-                  ))}
-                </div>
+                    <div>
+                      <label className="label">Andar</label>
+                      <input
+                        type="number"
+                        className="input"
+                        value={formData.floor}
+                        onChange={(e) => setFormData({ ...formData, floor: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <label className="label">Quota Mensal (EUR) *</label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        className="input"
+                        value={formData.monthlyFee}
+                        onChange={(e) => setFormData({ ...formData, monthlyFee: e.target.value })}
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="label">Email</label>
+                      <input
+                        type="email"
+                        className="input"
+                        value={formData.email}
+                        onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <label className="label">Telefone</label>
+                      <input
+                        type="text"
+                        className="input"
+                        value={formData.telefone}
+                        onChange={(e) => setFormData({ ...formData, telefone: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <label className="label">NIB</label>
+                      <input
+                        type="text"
+                        className="input"
+                        value={formData.nib}
+                        onChange={(e) => setFormData({ ...formData, nib: e.target.value })}
+                      />
+                    </div>
+                    <div className="md:col-span-2">
+                      <label className="label">Descrição</label>
+                      <input
+                        type="text"
+                        className="input"
+                        value={formData.description}
+                        onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                      />
+                    </div>
+                  </div>
 
-                <div className="mt-4 flex justify-end">
-                  <button type="submit" className="btn-primary" disabled={saving}>
-                    {saving ? 'A guardar...' : 'Guardar alterações'}
-                  </button>
-                </div>
-              </form>
+                  {/* Owners */}
+                  <div className="mt-4">
+                    <div className="flex justify-between items-center mb-2">
+                      <label className="label mb-0">Proprietário(s)</label>
+                      <button
+                        type="button"
+                        className="text-primary-600 hover:text-primary-800 text-sm font-medium"
+                        onClick={addOwner}
+                      >
+                        + Adicionar
+                      </button>
+                    </div>
+                    {owners.map((owner, index) => (
+                      <div key={index} className="flex gap-2 mb-2">
+                        <input
+                          type="text"
+                          className="input flex-1"
+                          value={owner}
+                          onChange={(e) => updateOwner(index, e.target.value)}
+                          placeholder="Nome do proprietário"
+                        />
+                        {owners.length > 1 && (
+                          <button
+                            type="button"
+                            className="text-red-500 hover:text-red-700 px-2"
+                            onClick={() => removeOwner(index)}
+                          >
+                            x
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="mt-4 flex justify-end">
+                    <button type="submit" className="btn-primary" disabled={saving}>
+                      {saving ? 'A guardar...' : 'Guardar alterações'}
+                    </button>
+                  </div>
+                </form>
+              </div>
+
+              {/* Transactions */}
+              <div className="card mt-4">
+                <h2 className="text-lg font-semibold mb-4">Últimas Transações</h2>
+                {unit.transactions && unit.transactions.length > 0 ? (
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead>
+                        <tr className="text-left text-sm text-gray-400">
+                          <th className="pb-4 font-medium">Data</th>
+                          <th className="pb-4 font-medium">Mês Ref.</th>
+                          <th className="pb-4 font-medium">Descrição</th>
+                          <th className="pb-4 font-medium text-right">Valor</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {unit.transactions.map((tx: Transaction, i: number) => (
+                          <tr key={tx.id} className={`hover:bg-gray-50 transition-colors ${i !== (unit.transactions?.length ?? 0) - 1 ? 'border-b border-gray-100' : ''}`}>
+                            <td className="py-4 text-sm text-gray-500">
+                              {new Date(tx.date).toLocaleDateString('pt-PT')}
+                            </td>
+                            <td className="py-4 text-sm text-gray-400">
+                              {tx.referenceMonth || '-'}
+                            </td>
+                            <td className="py-4 text-sm text-gray-900 font-medium">
+                              {tx.description}
+                            </td>
+                            <td className={`py-4 text-sm text-right font-semibold ${tx.amount >= 0 ? 'text-green-600' : 'text-red-500'}`}>
+                              {tx.amount >= 0 ? '+' : ''}{Math.abs(tx.amount).toFixed(2)} EUR
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <p className="text-gray-400 text-center py-4">Sem pagamentos registados</p>
+                )}
+              </div>
             </div>
 
+            {/* Sidebar info */}
+            <div className="space-y-4">
+              {/* Year Summary */}
+              <div className="card">
+                <h2 className="text-lg font-semibold mb-4">Resumo {calendarYear}</h2>
+                {(() => {
+                  const now = new Date();
+                  const currentYear = now.getFullYear();
+                  const currentMonth = now.getMonth() + 1;
+
+                  const paidYTD = monthStatus.reduce((sum, s) => sum + s.paid, 0);
+
+                  let expectedYTD = 0;
+                  let expectedLabel = '';
+
+                  if (calendarYear < currentYear) {
+                    expectedYTD = monthStatus.reduce((sum, s) => sum + s.expected, 0);
+                    expectedLabel = '12 meses';
+                  } else if (calendarYear === currentYear) {
+                    expectedYTD = monthStatus
+                      .filter((_, i) => i < currentMonth)
+                      .reduce((sum, s) => sum + s.expected, 0);
+                    expectedLabel = `até ao ${currentMonth}º mês`;
+                  } else {
+                    expectedYTD = 0;
+                    expectedLabel = 'N/A';
+                  }
+
+                  const yearDebt = Math.max(0, expectedYTD - paidYTD);
+
+                  const displayExpected = Math.max(expectedYTD, paidYTD);
+                  if (paidYTD > expectedYTD && calendarYear >= currentYear) {
+                    expectedLabel = `Pago adiantado`;
+                  }
+
+                  const totalDebt = yearDebt + pastYearsDebt;
+
+                  return (
+                    <div className="space-y-3">
+                      <div className="flex justify-between">
+                        <span className="text-gray-400 text-sm">Quota mensal:</span>
+                        <span className="font-medium">{unit.monthlyFee.toFixed(2)} EUR</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-400 text-sm">
+                          Esperado ({expectedLabel}):
+                        </span>
+                        <span className="font-medium">{displayExpected.toFixed(2)} EUR</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-400 text-sm">Pago em {calendarYear}:</span>
+                        <span className="font-medium text-green-600">{paidYTD.toFixed(2)} EUR</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-400 text-sm">Dívida {calendarYear}:</span>
+                        <span className={`font-medium ${yearDebt > 0 ? 'text-red-500' : 'text-green-600'}`}>
+                          {yearDebt.toFixed(2)} EUR
+                        </span>
+                      </div>
+
+                      {totalDebt > 0 && (
+                        <div className="pt-3 border-t border-gray-100">
+                          <div className="flex justify-between">
+                            <span className="text-gray-400 text-sm">Dívida anos anteriores:</span>
+                            <span className={`font-medium ${pastYearsDebt > 0 ? 'text-red-500' : ''}`}>
+                              {pastYearsDebt.toFixed(2)} EUR
+                            </span>
+                          </div>
+                          <div className="flex justify-between mt-2">
+                            <span className="text-gray-700 font-medium text-sm">Dívida total:</span>
+                            <span className="font-semibold text-red-500">
+                              {totalDebt.toFixed(2)} EUR
+                            </span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
+              </div>
+
+              {/* Month Calendar */}
+              <div className="card">
+                <h2 className="text-lg font-semibold mb-4">Estado dos Pagamentos</h2>
+                <MonthCalendar
+                  year={calendarYear}
+                  onYearChange={setCalendarYear}
+                  monthStatus={monthStatus}
+                  readOnly
+                />
+              </div>
+            </div>
+          </div>
+        ) : (
+          /* Histórico Tab */
+          <div>
+            {/* Summary Cards */}
+            {(() => {
+              const currentYear = new Date().getFullYear();
+              const totalAllTime = Object.values(paymentHistory).reduce((sum, v) => sum + v, 0);
+              const totalCurrentYear = Object.entries(paymentHistory)
+                .filter(([k]) => k.startsWith(`${currentYear}-`))
+                .reduce((sum, [, v]) => sum + v, 0);
+              const monthsWithPayments = Object.keys(paymentHistory).length;
+
+              return (
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                  <div className="card">
+                    <h3 className="text-sm text-gray-500 mb-1">Quota Mensal</h3>
+                    <p className="text-2xl font-semibold text-gray-900">{unit.monthlyFee.toFixed(2)} EUR</p>
+                  </div>
+                  <div className="card">
+                    <h3 className="text-sm text-gray-500 mb-1">Pago em {currentYear}</h3>
+                    <p className="text-2xl font-semibold text-green-600">{totalCurrentYear.toFixed(2)} EUR</p>
+                  </div>
+                  <div className="card">
+                    <h3 className="text-sm text-gray-500 mb-1">Total Histórico</h3>
+                    <p className="text-2xl font-semibold text-gray-900">{totalAllTime.toFixed(2)} EUR</p>
+                  </div>
+                  <div className="card">
+                    <h3 className="text-sm text-gray-500 mb-1">Dívida Total</h3>
+                    <p className={`text-2xl font-semibold ${pastYearsDebt > 0 ? 'text-red-500' : 'text-green-600'}`}>
+                      {pastYearsDebt.toFixed(2)} EUR
+                    </p>
+                  </div>
+                </div>
+              );
+            })()}
+
             {/* Payment History Table */}
-            <div className="card mt-4">
+            <div className="card">
               <h2 className="text-lg font-semibold mb-4">Histórico de Pagamentos</h2>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="text-left text-gray-500 border-b">
-                      <th className="pb-2 pr-2 font-medium sticky left-0 bg-white"></th>
+                      <th className="pb-2 pr-3 font-medium sticky left-0 bg-white"></th>
                       {['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'].map((m) => (
-                        <th key={m} className="pb-2 px-1 font-medium text-center min-w-[55px]">{m}</th>
+                        <th key={m} className="pb-2 px-2 font-medium text-center min-w-[60px]">{m}</th>
                       ))}
+                      <th className="pb-2 px-2 font-medium text-right">Total</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
-                    {Array.from({ length: new Date().getFullYear() - 2011 + 1 }, (_, i) => new Date().getFullYear() - i).map((year) => (
-                      <tr key={year}>
-                        <td className="py-1.5 pr-2 font-medium text-gray-900 sticky left-0 bg-white text-right">
-                          {year}
-                        </td>
-                        {Array.from({ length: 12 }, (_, m) => {
-                          const monthStr = `${year}-${(m + 1).toString().padStart(2, '0')}`;
-                          const amount = paymentHistory[monthStr] || 0;
-                          return (
-                            <td
-                              key={monthStr}
-                              className={`py-1.5 px-1 text-center ${amount > 0 ? 'bg-green-100 text-green-700' : ''}`}
-                            >
-                              {amount > 0 ? (
-                                <span className="text-xs font-medium">
-                                  {Number.isInteger(amount) ? amount : amount.toFixed(2)}
-                                </span>
-                              ) : (
-                                <span className="text-xs text-gray-300">-</span>
-                              )}
-                            </td>
-                          );
-                        })}
-                      </tr>
-                    ))}
+                    {Array.from({ length: new Date().getFullYear() - 2011 + 1 }, (_, i) => new Date().getFullYear() - i).map((year) => {
+                      const yearTotal = Array.from({ length: 12 }, (_, m) => {
+                        const monthStr = `${year}-${(m + 1).toString().padStart(2, '0')}`;
+                        return paymentHistory[monthStr] || 0;
+                      }).reduce((sum, v) => sum + v, 0);
+
+                      return (
+                        <tr key={year}>
+                          <td className="py-2 pr-3 font-semibold text-gray-900 sticky left-0 bg-white text-right">
+                            {year}
+                          </td>
+                          {Array.from({ length: 12 }, (_, m) => {
+                            const monthStr = `${year}-${(m + 1).toString().padStart(2, '0')}`;
+                            const amount = paymentHistory[monthStr] || 0;
+                            return (
+                              <td
+                                key={monthStr}
+                                className={`py-2 px-2 text-center ${amount > 0 ? 'bg-green-50 text-green-700' : ''}`}
+                              >
+                                {amount > 0 ? (
+                                  <span className="text-sm font-medium">
+                                    {Number.isInteger(amount) ? amount : amount.toFixed(2)}
+                                  </span>
+                                ) : (
+                                  <span className="text-sm text-gray-300">-</span>
+                                )}
+                              </td>
+                            );
+                          })}
+                          <td className="py-2 px-2 text-right font-semibold text-gray-900">
+                            {yearTotal > 0 ? `${yearTotal.toFixed(2)}` : '-'}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
             </div>
-
-            {/* Transactions */}
-            <div className="card mt-4">
-              <h2 className="text-lg font-semibold mb-4">Pagamentos</h2>
-              {unit.transactions && unit.transactions.length > 0 ? (
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead>
-                      <tr className="text-left text-sm text-gray-400">
-                        <th className="pb-4 font-medium">Data</th>
-                        <th className="pb-4 font-medium">Mês Ref.</th>
-                        <th className="pb-4 font-medium">Descrição</th>
-                        <th className="pb-4 font-medium text-right">Valor</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {unit.transactions.map((tx: Transaction, i: number) => (
-                        <tr key={tx.id} className={`hover:bg-gray-50 transition-colors ${i !== (unit.transactions?.length ?? 0) - 1 ? 'border-b border-gray-100' : ''}`}>
-                          <td className="py-4 text-sm text-gray-500">
-                            {new Date(tx.date).toLocaleDateString('pt-PT')}
-                          </td>
-                          <td className="py-4 text-sm text-gray-400">
-                            {tx.referenceMonth || '-'}
-                          </td>
-                          <td className="py-4 text-sm text-gray-900 font-medium">
-                            {tx.description}
-                          </td>
-                          <td className={`py-4 text-sm text-right font-semibold ${tx.amount >= 0 ? 'text-green-600' : 'text-red-500'}`}>
-                            {tx.amount >= 0 ? '+' : ''}{Math.abs(tx.amount).toFixed(2)} EUR
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              ) : (
-                <p className="text-gray-400 text-center py-4">Sem pagamentos registados</p>
-              )}
-            </div>
           </div>
-
-          {/* Sidebar info */}
-          <div className="space-y-4">
-            {/* Year Summary */}
-            <div className="card">
-              <h2 className="text-lg font-semibold mb-4">Resumo {calendarYear}</h2>
-              {(() => {
-                const now = new Date();
-                const currentYear = now.getFullYear();
-                const currentMonth = now.getMonth() + 1; // 1-12
-
-                // Soma total de todos os pagamentos efetuados no ano selecionado.
-                const paidYTD = monthStatus.reduce((sum, s) => sum + s.paid, 0);
-
-                let expectedYTD = 0;
-                let expectedLabel = '';
-
-                // Use per-month expected values from monthStatus (historical fees)
-                if (calendarYear < currentYear) {
-                  expectedYTD = monthStatus.reduce((sum, s) => sum + s.expected, 0);
-                  expectedLabel = '12 meses';
-                } else if (calendarYear === currentYear) {
-                  expectedYTD = monthStatus
-                    .filter((_, i) => i < currentMonth)
-                    .reduce((sum, s) => sum + s.expected, 0);
-                  expectedLabel = `até ao ${currentMonth}º mês`;
-                } else {
-                  expectedYTD = 0;
-                  expectedLabel = 'N/A';
-                }
-
-                const yearDebt = Math.max(0, expectedYTD - paidYTD);
-
-                const displayExpected = Math.max(expectedYTD, paidYTD);
-                if (paidYTD > expectedYTD && calendarYear >= currentYear) {
-                    expectedLabel = `Pago adiantado`;
-                }
-
-                const totalDebt = yearDebt + pastYearsDebt;
-
-                return (
-                  <div className="space-y-3">
-                    <div className="flex justify-between">
-                      <span className="text-gray-400 text-sm">Quota mensal:</span>
-                      <span className="font-medium">{unit.monthlyFee.toFixed(2)} EUR</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-400 text-sm">
-                        Esperado ({expectedLabel}):
-                      </span>
-                      <span className="font-medium">{displayExpected.toFixed(2)} EUR</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-400 text-sm">Pago em {calendarYear}:</span>
-                      <span className="font-medium text-green-600">{paidYTD.toFixed(2)} EUR</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-400 text-sm">Dívida {calendarYear}:</span>
-                      <span className={`font-medium ${yearDebt > 0 ? 'text-red-500' : 'text-green-600'}`}>
-                        {yearDebt.toFixed(2)} EUR
-                      </span>
-                    </div>
-
-                    {/* Mostra a secção de dívida total apenas se houver alguma dívida. */}
-                    {totalDebt > 0 && (
-                      <div className="pt-3 border-t border-gray-100">
-                        <div className="flex justify-between">
-                          <span className="text-gray-400 text-sm">Dívida anos anteriores:</span>
-                          <span className={`font-medium ${pastYearsDebt > 0 ? 'text-red-500' : ''}`}>
-                            {pastYearsDebt.toFixed(2)} EUR
-                          </span>
-                        </div>
-                        <div className="flex justify-between mt-2">
-                          <span className="text-gray-700 font-medium text-sm">Dívida total:</span>
-                          <span className="font-semibold text-red-500">
-                            {totalDebt.toFixed(2)} EUR
-                          </span>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                );
-              })()}
-            </div>
-
-            {/* Month Calendar */}
-            <div className="card">
-              <h2 className="text-lg font-semibold mb-4">Estado dos Pagamentos</h2>
-              <MonthCalendar
-                year={calendarYear}
-                onYearChange={setCalendarYear}
-                monthStatus={monthStatus}
-                readOnly
-              />
-            </div>
-          </div>
-        </div>
+        )}
       </main>
     </div>
   );
