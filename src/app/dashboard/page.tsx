@@ -34,17 +34,17 @@ export default function Dashboard() {
   }, []);
 
   return (
-    <div className="flex min-h-screen bg-gray-50">
+    <div className="flex min-h-screen">
       <Sidebar />
 
       <main className="flex-1 p-8">
-        <h1 className="text-2xl font-bold text-gray-900 mb-6">Dashboard</h1>
+        <h1 className="text-2xl font-semibold text-gray-900 mb-6">Dashboard</h1>
 
         {loading ? (
           <div className="text-gray-500">A carregar...</div>
         ) : (
           <>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
               <StatsCard
                 title="Saldo Atual"
                 value={`${stats?.currentBalance?.toFixed(2) ?? '0.00'} EUR`}

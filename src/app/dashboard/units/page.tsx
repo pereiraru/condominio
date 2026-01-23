@@ -146,12 +146,12 @@ export default function UnitsPage() {
   }
 
   return (
-    <div className="flex min-h-screen bg-gray-50">
+    <div className="flex min-h-screen">
       <Sidebar />
 
       <main className="flex-1 p-8">
         <div className="flex justify-between items-center mb-6">
-          <h1 className="text-2xl font-bold text-gray-900">Fraccoes</h1>
+          <h1 className="text-2xl font-semibold text-gray-900">Fraccoes</h1>
           <div className="flex gap-2">
             <input
               type="file"
@@ -176,49 +176,49 @@ export default function UnitsPage() {
         {loading ? (
           <p className="text-gray-500">A carregar...</p>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {units.map((unit) => (
-              <div key={unit.id} className="card hover:shadow-md transition-shadow cursor-pointer" onClick={() => router.push(`/dashboard/units/${unit.id}`)}>
+              <div key={unit.id} className="card-hover" onClick={() => router.push(`/dashboard/units/${unit.id}`)}>
                 <div className="flex justify-between items-start">
                   <div>
-                    <h3 className="text-xl font-bold text-gray-900">
+                    <h3 className="text-xl font-semibold text-gray-900">
                       {unit.code}
                     </h3>
                     {unit.floor != null && (
-                      <p className="text-gray-500">{unit.floor}o Andar</p>
+                      <p className="text-sm text-gray-500">{unit.floor}o Andar</p>
                     )}
                   </div>
-                  <span className="bg-primary-100 text-primary-700 px-3 py-1 rounded-full text-sm font-medium">
+                  <span className="bg-gray-100 text-gray-700 px-3 py-1 rounded-lg text-sm font-medium">
                     {unit.monthlyFee.toFixed(2)} EUR/mes
                   </span>
                 </div>
 
                 {unit.owners && unit.owners.length > 0 && (
-                  <div className="mt-2">
-                    <p className="text-sm text-gray-500">Proprietarios:</p>
-                    <p className="text-gray-700">{unit.owners.map(o => o.name).join(', ')}</p>
+                  <div className="mt-3">
+                    <p className="text-xs text-gray-400 uppercase tracking-wide">Proprietarios</p>
+                    <p className="text-gray-700 mt-0.5">{unit.owners.map(o => o.name).join(', ')}</p>
                   </div>
                 )}
 
                 {unit.description && (
-                  <p className="mt-2 text-gray-600">{unit.description}</p>
+                  <p className="mt-3 text-gray-600">{unit.description}</p>
                 )}
 
-                <div className="mt-3 flex flex-wrap gap-2 text-xs text-gray-500">
+                <div className="mt-3 flex flex-wrap gap-2 text-xs text-gray-400">
                   {unit.telefone && <span>Tel: {unit.telefone}</span>}
                   {unit.email && <span>Email: {unit.email}</span>}
                   {unit.nib && <span>NIB: {unit.nib}</span>}
                 </div>
 
-                <div className="mt-3 pt-3 border-t border-gray-100 flex justify-between text-sm">
+                <div className="mt-4 pt-4 border-t border-gray-100 flex justify-between text-sm">
                   <div>
-                    <span className="text-gray-500">Pago {new Date().getFullYear()}: </span>
+                    <span className="text-gray-400">Pago {new Date().getFullYear()}: </span>
                     <span className="font-medium text-green-600">
                       {(unit.totalPaid ?? 0).toFixed(2)} EUR
                     </span>
                   </div>
                   <div>
-                    <span className="text-gray-500">Divida: </span>
+                    <span className="text-gray-400">Divida: </span>
                     <span className={`font-medium ${(unit.totalOwed ?? 0) > 0 ? 'text-red-600' : 'text-green-600'}`}>
                       {(unit.totalOwed ?? 0).toFixed(2)} EUR
                     </span>

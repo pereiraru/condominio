@@ -131,12 +131,12 @@ export default function CreditorsPage() {
   }
 
   return (
-    <div className="flex min-h-screen bg-gray-50">
+    <div className="flex min-h-screen">
       <Sidebar />
 
       <main className="flex-1 p-8">
         <div className="flex justify-between items-center mb-6">
-          <h1 className="text-2xl font-bold text-gray-900">Credores</h1>
+          <h1 className="text-2xl font-semibold text-gray-900">Credores</h1>
           <button className="btn-primary" onClick={() => setShowModal(true)}>
             + Novo Credor
           </button>
@@ -153,44 +153,44 @@ export default function CreditorsPage() {
         {loading ? (
           <p className="text-gray-500">A carregar...</p>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {creditors.map((creditor) => (
-              <div key={creditor.id} className="card hover:shadow-md transition-shadow cursor-pointer" onClick={() => router.push(`/dashboard/creditors/${creditor.id}`)}>
+              <div key={creditor.id} className="card-hover" onClick={() => router.push(`/dashboard/creditors/${creditor.id}`)}>
                 <div className="flex justify-between items-start">
                   <div>
-                    <h3 className="text-xl font-bold text-gray-900">
+                    <h3 className="text-xl font-semibold text-gray-900">
                       {creditor.name}
                     </h3>
-                    <span className="text-sm text-gray-500">
+                    <span className="text-sm text-gray-400">
                       {getCategoryLabel(creditor.category)}
                     </span>
                   </div>
                   {creditor.amountDue && (
-                    <span className="bg-orange-100 text-orange-700 px-3 py-1 rounded-full text-sm font-medium">
+                    <span className="bg-orange-50 text-orange-600 px-3 py-1 rounded-lg text-sm font-medium">
                       {creditor.amountDue.toFixed(2)} EUR
                     </span>
                   )}
                 </div>
 
                 {creditor.description && (
-                  <p className="mt-2 text-gray-600">{creditor.description}</p>
+                  <p className="mt-3 text-gray-600">{creditor.description}</p>
                 )}
 
-                <div className="mt-3 flex flex-wrap gap-2 text-xs text-gray-500">
+                <div className="mt-3 flex flex-wrap gap-2 text-xs text-gray-400">
                   {creditor.telefone && <span>Tel: {creditor.telefone}</span>}
                   {creditor.email && <span>Email: {creditor.email}</span>}
                   {creditor.nib && <span>NIB: {creditor.nib}</span>}
                 </div>
 
-                <div className="mt-3 pt-3 border-t border-gray-100 flex justify-between text-sm">
+                <div className="mt-4 pt-4 border-t border-gray-100 flex justify-between text-sm">
                   <div>
-                    <span className="text-gray-500">Total pago: </span>
+                    <span className="text-gray-400">Total pago: </span>
                     <span className="font-medium text-gray-700">
                       {(creditor.totalPaid ?? 0).toFixed(2)} EUR
                     </span>
                   </div>
                   <div>
-                    <span className="text-gray-500">Media/mes: </span>
+                    <span className="text-gray-400">Media/mes: </span>
                     <span className="font-medium text-gray-700">
                       {(creditor.avgMonthly ?? 0).toFixed(2)} EUR
                     </span>
@@ -198,8 +198,8 @@ export default function CreditorsPage() {
                 </div>
 
                 {creditor.attachments && creditor.attachments.length > 0 && (
-                  <div className="mt-2 pt-2 border-t border-gray-100">
-                    <p className="text-xs text-gray-500 mb-1">Anexos:</p>
+                  <div className="mt-3 pt-3 border-t border-gray-100">
+                    <p className="text-xs text-gray-400 mb-1">Anexos:</p>
                     <div className="flex flex-wrap gap-1">
                       {creditor.attachments.map((att) => (
                         <a
@@ -207,7 +207,8 @@ export default function CreditorsPage() {
                           href={`/uploads/attachments/${att.filename}`}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="text-xs text-primary-600 hover:underline"
+                          className="text-xs text-gray-600 hover:text-gray-900"
+                          onClick={(e) => e.stopPropagation()}
                         >
                           {att.name}
                         </a>
@@ -216,9 +217,9 @@ export default function CreditorsPage() {
                   </div>
                 )}
 
-                <div className="mt-2">
+                <div className="mt-3">
                   <button
-                    className="text-xs text-primary-600 hover:text-primary-800"
+                    className="text-xs text-gray-500 hover:text-gray-900 transition-colors"
                     onClick={(e) => { e.stopPropagation(); handleAttachClick(creditor.id); }}
                     disabled={uploadingFor === creditor.id}
                   >

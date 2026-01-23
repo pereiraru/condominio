@@ -143,7 +143,7 @@ export default function UnitDetailPage() {
 
   if (loading) {
     return (
-      <div className="flex min-h-screen bg-gray-50">
+      <div className="flex min-h-screen">
         <Sidebar />
         <main className="flex-1 p-8">
           <p className="text-gray-500">A carregar...</p>
@@ -155,25 +155,27 @@ export default function UnitDetailPage() {
   if (!unit) return null;
 
   return (
-    <div className="flex min-h-screen bg-gray-50">
+    <div className="flex min-h-screen">
       <Sidebar />
 
       <main className="flex-1 p-8">
         <div className="flex items-center gap-4 mb-6">
           <button
-            className="text-gray-500 hover:text-gray-700"
+            className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-all"
             onClick={() => router.push('/dashboard/units')}
           >
-            &larr; Voltar
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
           </button>
-          <h1 className="text-2xl font-bold text-gray-900">Fraccao {unit.code}</h1>
+          <h1 className="text-2xl font-semibold text-gray-900">Fraccao {unit.code}</h1>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           {/* Edit Form */}
           <div className="lg:col-span-2">
             <div className="card">
-              <h2 className="text-lg font-bold mb-4">Dados da Fraccao</h2>
+              <h2 className="text-lg font-semibold mb-4">Dados da Fraccao</h2>
               <form onSubmit={handleSave}>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
@@ -287,32 +289,32 @@ export default function UnitDetailPage() {
             </div>
 
             {/* Transactions */}
-            <div className="card mt-6">
-              <h2 className="text-lg font-bold mb-4">Pagamentos</h2>
+            <div className="card mt-4">
+              <h2 className="text-lg font-semibold mb-4">Pagamentos</h2>
               {unit.transactions && unit.transactions.length > 0 ? (
                 <div className="overflow-x-auto">
                   <table className="w-full">
                     <thead>
-                      <tr className="text-left text-sm text-gray-500 border-b">
-                        <th className="pb-3 font-medium">Data</th>
-                        <th className="pb-3 font-medium">Mes Ref.</th>
-                        <th className="pb-3 font-medium">Descricao</th>
-                        <th className="pb-3 font-medium text-right">Valor</th>
+                      <tr className="text-left text-sm text-gray-400">
+                        <th className="pb-4 font-medium">Data</th>
+                        <th className="pb-4 font-medium">Mes Ref.</th>
+                        <th className="pb-4 font-medium">Descricao</th>
+                        <th className="pb-4 font-medium text-right">Valor</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-gray-100">
-                      {unit.transactions.map((tx: Transaction) => (
-                        <tr key={tx.id} className="hover:bg-gray-50">
-                          <td className="py-3 text-sm text-gray-600">
+                    <tbody>
+                      {unit.transactions.map((tx: Transaction, i: number) => (
+                        <tr key={tx.id} className={`hover:bg-gray-50 transition-colors ${i !== (unit.transactions?.length ?? 0) - 1 ? 'border-b border-gray-100' : ''}`}>
+                          <td className="py-4 text-sm text-gray-500">
                             {new Date(tx.date).toLocaleDateString('pt-PT')}
                           </td>
-                          <td className="py-3 text-sm text-gray-500">
+                          <td className="py-4 text-sm text-gray-400">
                             {tx.referenceMonth || '-'}
                           </td>
-                          <td className="py-3 text-sm text-gray-900">
+                          <td className="py-4 text-sm text-gray-900 font-medium">
                             {tx.description}
                           </td>
-                          <td className={`py-3 text-sm text-right font-medium ${tx.amount >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                          <td className={`py-4 text-sm text-right font-semibold ${tx.amount >= 0 ? 'text-green-600' : 'text-red-500'}`}>
                             {tx.amount >= 0 ? '+' : ''}{Math.abs(tx.amount).toFixed(2)} EUR
                           </td>
                         </tr>
@@ -321,16 +323,16 @@ export default function UnitDetailPage() {
                   </table>
                 </div>
               ) : (
-                <p className="text-gray-500 text-center py-4">Sem pagamentos registados</p>
+                <p className="text-gray-400 text-center py-4">Sem pagamentos registados</p>
               )}
             </div>
           </div>
 
           {/* Sidebar info */}
-          <div className="space-y-6">
+          <div className="space-y-4">
             {/* Year Summary */}
             <div className="card">
-              <h2 className="text-lg font-bold mb-4">Resumo {calendarYear}</h2>
+              <h2 className="text-lg font-semibold mb-4">Resumo {calendarYear}</h2>
               {(() => {
                 const now = new Date();
                 const currentYear = now.getFullYear();
@@ -368,38 +370,38 @@ export default function UnitDetailPage() {
                 return (
                   <div className="space-y-3">
                     <div className="flex justify-between">
-                      <span className="text-gray-500">Quota mensal:</span>
+                      <span className="text-gray-400 text-sm">Quota mensal:</span>
                       <span className="font-medium">{unit.monthlyFee.toFixed(2)} EUR</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-gray-500">
+                      <span className="text-gray-400 text-sm">
                         Esperado ({expectedLabel}):
                       </span>
                       <span className="font-medium">{displayExpected.toFixed(2)} EUR</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-gray-500">Pago em {calendarYear}:</span>
+                      <span className="text-gray-400 text-sm">Pago em {calendarYear}:</span>
                       <span className="font-medium text-green-600">{paidYTD.toFixed(2)} EUR</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-gray-500">Dívida {calendarYear}:</span>
-                      <span className={`font-medium ${yearDebt > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                      <span className="text-gray-400 text-sm">Dívida {calendarYear}:</span>
+                      <span className={`font-medium ${yearDebt > 0 ? 'text-red-500' : 'text-green-600'}`}>
                         {yearDebt.toFixed(2)} EUR
                       </span>
                     </div>
-                    
+
                     {/* Mostra a secção de dívida total apenas se houver alguma dívida. */}
                     {totalDebt > 0 && (
-                      <div className="pt-3 border-t border-gray-200">
+                      <div className="pt-3 border-t border-gray-100">
                         <div className="flex justify-between">
-                          <span className="text-gray-500">Dívida anos anteriores:</span>
-                          <span className={`font-medium ${pastYearsDebt > 0 ? 'text-red-600' : ''}`}>
+                          <span className="text-gray-400 text-sm">Dívida anos anteriores:</span>
+                          <span className={`font-medium ${pastYearsDebt > 0 ? 'text-red-500' : ''}`}>
                             {pastYearsDebt.toFixed(2)} EUR
                           </span>
                         </div>
                         <div className="flex justify-between mt-2">
-                          <span className="text-gray-700 font-medium">Dívida total:</span>
-                          <span className="font-bold text-red-600">
+                          <span className="text-gray-700 font-medium text-sm">Dívida total:</span>
+                          <span className="font-semibold text-red-500">
                             {totalDebt.toFixed(2)} EUR
                           </span>
                         </div>
@@ -412,7 +414,7 @@ export default function UnitDetailPage() {
 
             {/* Month Calendar */}
             <div className="card">
-              <h2 className="text-lg font-bold mb-4">Estado dos Pagamentos</h2>
+              <h2 className="text-lg font-semibold mb-4">Estado dos Pagamentos</h2>
               <MonthCalendar
                 year={calendarYear}
                 onYearChange={setCalendarYear}

@@ -75,12 +75,12 @@ export default function DocumentsPage() {
   };
 
   return (
-    <div className="flex min-h-screen bg-gray-50">
+    <div className="flex min-h-screen">
       <Sidebar />
 
       <main className="flex-1 p-8">
         <div className="flex justify-between items-center mb-6">
-          <h1 className="text-2xl font-bold text-gray-900">Documentos</h1>
+          <h1 className="text-2xl font-semibold text-gray-900">Documentos</h1>
           <button
             onClick={() => setShowUpload(!showUpload)}
             className="btn-primary"

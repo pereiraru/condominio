@@ -75,16 +75,16 @@ export default function PaymentsPage() {
   const totalPaid = payments.reduce((sum, p) => sum + p.amount, 0);
 
   return (
-    <div className="flex min-h-screen bg-gray-50">
+    <div className="flex min-h-screen">
       <Sidebar />
 
       <main className="flex-1 p-8">
-        <h1 className="text-2xl font-bold text-gray-900 mb-6">
+        <h1 className="text-2xl font-semibold text-gray-900 mb-6">
           Pagamentos Mensais
         </h1>
 
         <div className="card mb-6">
-          <div className="flex flex-wrap items-center gap-4">
+          <div className="flex flex-wrap items-center gap-6">
             <div>
               <label className="label">Mes</label>
               <input
@@ -96,14 +96,14 @@ export default function PaymentsPage() {
             </div>
             <div className="flex-1" />
             <div className="text-right">
-              <p className="text-sm text-gray-500">Pagamentos recebidos</p>
-              <p className="text-2xl font-bold text-green-600">
+              <p className="text-sm text-gray-400">Pagamentos recebidos</p>
+              <p className="text-2xl font-semibold text-green-600">
                 {paidCount}/{payments.length}
               </p>
             </div>
             <div className="text-right">
-              <p className="text-sm text-gray-500">Total recebido</p>
-              <p className="text-2xl font-bold text-primary-600">
+              <p className="text-sm text-gray-400">Total recebido</p>
+              <p className="text-2xl font-semibold text-gray-900">
                 {totalPaid.toFixed(2)} / {totalExpected.toFixed(2)} EUR
               </p>
             </div>
@@ -113,20 +113,20 @@ export default function PaymentsPage() {
         {loading ? (
           <p className="text-gray-500">A carregar...</p>
         ) : (
-          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
             {payments.map((p) => (
               <div
                 key={p.unit.id}
-                className={`card text-center cursor-pointer transition-all hover:scale-105 ${
+                className={`rounded-2xl p-4 text-center cursor-pointer transition-all hover:scale-105 ${
                   p.paid
-                    ? 'bg-green-50 border-green-200'
-                    : 'bg-red-50 border-red-200'
+                    ? 'bg-green-50'
+                    : 'bg-red-50'
                 }`}
               >
-                <h3 className="text-xl font-bold text-gray-900">{p.unit.code}</h3>
+                <h3 className="text-xl font-semibold text-gray-900">{p.unit.code}</h3>
                 <p
                   className={`text-sm font-medium ${
-                    p.paid ? 'text-green-600' : 'text-red-600'
+                    p.paid ? 'text-green-600' : 'text-red-500'
                   }`}
                 >
                   {p.paid ? 'Pago' : 'Pendente'}

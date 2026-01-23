@@ -373,19 +373,21 @@ export default function TransactionsPage() {
   }
 
   return (
-    <div className="flex min-h-screen bg-gray-50">
+    <div className="flex min-h-screen">
       <Sidebar />
 
       {/* Mappings Panel */}
       {showMappingsPanel && (
-        <div className="w-80 bg-white border-r border-gray-200 p-4 overflow-y-auto">
+        <div className="w-80 bg-white border-r border-gray-100 p-4 overflow-y-auto">
           <div className="flex justify-between items-center mb-4">
-            <h2 className="text-lg font-bold text-gray-900">Mapeamentos</h2>
+            <h2 className="text-lg font-semibold text-gray-900">Mapeamentos</h2>
             <button
-              className="text-gray-400 hover:text-gray-600"
+              className="p-1 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-all"
               onClick={() => setShowMappingsPanel(false)}
             >
-              x
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
             </button>
           </div>
 
@@ -482,13 +484,13 @@ export default function TransactionsPage() {
 
       <main className="flex-1 p-8">
         <div className="flex justify-between items-center mb-6">
-          <div className="flex items-center gap-4">
-            <h1 className="text-2xl font-bold text-gray-900">Transacoes</h1>
+          <div className="flex items-center gap-3">
+            <h1 className="text-2xl font-semibold text-gray-900">Transacoes</h1>
             <button
-              className={`text-sm px-3 py-1 rounded-lg border ${showMappingsPanel ? 'bg-primary-50 border-primary-300 text-primary-700' : 'border-gray-300 text-gray-600 hover:bg-gray-50'}`}
+              className={`text-sm px-3 py-1.5 rounded-lg transition-all ${showMappingsPanel ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
               onClick={() => setShowMappingsPanel(!showMappingsPanel)}
             >
-              {showMappingsPanel ? 'Fechar Mapeamentos' : 'Mapeamentos'}
+              Mapeamentos
             </button>
           </div>
           <button className="btn-primary" onClick={() => setShowModal(true)}>
