@@ -334,17 +334,36 @@ export default function UnitDetailPage() {
               {(() => {
                 const now = new Date();
                 const currentYear = now.getFullYear();
-                const currentMonth = now.getMonth() + 1;
-                const isCurrentYear = calendarYear === currentYear;
-                const monthsToCount = isCurrentYear ? currentMonth : 12;
-                const expectedYTD = unit.monthlyFee * monthsToCount;
-                const paidYTD = monthStatus
-                  .filter((s) => {
-                    const monthNum = parseInt(s.month.split('-')[1]);
-                    return monthNum <= monthsToCount;
-                  })
-                  .reduce((sum, s) => sum + s.paid, 0);
+                const currentMonth = now.getMonth() + 1; // 1-12
+
+                // Soma total de todos os pagamentos efetuados no ano selecionado.
+                const paidYTD = monthStatus.reduce((sum, s) => sum + s.paid, 0);
+
+                let expectedYTD = 0;
+                let expectedLabel = '';
+
+                // Define o valor esperado com base no ano.
+                if (calendarYear < currentYear) {
+                  expectedYTD = unit.monthlyFee * 12;
+                  expectedLabel = '12 meses';
+                } else if (calendarYear === currentYear) {
+                  expectedYTD = unit.monthlyFee * currentMonth;
+                  expectedLabel = `até ao ${currentMonth}º mês`;
+                } else { // Ano futuro
+                  expectedYTD = 0; // Nada é esperado para um ano futuro.
+                  expectedLabel = 'N/A';
+                }
+
+                // A dívida do ano é o esperado menos o que foi pago (mínimo de 0).
                 const yearDebt = Math.max(0, expectedYTD - paidYTD);
+                
+                // Para clareza, o valor "Esperado" deve mostrar o valor pago se for adiantado.
+                const displayExpected = Math.max(expectedYTD, paidYTD);
+                if (paidYTD > expectedYTD && calendarYear >= currentYear) {
+                    expectedLabel = `Pago adiantado`;
+                }
+
+                const totalDebt = yearDebt + pastYearsDebt;
 
                 return (
                   <div className="space-y-3">
@@ -354,29 +373,35 @@ export default function UnitDetailPage() {
                     </div>
                     <div className="flex justify-between">
                       <span className="text-gray-500">
-                        Esperado ({isCurrentYear ? `ate ${currentMonth} meses` : '12 meses'}):
+                        Esperado ({expectedLabel}):
                       </span>
-                      <span className="font-medium">{expectedYTD.toFixed(2)} EUR</span>
+                      <span className="font-medium">{displayExpected.toFixed(2)} EUR</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-gray-500">Pago em {calendarYear}:</span>
                       <span className="font-medium text-green-600">{paidYTD.toFixed(2)} EUR</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-gray-500">Divida {calendarYear}:</span>
+                      <span className="text-gray-500">Dívida {calendarYear}:</span>
                       <span className={`font-medium ${yearDebt > 0 ? 'text-red-600' : 'text-green-600'}`}>
                         {yearDebt.toFixed(2)} EUR
                       </span>
                     </div>
-                    {pastYearsDebt > 0 && (
+                    
+                    {/* Mostra a secção de dívida total apenas se houver alguma dívida. */}
+                    {totalDebt > 0 && (
                       <div className="pt-3 border-t border-gray-200">
                         <div className="flex justify-between">
-                          <span className="text-gray-500">Divida anos anteriores:</span>
-                          <span className="font-medium text-red-600">{pastYearsDebt.toFixed(2)} EUR</span>
+                          <span className="text-gray-500">Dívida anos anteriores:</span>
+                          <span className={`font-medium ${pastYearsDebt > 0 ? 'text-red-600' : ''}`}>
+                            {pastYearsDebt.toFixed(2)} EUR
+                          </span>
                         </div>
                         <div className="flex justify-between mt-2">
-                          <span className="text-gray-700 font-medium">Divida total:</span>
-                          <span className="font-bold text-red-600">{(yearDebt + pastYearsDebt).toFixed(2)} EUR</span>
+                          <span className="text-gray-700 font-medium">Dívida total:</span>
+                          <span className="font-bold text-red-600">
+                            {totalDebt.toFixed(2)} EUR
+                          </span>
                         </div>
                       </div>
                     )}
