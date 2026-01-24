@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { prisma } from '@/lib/prisma';
 import { authOptions } from '@/lib/auth';
-import { getFeeForMonth } from '@/lib/feeHistory';
+import { getTotalFeeForMonth, FeeHistoryRecord, ExtraChargeRecord } from '@/lib/feeHistory';
 
 export async function GET(request: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -33,6 +33,9 @@ export async function GET(request: NextRequest) {
       },
       orderBy: { name: 'asc' },
     });
+
+    // Get all extra charges
+    const allExtraCharges = await prisma.extraCharge.findMany();
 
     // Get all TransactionMonth allocations for the year, including transaction data
     const yearAllocations = await prisma.transactionMonth.findMany({
@@ -67,8 +70,9 @@ export async function GET(request: NextRequest) {
     const calculatePastYearsDebt = (
       entityId: string,
       entityType: 'unit' | 'creditor',
-      feeHistory: { amount: number; effectiveFrom: string }[],
-      defaultFee: number
+      feeHistory: FeeHistoryRecord[],
+      defaultFee: number,
+      extraCharges: ExtraChargeRecord[]
     ) => {
       const entityAllocs = pastAllocations.filter((a) =>
         entityType === 'unit' ? a.transaction.unitId === entityId : a.transaction.creditorId === entityId
@@ -89,12 +93,18 @@ export async function GET(request: NextRequest) {
         const startMonth = y === earliestYear ? earliestM : 1;
         for (let m = startMonth; m <= 12; m++) {
           const monthStr = `${y}-${m.toString().padStart(2, '0')}`;
-          const expected = getFeeForMonth(feeHistory, monthStr, defaultFee);
+          const feeData = getTotalFeeForMonth(
+            feeHistory,
+            entityType === 'unit' ? extraCharges : [],
+            monthStr,
+            defaultFee,
+            entityType === 'unit' ? entityId : undefined
+          );
           const paid = entityAllocs
             .filter((a) => a.month === monthStr)
             .reduce((sum, a) => sum + a.amount, 0);
 
-          totalExpected += expected;
+          totalExpected += feeData.total;
           totalPaid += paid;
         }
       }
@@ -104,9 +114,14 @@ export async function GET(request: NextRequest) {
 
     // Build unit data (receitas)
     const unitData = units.map((unit) => {
+      // Filter extra charges for this unit (global + unit-specific)
+      const unitExtraCharges = allExtraCharges.filter(
+        (e) => e.unitId === null || e.unitId === unit.id
+      ) as ExtraChargeRecord[];
+
       const months: Record<
         string,
-        { paid: number; expected: number; transactions: { id: string; amount: number; date: string; description: string }[] }
+        { paid: number; expected: number; baseFee: number; extras: number; transactions: { id: string; amount: number; date: string; description: string }[] }
       > = {};
       let totalPaid = 0;
       let totalExpected = 0;
@@ -117,11 +132,19 @@ export async function GET(request: NextRequest) {
           (a) => a.transaction.unitId === unit.id && a.month === monthStr && a.transaction.amount > 0
         );
         const paid = monthAllocs.reduce((sum, a) => sum + a.amount, 0);
-        const expected = getFeeForMonth(unit.feeHistory, monthStr, unit.monthlyFee);
+        const feeData = getTotalFeeForMonth(
+          unit.feeHistory as FeeHistoryRecord[],
+          unitExtraCharges,
+          monthStr,
+          unit.monthlyFee,
+          unit.id
+        );
 
         months[monthStr] = {
           paid,
-          expected,
+          expected: feeData.total,
+          baseFee: feeData.baseFee,
+          extras: feeData.extras.reduce((sum, e) => sum + e.amount, 0),
           transactions: monthAllocs.map((a) => ({
             id: a.transaction.id,
             amount: a.amount,
@@ -130,15 +153,18 @@ export async function GET(request: NextRequest) {
           })),
         };
         totalPaid += paid;
-        totalExpected += expected;
+        totalExpected += feeData.total;
       }
 
       const pastYearsDebt = calculatePastYearsDebt(
         unit.id,
         'unit',
-        unit.feeHistory,
-        unit.monthlyFee
+        unit.feeHistory as FeeHistoryRecord[],
+        unit.monthlyFee,
+        unitExtraCharges
       );
+
+      const yearDebt = Math.max(0, totalExpected - totalPaid);
 
       return {
         id: unit.id,
@@ -147,7 +173,9 @@ export async function GET(request: NextRequest) {
         months,
         totalPaid,
         totalExpected,
+        yearDebt,
         pastYearsDebt,
+        totalDebt: yearDebt + pastYearsDebt,
       };
     });
 
@@ -166,11 +194,16 @@ export async function GET(request: NextRequest) {
           (a) => a.transaction.creditorId === creditor.id && a.month === monthStr && a.transaction.amount < 0
         );
         const paid = monthAllocs.reduce((sum, a) => sum + a.amount, 0);
-        const expected = getFeeForMonth(creditor.feeHistory, monthStr, creditor.amountDue ?? 0);
+        const feeData = getTotalFeeForMonth(
+          creditor.feeHistory as FeeHistoryRecord[],
+          [], // Creditors don't have extra charges
+          monthStr,
+          creditor.amountDue ?? 0
+        );
 
         months[monthStr] = {
           paid,
-          expected,
+          expected: feeData.total,
           transactions: monthAllocs.map((a) => ({
             id: a.transaction.id,
             amount: a.amount,
@@ -179,14 +212,15 @@ export async function GET(request: NextRequest) {
           })),
         };
         totalPaid += paid;
-        totalExpected += expected;
+        totalExpected += feeData.total;
       }
 
       const pastYearsDebt = calculatePastYearsDebt(
         creditor.id,
         'creditor',
-        creditor.feeHistory,
-        creditor.amountDue ?? 0
+        creditor.feeHistory as FeeHistoryRecord[],
+        creditor.amountDue ?? 0,
+        []
       );
 
       return {
@@ -203,6 +237,7 @@ export async function GET(request: NextRequest) {
     // Calculate totals
     const totalReceitas = unitData.reduce((sum, u) => sum + u.totalPaid, 0);
     const totalDespesas = creditorData.reduce((sum, c) => sum + c.totalPaid, 0);
+    const totalDebtAllUnits = unitData.reduce((sum, u) => sum + u.totalDebt, 0);
 
     return NextResponse.json({
       year,
@@ -212,6 +247,7 @@ export async function GET(request: NextRequest) {
         receitas: totalReceitas,
         despesas: totalDespesas,
         saldo: totalReceitas - totalDespesas,
+        totalDebt: totalDebtAllUnits,
       },
     });
   } catch (error) {

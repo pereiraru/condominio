@@ -40,6 +40,14 @@ export default function UnitDetailPage() {
   const [monthStatus, setMonthStatus] = useState<MonthPaymentStatus[]>([]);
   const [pastYearsDebt, setPastYearsDebt] = useState(0);
   const [paymentHistory, setPaymentHistory] = useState<Record<string, number>>({});
+  const [expectedHistory, setExpectedHistory] = useState<Record<string, number>>({});
+  const [yearlyData, setYearlyData] = useState<{
+    year: number;
+    paid: number;
+    expected: number;
+    debt: number;
+    accumulatedDebt: number;
+  }[]>([]);
 
   // Fee history and extra charges state
   const [feeHistory, setFeeHistory] = useState<FeeHistory[]>([]);
@@ -137,7 +145,9 @@ export default function UnitDetailPage() {
       const res = await fetch(`/api/units/${id}/payment-history`);
       if (res.ok) {
         const data = await res.json();
-        setPaymentHistory(data.payments);
+        setPaymentHistory(data.payments || {});
+        setExpectedHistory(data.expected || {});
+        setYearlyData(data.yearlyData || []);
       }
     } catch (error) {
       console.error('Error fetching payment history:', error);
@@ -802,53 +812,78 @@ export default function UnitDetailPage() {
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="text-left text-gray-500 border-b">
-                        <th className="pb-2 pr-3 font-medium sticky left-0 bg-white"></th>
+                        <th className="pb-2 pr-3 font-medium sticky left-0 bg-white z-10"></th>
                         {['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'].map((m) => (
                           <th key={m} className="pb-2 px-2 font-medium text-center min-w-[60px]">{m}</th>
                         ))}
-                        <th className="pb-2 px-2 font-medium text-right">Total</th>
+                        <th className="pb-2 px-2 font-medium text-right min-w-[80px]">Pago</th>
+                        <th className="pb-2 px-2 font-medium text-right min-w-[80px]">Esperado</th>
+                        <th className="pb-2 px-2 font-medium text-right min-w-[80px]">Divida</th>
+                        <th className="pb-2 px-2 font-medium text-right min-w-[80px]">Acumulado</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
                       {Array.from({ length: new Date().getFullYear() - 2011 + 1 }, (_, i) => new Date().getFullYear() - i).map((year) => {
-                        const yearTotal = Array.from({ length: 12 }, (_, m) => {
-                          const monthStr = `${year}-${(m + 1).toString().padStart(2, '0')}`;
-                          return paymentHistory[monthStr] || 0;
-                        }).reduce((sum, v) => sum + v, 0);
+                        const yearData = yearlyData.find((y) => y.year === year);
+                        const yearPaid = yearData?.paid || 0;
+                        const yearExpected = yearData?.expected || 0;
+                        const yearDebt = yearData?.debt || 0;
+                        const accumulatedDebt = yearData?.accumulatedDebt || 0;
 
                         return (
                           <tr key={year}>
-                            <td className="py-2 pr-3 font-semibold text-gray-900 sticky left-0 bg-white text-right">
+                            <td className="py-2 pr-3 font-semibold text-gray-900 sticky left-0 bg-white z-10 text-right">
                               {year}
                             </td>
                             {Array.from({ length: 12 }, (_, m) => {
                               const monthStr = `${year}-${(m + 1).toString().padStart(2, '0')}`;
-                              const amount = paymentHistory[monthStr] || 0;
+                              const paid = paymentHistory[monthStr] || 0;
+                              const expected = expectedHistory[monthStr] || 0;
                               const isSelected = historyPanelOpen && historyPanelMonth === monthStr;
+                              const isPaidInFull = paid >= expected && expected > 0;
+                              const isPartial = paid > 0 && paid < expected;
+                              const isUnpaid = paid === 0 && expected > 0;
+
                               return (
                                 <td
                                   key={monthStr}
                                   className={`py-2 px-2 text-center transition-colors ${isAdmin ? 'cursor-pointer' : ''} ${
                                     isSelected
                                       ? 'bg-primary-100 ring-2 ring-primary-500'
-                                      : amount > 0
+                                      : isPaidInFull
                                         ? `bg-green-50 text-green-700 ${isAdmin ? 'hover:bg-green-100' : ''}`
-                                        : isAdmin ? 'hover:bg-gray-50' : ''
+                                        : isPartial
+                                          ? `bg-yellow-50 text-yellow-700 ${isAdmin ? 'hover:bg-yellow-100' : ''}`
+                                          : isUnpaid
+                                            ? `bg-red-50 text-red-400 ${isAdmin ? 'hover:bg-red-100' : ''}`
+                                            : isAdmin ? 'hover:bg-gray-50' : ''
                                   }`}
                                   onClick={() => isAdmin && handleHistoryCellClick(monthStr)}
+                                  title={expected > 0 ? `Esperado: ${expected.toFixed(2)}€` : ''}
                                 >
-                                  {amount > 0 ? (
+                                  {paid > 0 ? (
                                     <span className="text-sm font-medium">
-                                      {Number.isInteger(amount) ? amount : amount.toFixed(2)}
+                                      {Number.isInteger(paid) ? paid : paid.toFixed(2)}
                                     </span>
+                                  ) : expected > 0 ? (
+                                    <span className="text-sm text-red-300">{expected.toFixed(0)}</span>
                                   ) : (
                                     <span className="text-sm text-gray-300">-</span>
                                   )}
                                 </td>
                               );
                             })}
-                            <td className="py-2 px-2 text-right font-semibold text-gray-900">
-                              {yearTotal > 0 ? `${yearTotal.toFixed(2)}` : '-'}
+                            <td className="py-2 px-2 text-right font-semibold text-green-600">
+                              {yearPaid > 0 ? yearPaid.toFixed(2) : '-'}
+                            </td>
+                            <td className="py-2 px-2 text-right font-medium text-gray-600">
+                              {yearExpected > 0 ? yearExpected.toFixed(2) : '-'}
+                            </td>
+                            <td className={`py-2 px-2 text-right font-semibold ${yearDebt > 0 ? 'text-red-500' : 'text-green-600'}`}>
+                              {yearExpected > 0 ? yearDebt.toFixed(2) : '-'}
+                            </td>
+                            <td className={`py-2 px-2 text-right font-semibold ${accumulatedDebt > 0 ? 'text-red-600 bg-red-50' : 'text-green-600'}`}>
+                              {accumulatedDebt > 0 ? accumulatedDebt.toFixed(2) : yearExpected > 0 ? '0.00' : '-'}
                             </td>
                           </tr>
                         );

@@ -27,7 +27,9 @@ interface OverviewRow {
   months: Record<string, { paid: number; expected: number; transactions: MonthTransaction[] }>;
   totalPaid: number;
   totalExpected: number;
+  yearDebt?: number;
   pastYearsDebt: number;
+  totalDebt?: number;
 }
 
 interface OverviewData {
@@ -38,6 +40,7 @@ interface OverviewData {
     receitas: number;
     despesas: number;
     saldo: number;
+    totalDebt: number;
   };
 }
 
@@ -554,7 +557,7 @@ export default function ReportsPage() {
               <div className={`flex gap-6`}>
                 <div className={`flex-1 space-y-6 ${panelOpen ? 'max-w-[calc(100%-340px)]' : ''}`}>
                   {/* Totals */}
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
                     <div className="card">
                       <h3 className="text-sm font-medium text-gray-500">Total Receitas {selectedYear}</h3>
                       <p className="text-2xl font-bold text-green-600">{overviewData.totals.receitas.toFixed(2)} EUR</p>
@@ -567,6 +570,12 @@ export default function ReportsPage() {
                       <h3 className="text-sm font-medium text-gray-500">Saldo {selectedYear}</h3>
                       <p className={`text-2xl font-bold ${overviewData.totals.saldo >= 0 ? 'text-primary-600' : 'text-red-600'}`}>
                         {overviewData.totals.saldo.toFixed(2)} EUR
+                      </p>
+                    </div>
+                    <div className="card">
+                      <h3 className="text-sm font-medium text-gray-500">Dívida Total Acumulada</h3>
+                      <p className={`text-2xl font-bold ${overviewData.totals.totalDebt > 0 ? 'text-red-600' : 'text-gray-400'}`}>
+                        {overviewData.totals.totalDebt > 0 ? `${overviewData.totals.totalDebt.toFixed(2)} EUR` : '0.00 EUR'}
                       </p>
                     </div>
                   </div>
@@ -585,6 +594,8 @@ export default function ReportsPage() {
                             ))}
                             <th className="pb-2 px-2 font-medium text-right">Pago</th>
                             <th className="pb-2 px-2 font-medium text-right">Esperado</th>
+                            <th className="pb-2 px-2 font-medium text-right text-red-600">Dív.Ano</th>
+                            <th className="pb-2 px-2 font-medium text-right text-red-600">Dív.Total</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100">
@@ -626,6 +637,12 @@ export default function ReportsPage() {
                               <td className="py-2 px-2 text-right text-gray-500">
                                 {unit.totalExpected.toFixed(2)}€
                               </td>
+                              <td className={`py-2 px-2 text-right font-medium ${(unit.yearDebt || 0) > 0 ? 'text-red-600' : 'text-gray-300'}`}>
+                                {(unit.yearDebt || 0) > 0 ? `${(unit.yearDebt || 0).toFixed(2)}€` : '-'}
+                              </td>
+                              <td className={`py-2 px-2 text-right font-medium ${(unit.totalDebt || 0) > 0 ? 'text-red-600' : 'text-gray-300'}`}>
+                                {(unit.totalDebt || 0) > 0 ? `${(unit.totalDebt || 0).toFixed(2)}€` : '-'}
+                              </td>
                             </tr>
                           ))}
                           {/* Totals row */}
@@ -653,6 +670,14 @@ export default function ReportsPage() {
                             </td>
                             <td className="py-2 px-2 text-right text-gray-500">
                               {overviewData.units.reduce((sum, u) => sum + u.totalExpected, 0).toFixed(2)}€
+                            </td>
+                            <td className="py-2 px-2 text-right text-red-600">
+                              {overviewData.units.reduce((sum, u) => sum + (u.yearDebt || 0), 0) > 0
+                                ? `${overviewData.units.reduce((sum, u) => sum + (u.yearDebt || 0), 0).toFixed(2)}€`
+                                : '-'}
+                            </td>
+                            <td className="py-2 px-2 text-right text-red-600">
+                              {overviewData.totals.totalDebt > 0 ? `${overviewData.totals.totalDebt.toFixed(2)}€` : '-'}
                             </td>
                           </tr>
                         </tbody>
