@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
+import { useSession } from 'next-auth/react';
 import Sidebar from '@/components/Sidebar';
 import MonthCalendar from '@/components/MonthCalendar';
 import TransactionEditPanel from '@/components/TransactionEditPanel';
@@ -10,6 +11,8 @@ import { Unit, Transaction, Creditor, MonthPaymentStatus } from '@/lib/types';
 export default function UnitDetailPage() {
   const params = useParams();
   const router = useRouter();
+  const { data: session } = useSession();
+  const isAdmin = session?.user?.role === 'admin';
   const id = params.id as string;
 
   const [unit, setUnit] = useState<Unit & { transactions?: Transaction[] } | null>(null);
@@ -51,9 +54,12 @@ export default function UnitDetailPage() {
   useEffect(() => {
     fetchUnit();
     fetchPaymentHistory();
-    fetchAllUnits();
-    fetchCreditors();
-  }, [id]);
+    // Only admins need these for the edit panel
+    if (isAdmin) {
+      fetchAllUnits();
+      fetchCreditors();
+    }
+  }, [id, isAdmin]);
 
   // Fetch monthly status when unit loads or year changes
   useEffect(() => {
@@ -379,7 +385,7 @@ export default function UnitDetailPage() {
         <div className="flex items-center gap-4 mb-4">
           <button
             className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-all"
-            onClick={() => router.push('/dashboard/units')}
+            onClick={() => router.push(isAdmin ? '/dashboard/units' : '/dashboard')}
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
@@ -421,13 +427,14 @@ export default function UnitDetailPage() {
                 <form onSubmit={handleSave}>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
-                      <label className="label">Código *</label>
+                      <label className="label">Código</label>
                       <input
                         type="text"
                         className="input"
                         value={formData.code}
                         onChange={(e) => setFormData({ ...formData, code: e.target.value })}
                         required
+                        disabled={!isAdmin}
                       />
                     </div>
                     <div>
@@ -437,10 +444,11 @@ export default function UnitDetailPage() {
                         className="input"
                         value={formData.floor}
                         onChange={(e) => setFormData({ ...formData, floor: e.target.value })}
+                        disabled={!isAdmin}
                       />
                     </div>
                     <div>
-                      <label className="label">Quota Mensal (EUR) *</label>
+                      <label className="label">Quota Mensal (EUR)</label>
                       <input
                         type="number"
                         step="0.01"
@@ -448,6 +456,7 @@ export default function UnitDetailPage() {
                         value={formData.monthlyFee}
                         onChange={(e) => setFormData({ ...formData, monthlyFee: e.target.value })}
                         required
+                        disabled={!isAdmin}
                       />
                     </div>
                     <div>
@@ -457,6 +466,7 @@ export default function UnitDetailPage() {
                         className="input"
                         value={formData.email}
                         onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                        disabled={!isAdmin}
                       />
                     </div>
                     <div>
@@ -466,6 +476,7 @@ export default function UnitDetailPage() {
                         className="input"
                         value={formData.telefone}
                         onChange={(e) => setFormData({ ...formData, telefone: e.target.value })}
+                        disabled={!isAdmin}
                       />
                     </div>
                     <div>
@@ -475,6 +486,7 @@ export default function UnitDetailPage() {
                         className="input"
                         value={formData.nib}
                         onChange={(e) => setFormData({ ...formData, nib: e.target.value })}
+                        disabled={!isAdmin}
                       />
                     </div>
                     <div className="md:col-span-2">
@@ -484,6 +496,7 @@ export default function UnitDetailPage() {
                         className="input"
                         value={formData.description}
                         onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                        disabled={!isAdmin}
                       />
                     </div>
                   </div>
@@ -492,13 +505,15 @@ export default function UnitDetailPage() {
                   <div className="mt-4">
                     <div className="flex justify-between items-center mb-2">
                       <label className="label mb-0">Proprietário(s)</label>
-                      <button
-                        type="button"
-                        className="text-primary-600 hover:text-primary-800 text-sm font-medium"
-                        onClick={addOwner}
-                      >
-                        + Adicionar
-                      </button>
+                      {isAdmin && (
+                        <button
+                          type="button"
+                          className="text-primary-600 hover:text-primary-800 text-sm font-medium"
+                          onClick={addOwner}
+                        >
+                          + Adicionar
+                        </button>
+                      )}
                     </div>
                     {owners.map((owner, index) => (
                       <div key={index} className="flex gap-2 mb-2">
@@ -508,8 +523,9 @@ export default function UnitDetailPage() {
                           value={owner}
                           onChange={(e) => updateOwner(index, e.target.value)}
                           placeholder="Nome do proprietário"
+                          disabled={!isAdmin}
                         />
-                        {owners.length > 1 && (
+                        {isAdmin && owners.length > 1 && (
                           <button
                             type="button"
                             className="text-red-500 hover:text-red-700 px-2"
@@ -522,11 +538,13 @@ export default function UnitDetailPage() {
                     ))}
                   </div>
 
-                  <div className="mt-4 flex justify-end">
-                    <button type="submit" className="btn-primary" disabled={saving}>
-                      {saving ? 'A guardar...' : 'Guardar alterações'}
-                    </button>
-                  </div>
+                  {isAdmin && (
+                    <div className="mt-4 flex justify-end">
+                      <button type="submit" className="btn-primary" disabled={saving}>
+                        {saving ? 'A guardar...' : 'Guardar alterações'}
+                      </button>
+                    </div>
+                  )}
                 </form>
               </div>
 
@@ -534,8 +552,8 @@ export default function UnitDetailPage() {
               <div className="card mt-4">
                 <h2 className="text-lg font-semibold mb-4">Últimas Transações</h2>
                 {unit.transactions && unit.transactions.length > 0 ? (
-                  <div className={`${selectedTx ? 'flex gap-4' : ''}`}>
-                    <div className={`overflow-x-auto ${selectedTx ? 'flex-1' : ''}`}>
+                  <div className={`${selectedTx && isAdmin ? 'flex gap-4' : ''}`}>
+                    <div className={`overflow-x-auto ${selectedTx && isAdmin ? 'flex-1' : ''}`}>
                       <table className="w-full">
                         <thead>
                           <tr className="text-left text-sm text-gray-400">
@@ -549,10 +567,10 @@ export default function UnitDetailPage() {
                           {unit.transactions.map((tx: Transaction, i: number) => (
                             <tr
                               key={tx.id}
-                              className={`hover:bg-gray-50 transition-colors cursor-pointer ${
-                                selectedTx?.id === tx.id ? 'bg-primary-50' : ''
+                              className={`${isAdmin ? 'hover:bg-gray-50 cursor-pointer' : ''} transition-colors ${
+                                selectedTx?.id === tx.id && isAdmin ? 'bg-primary-50' : ''
                               } ${i !== (unit.transactions?.length ?? 0) - 1 ? 'border-b border-gray-100' : ''}`}
-                              onClick={() => openTxPanel(tx)}
+                              onClick={() => isAdmin && openTxPanel(tx)}
                             >
                               <td className="py-4 text-sm text-gray-500">
                                 {new Date(tx.date).toLocaleDateString('pt-PT')}
@@ -573,7 +591,7 @@ export default function UnitDetailPage() {
                         </tbody>
                       </table>
                     </div>
-                    {selectedTx && (
+                    {isAdmin && selectedTx && (
                       <TransactionEditPanel
                         transaction={selectedTx}
                         units={allUnits}
@@ -686,7 +704,7 @@ export default function UnitDetailPage() {
         ) : (
           /* Histórico Tab */
           <div className={`flex gap-6`}>
-            <div className={`flex-1 ${historyPanelOpen ? 'max-w-[calc(100%-340px)]' : ''}`}>
+            <div className={`flex-1 ${isAdmin && historyPanelOpen ? 'max-w-[calc(100%-340px)]' : ''}`}>
               {/* Summary Cards */}
               {(() => {
                 const currentYear = new Date().getFullYear();
@@ -722,7 +740,7 @@ export default function UnitDetailPage() {
               {/* Payment History Table */}
               <div className="card">
                 <h2 className="text-lg font-semibold mb-4">Histórico de Pagamentos</h2>
-                <p className="text-xs text-gray-500 mb-4">Clique numa célula para editar a alocação de meses</p>
+                {isAdmin && <p className="text-xs text-gray-500 mb-4">Clique numa célula para editar a alocação de meses</p>}
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
@@ -753,14 +771,14 @@ export default function UnitDetailPage() {
                               return (
                                 <td
                                   key={monthStr}
-                                  className={`py-2 px-2 text-center cursor-pointer transition-colors ${
+                                  className={`py-2 px-2 text-center transition-colors ${isAdmin ? 'cursor-pointer' : ''} ${
                                     isSelected
                                       ? 'bg-primary-100 ring-2 ring-primary-500'
                                       : amount > 0
-                                        ? 'bg-green-50 text-green-700 hover:bg-green-100'
-                                        : 'hover:bg-gray-50'
+                                        ? `bg-green-50 text-green-700 ${isAdmin ? 'hover:bg-green-100' : ''}`
+                                        : isAdmin ? 'hover:bg-gray-50' : ''
                                   }`}
-                                  onClick={() => handleHistoryCellClick(monthStr)}
+                                  onClick={() => isAdmin && handleHistoryCellClick(monthStr)}
                                 >
                                   {amount > 0 ? (
                                     <span className="text-sm font-medium">
@@ -784,8 +802,8 @@ export default function UnitDetailPage() {
               </div>
             </div>
 
-            {/* History Edit Side Panel */}
-            {historyPanelOpen && (
+            {/* History Edit Side Panel (admin only) */}
+            {isAdmin && historyPanelOpen && (
               <div className="w-80 shrink-0">
                 <div className="card sticky top-8 max-h-[calc(100vh-4rem)] overflow-y-auto">
                   <div className="flex justify-between items-center mb-4">
