@@ -6,7 +6,9 @@ import { useSession } from 'next-auth/react';
 import Sidebar from '@/components/Sidebar';
 import MonthCalendar from '@/components/MonthCalendar';
 import TransactionEditPanel from '@/components/TransactionEditPanel';
-import { Unit, Transaction, Creditor, MonthPaymentStatus } from '@/lib/types';
+import FeeHistoryManager from '@/components/FeeHistoryManager';
+import ExtraChargesManager from '@/components/ExtraChargesManager';
+import { Unit, Transaction, Creditor, MonthPaymentStatus, FeeHistory, ExtraCharge } from '@/lib/types';
 
 export default function UnitDetailPage() {
   const params = useParams();
@@ -39,6 +41,10 @@ export default function UnitDetailPage() {
   const [pastYearsDebt, setPastYearsDebt] = useState(0);
   const [paymentHistory, setPaymentHistory] = useState<Record<string, number>>({});
 
+  // Fee history and extra charges state
+  const [feeHistory, setFeeHistory] = useState<FeeHistory[]>([]);
+  const [extraCharges, setExtraCharges] = useState<ExtraCharge[]>([]);
+
   // History edit panel state
   const [historyPanelOpen, setHistoryPanelOpen] = useState(false);
   const [historyPanelMonth, setHistoryPanelMonth] = useState('');
@@ -54,6 +60,8 @@ export default function UnitDetailPage() {
   useEffect(() => {
     fetchUnit();
     fetchPaymentHistory();
+    fetchFeeHistory();
+    fetchExtraCharges();
     // Only admins need these for the edit panel
     if (isAdmin) {
       fetchAllUnits();
@@ -134,6 +142,38 @@ export default function UnitDetailPage() {
     } catch (error) {
       console.error('Error fetching payment history:', error);
     }
+  }
+
+  async function fetchFeeHistory() {
+    try {
+      const res = await fetch(`/api/units/${id}/fee-history`);
+      if (res.ok) {
+        setFeeHistory(await res.json());
+      }
+    } catch (error) {
+      console.error('Error fetching fee history:', error);
+    }
+  }
+
+  async function fetchExtraCharges() {
+    try {
+      const res = await fetch(`/api/extra-charges?unitId=${id}`);
+      if (res.ok) {
+        setExtraCharges(await res.json());
+      }
+    } catch (error) {
+      console.error('Error fetching extra charges:', error);
+    }
+  }
+
+  function handleFeeHistoryUpdate() {
+    fetchFeeHistory();
+    fetchMonthlyStatus();
+  }
+
+  function handleExtraChargesUpdate() {
+    fetchExtraCharges();
+    fetchMonthlyStatus();
   }
 
   async function handleHistoryCellClick(month: string) {
@@ -606,6 +646,23 @@ export default function UnitDetailPage() {
                   <p className="text-gray-400 text-center py-4">Sem pagamentos registados</p>
                 )}
               </div>
+
+              {/* Fee History Manager */}
+              <FeeHistoryManager
+                unitId={id}
+                feeHistory={feeHistory}
+                defaultFee={unit.monthlyFee}
+                readOnly={!isAdmin}
+                onUpdate={handleFeeHistoryUpdate}
+              />
+
+              {/* Extra Charges Manager */}
+              <ExtraChargesManager
+                unitId={id}
+                extraCharges={extraCharges}
+                readOnly={!isAdmin}
+                onUpdate={handleExtraChargesUpdate}
+              />
             </div>
 
             {/* Sidebar info */}

@@ -79,7 +79,28 @@ export interface MonthPaymentStatus {
   month: string; // "YYYY-MM"
   paid: number;
   expected: number;
+  baseFee?: number;
+  extras?: { description: string; amount: number }[];
   isPaid: boolean;
+}
+
+export interface FeeHistory {
+  id: string;
+  unitId?: string;
+  creditorId?: string;
+  amount: number;
+  effectiveFrom: string; // "YYYY-MM"
+  effectiveTo?: string | null; // "YYYY-MM"
+}
+
+export interface ExtraCharge {
+  id: string;
+  unitId?: string | null;
+  unit?: { code: string };
+  description: string;
+  amount: number;
+  effectiveFrom: string; // "YYYY-MM"
+  effectiveTo?: string | null; // "YYYY-MM"
 }
 
 export interface Document {

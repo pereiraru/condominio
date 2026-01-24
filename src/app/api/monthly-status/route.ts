@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { prisma } from '@/lib/prisma';
 import { authOptions, canAccessUnit } from '@/lib/auth';
-import { getFeeForMonth } from '@/lib/feeHistory';
+import { getTotalFeeForMonth, FeeHistoryRecord, ExtraChargeRecord } from '@/lib/feeHistory';
 
 export async function GET(request: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -31,9 +31,10 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Get current fee and fee history
+    // Get current fee, fee history, and extra charges
     let defaultFee = 0;
-    let feeHistory: { amount: number; effectiveFrom: string }[] = [];
+    let feeHistory: FeeHistoryRecord[] = [];
+    let extraCharges: ExtraChargeRecord[] = [];
 
     if (unitId) {
       const unit = await prisma.unit.findUnique({
@@ -42,6 +43,14 @@ export async function GET(request: NextRequest) {
       });
       defaultFee = unit?.monthlyFee ?? 0;
       feeHistory = unit?.feeHistory ?? [];
+
+      // Get extra charges (global + unit-specific)
+      const charges = await prisma.extraCharge.findMany({
+        where: {
+          OR: [{ unitId: null }, { unitId }],
+        },
+      });
+      extraCharges = charges;
     } else if (creditorId) {
       const creditor = await prisma.creditor.findUnique({
         where: { id: creditorId },
@@ -49,6 +58,7 @@ export async function GET(request: NextRequest) {
       });
       defaultFee = creditor?.amountDue ?? 0;
       feeHistory = creditor?.feeHistory ?? [];
+      // Creditors don't have extra charges
     }
 
     // Query TransactionMonth entries for the year
@@ -72,13 +82,26 @@ export async function GET(request: NextRequest) {
       const monthStr = `${year}-${m.toString().padStart(2, '0')}`;
       const monthAllocs = allocations.filter((a) => a.month === monthStr);
       const paid = monthAllocs.reduce((sum, a) => sum + a.amount, 0);
-      const expected = getFeeForMonth(feeHistory, monthStr, defaultFee);
+
+      // Calculate expected with extra charges
+      const feeData = getTotalFeeForMonth(
+        feeHistory,
+        extraCharges,
+        monthStr,
+        defaultFee,
+        unitId || undefined
+      );
 
       months.push({
         month: monthStr,
         paid,
-        expected,
-        isPaid: expected > 0 ? paid >= expected : paid > 0,
+        expected: feeData.total,
+        baseFee: feeData.baseFee,
+        extras: feeData.extras.map((e) => ({
+          description: e.description,
+          amount: e.amount,
+        })),
+        isPaid: feeData.total > 0 ? paid >= feeData.total : paid > 0,
       });
     }
 

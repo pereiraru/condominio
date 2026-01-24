@@ -36,6 +36,7 @@ model Unit {
   owners              Owner[]
   transactions        Transaction[]
   feeHistory          FeeHistory[]
+  extraCharges        ExtraCharge[]
   descriptionMappings DescriptionMapping[]
   createdAt           DateTime      @default(now())
   updatedAt           DateTime      @updatedAt
@@ -144,8 +145,22 @@ model FeeHistory {
   creditorId    String?
   amount        Float
   effectiveFrom String    // "YYYY-MM" format
+  effectiveTo   String?   // "YYYY-MM" format, null means ongoing
   createdAt     DateTime  @default(now())
 
   unit     Unit?     @relation(fields: [unitId], references: [id], onDelete: Cascade)
   creditor Creditor? @relation(fields: [creditorId], references: [id], onDelete: Cascade)
+}
+
+// Extra charges - additional fees for specific periods (repairs, improvements, etc.)
+model ExtraCharge {
+  id            String    @id @default(cuid())
+  unitId        String?   // null means applies to all units
+  description   String    // e.g., "Reparação bomba de água"
+  amount        Float     // extra amount to add to monthly fee
+  effectiveFrom String    // "YYYY-MM" format
+  effectiveTo   String?   // "YYYY-MM" format, null means ongoing
+  createdAt     DateTime  @default(now())
+
+  unit Unit? @relation(fields: [unitId], references: [id], onDelete: Cascade)
 }
