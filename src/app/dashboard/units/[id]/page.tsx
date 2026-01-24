@@ -370,6 +370,13 @@ export default function UnitDetailPage() {
             ? data.owners
             : [{ id: '', name: '', unitId: id }]
         );
+        // Default to current owner for Histórico filter
+        if (data.owners && data.owners.length > 0 && !selectedOwnerId) {
+          const currentOwner = data.owners.find((o: Owner) => !o.endMonth);
+          if (currentOwner) {
+            setSelectedOwnerId(currentOwner.id);
+          }
+        }
       } else {
         router.push('/dashboard/units');
       }
