@@ -40,6 +40,7 @@ export default function UnitDetailPage() {
   const [calendarYear, setCalendarYear] = useState(new Date().getFullYear());
   const [monthStatus, setMonthStatus] = useState<MonthPaymentStatus[]>([]);
   const [pastYearsDebt, setPastYearsDebt] = useState(0);
+  const [previousDebtRemaining, setPreviousDebtRemaining] = useState(0);
   const [paymentHistory, setPaymentHistory] = useState<Record<string, number>>({});
   const [expectedHistory, setExpectedHistory] = useState<Record<string, number>>({});
   const [yearlyData, setYearlyData] = useState<{
@@ -65,6 +66,9 @@ export default function UnitDetailPage() {
   const [historyPanelCalendarYear, setHistoryPanelCalendarYear] = useState(new Date().getFullYear());
   const [historyPanelMonthStatus, setHistoryPanelMonthStatus] = useState<MonthPaymentStatus[]>([]);
   const [historyPanelSaving, setHistoryPanelSaving] = useState(false);
+  const [historyPanelPrevDebt, setHistoryPanelPrevDebt] = useState(false);
+  const [historyPanelPrevDebtAmount, setHistoryPanelPrevDebtAmount] = useState('');
+  const [ownerRemainingPrevDebt, setOwnerRemainingPrevDebt] = useState(0);
 
   useEffect(() => {
     fetchUnit();
@@ -144,6 +148,7 @@ export default function UnitDetailPage() {
       if (res.ok) {
         const data = await res.json();
         setPastYearsDebt(data.pastYearsDebt);
+        setPreviousDebtRemaining(data.previousDebtRemaining || 0);
       }
     } catch (error) {
       console.error('Error fetching past years debt:', error);
@@ -204,6 +209,27 @@ export default function UnitDetailPage() {
     setHistoryPanelSelectedMonths([]);
     setHistoryPanelCustomAmounts({});
     setHistoryPanelShowCustom(false);
+    setHistoryPanelPrevDebt(false);
+    setHistoryPanelPrevDebtAmount('');
+
+    // Fetch owner's remaining previous debt
+    if (selectedOwnerId) {
+      try {
+        const res = await fetch(`/api/units/${id}/debt?ownerId=${selectedOwnerId}`);
+        if (res.ok) {
+          const data = await res.json();
+          setOwnerRemainingPrevDebt(data.previousDebtRemaining || 0);
+        }
+      } catch { /* ignore */ }
+    } else {
+      try {
+        const res = await fetch(`/api/units/${id}/debt`);
+        if (res.ok) {
+          const data = await res.json();
+          setOwnerRemainingPrevDebt(data.previousDebtRemaining || 0);
+        }
+      } catch { /* ignore */ }
+    }
 
     try {
       // Fetch transactions allocated to this month
@@ -228,28 +254,45 @@ export default function UnitDetailPage() {
   function selectHistoryPanelTransaction(tx: Transaction) {
     setHistoryPanelSelectedTx(tx);
     if (tx.monthAllocations && tx.monthAllocations.length > 0) {
-      const months = tx.monthAllocations.map((a) => a.month);
-      setHistoryPanelSelectedMonths(months);
-      const equalAmount = Math.abs(tx.amount) / months.length;
-      const isCustom = tx.monthAllocations.some(
-        (a) => Math.abs(a.amount - equalAmount) > 0.01
-      );
-      if (isCustom) {
-        setHistoryPanelShowCustom(true);
-        const amounts: Record<string, string> = {};
-        tx.monthAllocations.forEach((a) => {
-          amounts[a.month] = a.amount.toFixed(2);
-        });
-        setHistoryPanelCustomAmounts(amounts);
+      // Separate PREV-DEBT from regular allocations
+      const prevDebtAlloc = tx.monthAllocations.find((a) => a.month === 'PREV-DEBT');
+      const regularAllocs = tx.monthAllocations.filter((a) => a.month !== 'PREV-DEBT');
+
+      if (prevDebtAlloc) {
+        setHistoryPanelPrevDebt(true);
+        setHistoryPanelPrevDebtAmount(prevDebtAlloc.amount.toFixed(2));
       } else {
-        setHistoryPanelShowCustom(false);
-        setHistoryPanelCustomAmounts({});
+        setHistoryPanelPrevDebt(false);
+        setHistoryPanelPrevDebtAmount('');
       }
-      setHistoryPanelCalendarYear(parseInt(months[0].split('-')[0]));
+
+      const months = regularAllocs.map((a) => a.month);
+      setHistoryPanelSelectedMonths(months);
+
+      if (months.length > 0) {
+        const equalAmount = Math.abs(tx.amount) / tx.monthAllocations.length;
+        const isCustom = regularAllocs.some(
+          (a) => Math.abs(a.amount - equalAmount) > 0.01
+        ) || !!prevDebtAlloc;
+        if (isCustom) {
+          setHistoryPanelShowCustom(true);
+          const amounts: Record<string, string> = {};
+          regularAllocs.forEach((a) => {
+            amounts[a.month] = a.amount.toFixed(2);
+          });
+          setHistoryPanelCustomAmounts(amounts);
+        } else {
+          setHistoryPanelShowCustom(false);
+          setHistoryPanelCustomAmounts({});
+        }
+        setHistoryPanelCalendarYear(parseInt(months[0].split('-')[0]));
+      }
     } else {
       setHistoryPanelSelectedMonths([historyPanelMonth]);
       setHistoryPanelCustomAmounts({});
       setHistoryPanelShowCustom(false);
+      setHistoryPanelPrevDebt(false);
+      setHistoryPanelPrevDebtAmount('');
     }
   }
 
@@ -301,16 +344,30 @@ export default function UnitDetailPage() {
   }
 
   function getHistoryPanelAllocations(): { month: string; amount: number }[] {
-    if (!historyPanelSelectedTx || historyPanelSelectedMonths.length === 0) return [];
+    if (!historyPanelSelectedTx) return [];
+    const allocs: { month: string; amount: number }[] = [];
     const txAmount = Math.abs(historyPanelSelectedTx.amount);
-    if (historyPanelShowCustom) {
-      return historyPanelSelectedMonths.map((month) => ({
-        month,
-        amount: parseFloat(historyPanelCustomAmounts[month] || '0'),
-      }));
+
+    if (historyPanelSelectedMonths.length > 0) {
+      if (historyPanelShowCustom) {
+        historyPanelSelectedMonths.forEach((month) => {
+          allocs.push({ month, amount: parseFloat(historyPanelCustomAmounts[month] || '0') });
+        });
+      } else {
+        const prevDebtAmt = historyPanelPrevDebt ? (parseFloat(historyPanelPrevDebtAmount) || 0) : 0;
+        const remaining = txAmount - prevDebtAmt;
+        const perMonth = historyPanelSelectedMonths.length > 0 ? remaining / historyPanelSelectedMonths.length : 0;
+        historyPanelSelectedMonths.forEach((month) => {
+          allocs.push({ month, amount: perMonth });
+        });
+      }
     }
-    const perMonth = txAmount / historyPanelSelectedMonths.length;
-    return historyPanelSelectedMonths.map((month) => ({ month, amount: perMonth }));
+
+    if (historyPanelPrevDebt && parseFloat(historyPanelPrevDebtAmount) > 0) {
+      allocs.push({ month: 'PREV-DEBT', amount: parseFloat(historyPanelPrevDebtAmount) });
+    }
+
+    return allocs;
   }
 
   function getHistoryPanelAllocationTotal(): number {
@@ -330,9 +387,10 @@ export default function UnitDetailPage() {
 
       if (res.ok) {
         setHistoryPanelOpen(false);
-        fetchPaymentHistory();
+        fetchPaymentHistory(selectedOwnerId || undefined);
         fetchUnit();
-        fetchMonthlyStatus();
+        fetchMonthlyStatus(selectedOwnerId || undefined);
+        fetchPastYearsDebt(selectedOwnerId || undefined);
       } else {
         const data = await res.json();
         alert(`Erro: ${data.error}`);
@@ -396,7 +454,7 @@ export default function UnitDetailPage() {
     setOwners(owners.filter((_, i) => i !== index));
   }
 
-  function updateOwnerField(index: number, field: keyof Owner, value: string | null) {
+  function updateOwnerField(index: number, field: keyof Owner, value: string | number | null) {
     const updated = [...owners];
     updated[index] = { ...updated[index], [field]: value };
     setOwners(updated);
@@ -435,6 +493,7 @@ export default function UnitDetailPage() {
           nib: o.nib || null,
           startMonth: o.startMonth || null,
           endMonth: o.endMonth || null,
+          previousDebt: o.previousDebt ?? 0,
         }));
 
       const res = await fetch(`/api/units/${id}`, {
@@ -693,6 +752,16 @@ export default function UnitDetailPage() {
                           {isAdmin && (
                             <>
                               <div>
+                                <label className="text-xs text-gray-500">Dívida Anterior (EUR)</label>
+                                <input
+                                  type="number"
+                                  step="0.01"
+                                  className="input text-sm"
+                                  value={owner.previousDebt ?? 0}
+                                  onChange={(e) => updateOwnerField(index, 'previousDebt', parseFloat(e.target.value) || 0)}
+                                />
+                              </div>
+                              <div>
                                 <label className="text-xs text-gray-500">Início (AAAA-MM)</label>
                                 <input
                                   type="text"
@@ -841,7 +910,7 @@ export default function UnitDetailPage() {
                     expectedLabel = `Pago adiantado`;
                   }
 
-                  const totalDebt = yearDebt + pastYearsDebt;
+                  const totalDebt = yearDebt + pastYearsDebt + previousDebtRemaining;
 
                   return (
                     <div className="space-y-3">
@@ -874,6 +943,14 @@ export default function UnitDetailPage() {
                               {pastYearsDebt.toFixed(2)} EUR
                             </span>
                           </div>
+                          {previousDebtRemaining > 0 && (
+                            <div className="flex justify-between mt-1">
+                              <span className="text-gray-400 text-sm">Dívida anterior:</span>
+                              <span className="font-medium text-red-500">
+                                {previousDebtRemaining.toFixed(2)} EUR
+                              </span>
+                            </div>
+                          )}
                           <div className="flex justify-between mt-2">
                             <span className="text-gray-700 font-medium text-sm">Dívida total:</span>
                             <span className="font-semibold text-red-500">
@@ -927,9 +1004,14 @@ export default function UnitDetailPage() {
                     </div>
                     <div className="card">
                       <h3 className="text-sm text-gray-500 mb-1">Dívida Total</h3>
-                      <p className={`text-2xl font-semibold ${pastYearsDebt > 0 ? 'text-red-500' : 'text-green-600'}`}>
-                        {pastYearsDebt.toFixed(2)} EUR
+                      <p className={`text-2xl font-semibold ${(pastYearsDebt + previousDebtRemaining) > 0 ? 'text-red-500' : 'text-green-600'}`}>
+                        {(pastYearsDebt + previousDebtRemaining).toFixed(2)} EUR
                       </p>
+                      {previousDebtRemaining > 0 && (
+                        <p className="text-xs text-gray-500 mt-1">
+                          (inclui {previousDebtRemaining.toFixed(2)} dívida anterior)
+                        </p>
+                      )}
                     </div>
                   </div>
                 );
@@ -970,7 +1052,7 @@ export default function UnitDetailPage() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
-                      {Array.from({ length: new Date().getFullYear() - 2011 + 1 }, (_, i) => new Date().getFullYear() - i).map((year) => {
+                      {Array.from({ length: new Date().getFullYear() - 2024 + 1 }, (_, i) => new Date().getFullYear() - i).map((year) => {
                         const yearData = yearlyData.find((y) => y.year === year);
                         const yearPaid = yearData?.paid || 0;
                         const yearExpected = yearData?.expected || 0;
@@ -1118,6 +1200,42 @@ export default function UnitDetailPage() {
                           selectedMonths={historyPanelSelectedMonths}
                           onToggleMonth={handleHistoryPanelToggleMonth}
                         />
+
+                        {ownerRemainingPrevDebt > 0 && (
+                          <div className="mt-3">
+                            <button
+                              type="button"
+                              className={`w-full text-sm px-3 py-2 rounded-lg font-medium transition-all ${
+                                historyPanelPrevDebt
+                                  ? 'bg-orange-100 text-orange-700 border border-orange-300'
+                                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200 border border-gray-200'
+                              }`}
+                              onClick={() => {
+                                const next = !historyPanelPrevDebt;
+                                setHistoryPanelPrevDebt(next);
+                                if (next) {
+                                  setHistoryPanelPrevDebtAmount(ownerRemainingPrevDebt.toFixed(2));
+                                } else {
+                                  setHistoryPanelPrevDebtAmount('');
+                                }
+                              }}
+                            >
+                              Dívida Anterior ({ownerRemainingPrevDebt.toFixed(2)} EUR restante)
+                            </button>
+                            {historyPanelPrevDebt && (
+                              <div className="mt-2 flex items-center gap-2">
+                                <input
+                                  type="number"
+                                  step="0.01"
+                                  className="input text-sm py-1 flex-1"
+                                  value={historyPanelPrevDebtAmount}
+                                  onChange={(e) => setHistoryPanelPrevDebtAmount(e.target.value)}
+                                />
+                                <span className="text-xs text-gray-400">EUR</span>
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </div>
 
                       {historyPanelSelectedMonths.length > 0 && (
@@ -1160,6 +1278,7 @@ export default function UnitDetailPage() {
                               ))}
                               <div className={`text-xs mt-1 ${getHistoryPanelAllocationTotal() > Math.abs(historyPanelSelectedTx.amount) + 0.01 ? 'text-red-500' : 'text-gray-500'}`}>
                                 Total: {getHistoryPanelAllocationTotal().toFixed(2)} / {Math.abs(historyPanelSelectedTx.amount).toFixed(2)} EUR
+                                {historyPanelPrevDebt && ` (incl. ${historyPanelPrevDebtAmount || '0'} dív. ant.)`}
                                 {getHistoryPanelAllocationTotal() > Math.abs(historyPanelSelectedTx.amount) + 0.01 && ' (excede o valor!)'}
                               </div>
                             </div>
@@ -1170,7 +1289,7 @@ export default function UnitDetailPage() {
                       <button
                         className="btn-primary w-full"
                         onClick={handleHistoryPanelSave}
-                        disabled={historyPanelSaving || historyPanelSelectedMonths.length === 0 || getHistoryPanelAllocationTotal() > Math.abs(historyPanelSelectedTx.amount) + 0.01}
+                        disabled={historyPanelSaving || (historyPanelSelectedMonths.length === 0 && !historyPanelPrevDebt) || getHistoryPanelAllocationTotal() > Math.abs(historyPanelSelectedTx.amount) + 0.01}
                       >
                         {historyPanelSaving ? 'A guardar...' : 'Guardar'}
                       </button>

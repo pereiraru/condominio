@@ -54,10 +54,14 @@ export async function GET(
       select: { month: true, amount: true },
     });
 
-    // Filter allocations to owner period
+    // Separate PREV-DEBT allocations
+    const prevDebtAllocations = allocations.filter((a) => a.month === 'PREV-DEBT');
+    const regularAllocations = allocations.filter((a) => a.month !== 'PREV-DEBT');
+
+    // Filter regular allocations to owner period
     const filteredAllocations = ownerId
-      ? allocations.filter((a) => isMonthInOwnerPeriod(a.month, ownerStartMonth, ownerEndMonth))
-      : allocations;
+      ? regularAllocations.filter((a) => isMonthInOwnerPeriod(a.month, ownerStartMonth, ownerEndMonth))
+      : regularAllocations;
 
     // Determine start year from owner period or allocations
     let startYear: number | null = null;
@@ -101,7 +105,20 @@ export async function GET(
       pastYearsDebt += yearDebt;
     }
 
-    return NextResponse.json({ pastYearsDebt });
+    // Calculate previousDebtRemaining
+    let previousDebt = 0;
+    if (ownerId) {
+      const owner = unit.owners.find((o) => o.id === ownerId);
+      if (owner) {
+        previousDebt = owner.previousDebt;
+      }
+    } else {
+      previousDebt = unit.owners.reduce((sum, o) => sum + o.previousDebt, 0);
+    }
+    const previousDebtPaid = prevDebtAllocations.reduce((sum, a) => sum + a.amount, 0);
+    const previousDebtRemaining = Math.max(0, previousDebt - previousDebtPaid);
+
+    return NextResponse.json({ pastYearsDebt, previousDebtRemaining });
   } catch (error) {
     console.error('Error calculating debt:', error);
     return NextResponse.json(

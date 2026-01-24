@@ -34,6 +34,9 @@ export default function TransactionEditPanel({
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [prevDebtEnabled, setPrevDebtEnabled] = useState(false);
+  const [prevDebtAmount, setPrevDebtAmount] = useState('');
+  const [ownerRemainingPrevDebt, setOwnerRemainingPrevDebt] = useState(0);
 
   // Initialize form from transaction
   useEffect(() => {
@@ -45,29 +48,55 @@ export default function TransactionEditPanel({
 
     // Load existing allocations
     if (transaction.monthAllocations && transaction.monthAllocations.length > 0) {
-      const months = transaction.monthAllocations.map((a) => a.month);
+      const prevDebtAlloc = transaction.monthAllocations.find((a) => a.month === 'PREV-DEBT');
+      const regularAllocs = transaction.monthAllocations.filter((a) => a.month !== 'PREV-DEBT');
+
+      if (prevDebtAlloc) {
+        setPrevDebtEnabled(true);
+        setPrevDebtAmount(prevDebtAlloc.amount.toFixed(2));
+      } else {
+        setPrevDebtEnabled(false);
+        setPrevDebtAmount('');
+      }
+
+      const months = regularAllocs.map((a) => a.month);
       setSelectedMonths(months);
 
       // Check if amounts are custom (not equal split)
-      const equalAmount = Math.abs(transaction.amount) / months.length;
-      const isCustom = transaction.monthAllocations.some(
-        (a) => Math.abs(a.amount - equalAmount) > 0.01
-      );
-      if (isCustom) {
-        setShowCustom(true);
-        const amounts: Record<string, string> = {};
-        transaction.monthAllocations.forEach((a) => {
-          amounts[a.month] = a.amount.toFixed(2);
-        });
-        setCustomAmounts(amounts);
-      }
-
-      // Set calendar year to the year of the first allocation
       if (months.length > 0) {
+        const equalAmount = Math.abs(transaction.amount) / transaction.monthAllocations.length;
+        const isCustom = regularAllocs.some(
+          (a) => Math.abs(a.amount - equalAmount) > 0.01
+        ) || !!prevDebtAlloc;
+        if (isCustom) {
+          setShowCustom(true);
+          const amounts: Record<string, string> = {};
+          regularAllocs.forEach((a) => {
+            amounts[a.month] = a.amount.toFixed(2);
+          });
+          setCustomAmounts(amounts);
+        }
+
         setCalendarYear(parseInt(months[0].split('-')[0]));
       }
     }
   }, [transaction]);
+
+  // Fetch owner's remaining previous debt when unit changes
+  useEffect(() => {
+    if (type === 'unit' && unitId) {
+      fetch(`/api/units/${unitId}/debt`)
+        .then((res) => res.ok ? res.json() : null)
+        .then((data) => {
+          if (data) {
+            setOwnerRemainingPrevDebt(data.previousDebtRemaining || 0);
+          }
+        })
+        .catch(() => setOwnerRemainingPrevDebt(0));
+    } else {
+      setOwnerRemainingPrevDebt(0);
+    }
+  }, [unitId, type]);
 
   // Fetch monthly status when entity or year changes
   useEffect(() => {
@@ -120,17 +149,29 @@ export default function TransactionEditPanel({
   }
 
   function getAllocations(): { month: string; amount: number }[] {
-    if (selectedMonths.length === 0) return [];
+    const allocs: { month: string; amount: number }[] = [];
+    const txAmount = Math.abs(transaction.amount);
 
-    if (showCustom) {
-      return selectedMonths.map((month) => ({
-        month,
-        amount: parseFloat(customAmounts[month] || '0'),
-      }));
+    if (selectedMonths.length > 0) {
+      if (showCustom) {
+        selectedMonths.forEach((month) => {
+          allocs.push({ month, amount: parseFloat(customAmounts[month] || '0') });
+        });
+      } else {
+        const prevDebtAmt = prevDebtEnabled ? (parseFloat(prevDebtAmount) || 0) : 0;
+        const remaining = txAmount - prevDebtAmt;
+        const perMonth = selectedMonths.length > 0 ? remaining / selectedMonths.length : 0;
+        selectedMonths.forEach((month) => {
+          allocs.push({ month, amount: perMonth });
+        });
+      }
     }
 
-    const perMonth = Math.abs(transaction.amount) / selectedMonths.length;
-    return selectedMonths.map((month) => ({ month, amount: perMonth }));
+    if (prevDebtEnabled && parseFloat(prevDebtAmount) > 0) {
+      allocs.push({ month: 'PREV-DEBT', amount: parseFloat(prevDebtAmount) });
+    }
+
+    return allocs;
   }
 
   function getAllocationTotal(): number {
@@ -318,6 +359,43 @@ export default function TransactionEditPanel({
               selectedMonths={selectedMonths}
               onToggleMonth={handleToggleMonth}
             />
+
+            {/* Previous Debt Button */}
+            {ownerRemainingPrevDebt > 0 && (
+              <div className="mt-3">
+                <button
+                  type="button"
+                  className={`w-full text-sm px-3 py-2 rounded-lg font-medium transition-all ${
+                    prevDebtEnabled
+                      ? 'bg-orange-100 text-orange-700 border border-orange-300'
+                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200 border border-gray-200'
+                  }`}
+                  onClick={() => {
+                    const next = !prevDebtEnabled;
+                    setPrevDebtEnabled(next);
+                    if (next) {
+                      setPrevDebtAmount(ownerRemainingPrevDebt.toFixed(2));
+                    } else {
+                      setPrevDebtAmount('');
+                    }
+                  }}
+                >
+                  Dívida Anterior ({ownerRemainingPrevDebt.toFixed(2)} EUR restante)
+                </button>
+                {prevDebtEnabled && (
+                  <div className="mt-2 flex items-center gap-2">
+                    <input
+                      type="number"
+                      step="0.01"
+                      className="input text-sm py-1 flex-1"
+                      value={prevDebtAmount}
+                      onChange={(e) => setPrevDebtAmount(e.target.value)}
+                    />
+                    <span className="text-xs text-gray-400">EUR</span>
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Allocation info */}
             {selectedMonths.length > 0 && (

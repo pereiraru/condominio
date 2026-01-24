@@ -15,6 +15,7 @@ export interface Owner {
   nib?: string | null;
   startMonth?: string | null; // "YYYY-MM"
   endMonth?: string | null;   // "YYYY-MM"
+  previousDebt?: number;
   unitId: string;
 }
 

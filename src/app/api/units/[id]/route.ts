@@ -107,6 +107,7 @@ export async function PUT(
         nib?: string | null;
         startMonth?: string | null;
         endMonth?: string | null;
+        previousDebt?: number;
       }[];
 
       // Get existing owner IDs
@@ -135,6 +136,7 @@ export async function PUT(
           nib: owner.nib || null,
           startMonth: owner.startMonth || null,
           endMonth: owner.endMonth || null,
+          previousDebt: owner.previousDebt != null ? owner.previousDebt : 0,
           unitId: params.id,
         };
 

@@ -71,10 +71,14 @@ export async function GET(
       },
     });
 
-    // Filter allocations to owner period if applicable
+    // Separate PREV-DEBT allocations from regular monthly ones
+    const prevDebtAllocations = allocations.filter((a) => a.month === 'PREV-DEBT');
+    const regularAllocations = allocations.filter((a) => a.month !== 'PREV-DEBT');
+
+    // Filter regular allocations to owner period if applicable
     const filteredAllocations = ownerId
-      ? allocations.filter((a) => isMonthInOwnerPeriod(a.month, ownerStartMonth, ownerEndMonth))
-      : allocations;
+      ? regularAllocations.filter((a) => isMonthInOwnerPeriod(a.month, ownerStartMonth, ownerEndMonth))
+      : regularAllocations;
 
     // Find the earliest month with any activity
     const allMonths = filteredAllocations.map((a) => a.month);
@@ -180,10 +184,31 @@ export async function GET(
       });
     }
 
+    // Calculate previous debt info
+    let previousDebt = 0;
+    let previousDebtPaid = 0;
+
+    if (ownerId) {
+      const owner = unit.owners.find((o) => o.id === ownerId);
+      if (owner) {
+        previousDebt = owner.previousDebt;
+      }
+      previousDebtPaid = prevDebtAllocations.reduce((sum, a) => sum + a.amount, 0);
+    } else {
+      // Sum all owners' previousDebt
+      previousDebt = unit.owners.reduce((sum, o) => sum + o.previousDebt, 0);
+      previousDebtPaid = prevDebtAllocations.reduce((sum, a) => sum + a.amount, 0);
+    }
+
+    const previousDebtRemaining = Math.max(0, previousDebt - previousDebtPaid);
+
     return NextResponse.json({
       payments,
       expected,
       yearlyData,
+      previousDebt,
+      previousDebtPaid,
+      previousDebtRemaining,
     });
   } catch (error) {
     console.error('Error fetching payment history:', error);

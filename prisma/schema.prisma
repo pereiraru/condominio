@@ -53,6 +53,7 @@ model Owner {
   nib        String?
   startMonth String?  // "YYYY-MM" - null = from the beginning
   endMonth   String?  // "YYYY-MM" - null = current owner
+  previousDebt Float    @default(0)
   unitId     String
   unit       Unit     @relation(fields: [unitId], references: [id], onDelete: Cascade)
   users      User[]
