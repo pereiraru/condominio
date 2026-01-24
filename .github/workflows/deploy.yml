@@ -22,7 +22,3 @@ jobs:
         run: |
           docker compose build --no-cache
           docker compose up -d
-
-      - name: Run database migrations
-        run: |
-          docker compose exec -T app npx prisma db push --accept-data-loss
