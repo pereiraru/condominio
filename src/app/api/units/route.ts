@@ -1,14 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getServerSession } from 'next-auth';
 import { prisma } from '@/lib/prisma';
+import { authOptions } from '@/lib/auth';
 import { getFeeForMonth } from '@/lib/feeHistory';
 
 export async function GET() {
+  const session = await getServerSession(authOptions);
+
+  // Non-admin users can only see their own unit
+  const isAdmin = session?.user?.role === 'admin';
+  const userUnitId = session?.user?.unitId;
+
   try {
     const now = new Date();
     const currentYear = now.getFullYear();
     const currentMonth = now.getMonth() + 1;
 
     const units = await prisma.unit.findMany({
+      where: isAdmin ? undefined : { id: userUnitId || 'none' },
       orderBy: { code: 'asc' },
       include: {
         owners: true,
@@ -87,6 +96,12 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
+  const session = await getServerSession(authOptions);
+
+  if (!session || session.user.role !== 'admin') {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
+  }
+
   try {
     const body = await request.json();
 

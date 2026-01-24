@@ -1,7 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getServerSession } from 'next-auth';
 import { prisma } from '@/lib/prisma';
+import { authOptions } from '@/lib/auth';
 
 export async function GET(request: NextRequest) {
+  const session = await getServerSession(authOptions);
+  const isAdmin = session?.user?.role === 'admin';
+  const userUnitId = session?.user?.unitId;
+
   try {
     const searchParams = request.nextUrl.searchParams;
     const limit = parseInt(searchParams.get('limit') ?? '50');
@@ -16,12 +22,20 @@ export async function GET(request: NextRequest) {
 
     const where: Record<string, unknown> = {};
 
-    if (unassigned === 'true') {
-      where.unitId = null;
-      where.creditorId = null;
+    // Non-admin users can only see their own unit's transactions
+    if (!isAdmin) {
+      if (!userUnitId) {
+        return NextResponse.json({ transactions: [], total: 0, limit, offset });
+      }
+      where.unitId = userUnitId;
     } else {
-      if (unitId) where.unitId = unitId;
-      if (creditorId) where.creditorId = creditorId;
+      if (unassigned === 'true') {
+        where.unitId = null;
+        where.creditorId = null;
+      } else {
+        if (unitId) where.unitId = unitId;
+        if (creditorId) where.creditorId = creditorId;
+      }
     }
     if (type) where.type = type;
     if (startDate || endDate) {
@@ -52,6 +66,12 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  const session = await getServerSession(authOptions);
+
+  if (!session || session.user.role !== 'admin') {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
+  }
+
   try {
     const body = await request.json();
     const months: string[] = body.months || [];

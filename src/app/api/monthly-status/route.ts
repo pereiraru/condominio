@@ -1,8 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getServerSession } from 'next-auth';
 import { prisma } from '@/lib/prisma';
+import { authOptions, canAccessUnit } from '@/lib/auth';
 import { getFeeForMonth } from '@/lib/feeHistory';
 
 export async function GET(request: NextRequest) {
+  const session = await getServerSession(authOptions);
+  const isAdmin = session?.user?.role === 'admin';
+
   try {
     const searchParams = request.nextUrl.searchParams;
     const unitId = searchParams.get('unitId');
@@ -14,6 +19,16 @@ export async function GET(request: NextRequest) {
         { error: 'unitId or creditorId required' },
         { status: 400 }
       );
+    }
+
+    // Non-admin users can only query their own unit (not creditors)
+    if (!isAdmin) {
+      if (creditorId) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
+      }
+      if (unitId && !canAccessUnit(session?.user?.role, session?.user?.unitId, unitId)) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
+      }
     }
 
     // Get current fee and fee history

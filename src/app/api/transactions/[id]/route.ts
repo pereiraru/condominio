@@ -1,10 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getServerSession } from 'next-auth';
 import { prisma } from '@/lib/prisma';
+import { authOptions, canAccessUnit } from '@/lib/auth';
 
 export async function GET(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
+  const session = await getServerSession(authOptions);
+
   try {
     const transaction = await prisma.transaction.findUnique({
       where: { id: params.id },
@@ -13,6 +17,11 @@ export async function GET(
 
     if (!transaction) {
       return NextResponse.json({ error: 'Transaction not found' }, { status: 404 });
+    }
+
+    // Non-admin users can only see their own unit's transactions
+    if (transaction.unitId && !canAccessUnit(session?.user?.role, session?.user?.unitId, transaction.unitId)) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
     }
 
     return NextResponse.json(transaction);
@@ -26,6 +35,12 @@ export async function PATCH(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
+  const session = await getServerSession(authOptions);
+
+  if (!session || session.user.role !== 'admin') {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
+  }
+
   try {
     const body = await request.json();
 
@@ -87,6 +102,12 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
+  const session = await getServerSession(authOptions);
+
+  if (!session || session.user.role !== 'admin') {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
+  }
+
   try {
     await prisma.transaction.delete({
       where: { id: params.id },

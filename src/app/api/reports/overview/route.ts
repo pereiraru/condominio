@@ -1,8 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getServerSession } from 'next-auth';
 import { prisma } from '@/lib/prisma';
+import { authOptions } from '@/lib/auth';
 import { getFeeForMonth } from '@/lib/feeHistory';
 
 export async function GET(request: NextRequest) {
+  const session = await getServerSession(authOptions);
+
+  // Only admins can access the full overview report
+  if (!session || session.user.role !== 'admin') {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
+  }
+
   try {
     const year = parseInt(
       request.nextUrl.searchParams.get('year') ?? new Date().getFullYear().toString()
