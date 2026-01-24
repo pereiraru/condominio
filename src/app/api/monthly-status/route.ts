@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { prisma } from '@/lib/prisma';
 import { authOptions, canAccessUnit } from '@/lib/auth';
 import { getTotalFeeForMonth, FeeHistoryRecord, ExtraChargeRecord } from '@/lib/feeHistory';
+import { isMonthInOwnerPeriod } from '@/lib/ownerPeriod';
 
 export async function GET(request: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -13,6 +14,7 @@ export async function GET(request: NextRequest) {
     const unitId = searchParams.get('unitId');
     const creditorId = searchParams.get('creditorId');
     const year = parseInt(searchParams.get('year') ?? new Date().getFullYear().toString());
+    let ownerId = searchParams.get('ownerId');
 
     if (!unitId && !creditorId) {
       return NextResponse.json(
@@ -31,6 +33,14 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // Non-admin: auto-detect ownerId from session
+    if (!isAdmin && session?.user?.ownerId) {
+      ownerId = session.user.ownerId;
+    }
+
+    let ownerStartMonth: string | null = null;
+    let ownerEndMonth: string | null = null;
+
     // Get current fee, fee history, and extra charges
     let defaultFee = 0;
     let feeHistory: FeeHistoryRecord[] = [];
@@ -39,10 +49,22 @@ export async function GET(request: NextRequest) {
     if (unitId) {
       const unit = await prisma.unit.findUnique({
         where: { id: unitId },
-        include: { feeHistory: { orderBy: { effectiveFrom: 'asc' } } },
+        include: {
+          feeHistory: { orderBy: { effectiveFrom: 'asc' } },
+          owners: true,
+        },
       });
       defaultFee = unit?.monthlyFee ?? 0;
       feeHistory = unit?.feeHistory ?? [];
+
+      // Resolve owner period
+      if (ownerId && unit?.owners) {
+        const owner = unit.owners.find((o) => o.id === ownerId);
+        if (owner) {
+          ownerStartMonth = owner.startMonth;
+          ownerEndMonth = owner.endMonth;
+        }
+      }
 
       // Get extra charges (global + unit-specific)
       const charges = await prisma.extraCharge.findMany({
@@ -80,8 +102,14 @@ export async function GET(request: NextRequest) {
     const months = [];
     for (let m = 1; m <= 12; m++) {
       const monthStr = `${year}-${m.toString().padStart(2, '0')}`;
+
+      // If filtering by owner period, skip months outside the period
+      const inPeriod = ownerId
+        ? isMonthInOwnerPeriod(monthStr, ownerStartMonth, ownerEndMonth)
+        : true;
+
       const monthAllocs = allocations.filter((a) => a.month === monthStr);
-      const paid = monthAllocs.reduce((sum, a) => sum + a.amount, 0);
+      const paid = inPeriod ? monthAllocs.reduce((sum, a) => sum + a.amount, 0) : 0;
 
       // Calculate expected with extra charges
       const feeData = getTotalFeeForMonth(
@@ -95,13 +123,17 @@ export async function GET(request: NextRequest) {
       months.push({
         month: monthStr,
         paid,
-        expected: feeData.total,
-        baseFee: feeData.baseFee,
-        extras: feeData.extras.map((e) => ({
-          description: e.description,
-          amount: e.amount,
-        })),
-        isPaid: feeData.total > 0 ? paid >= feeData.total : paid > 0,
+        expected: inPeriod ? feeData.total : 0,
+        baseFee: inPeriod ? feeData.baseFee : 0,
+        extras: inPeriod
+          ? feeData.extras.map((e) => ({
+              description: e.description,
+              amount: e.amount,
+            }))
+          : [],
+        isPaid: inPeriod
+          ? (feeData.total > 0 ? paid >= feeData.total : paid > 0)
+          : true,
       });
     }
 

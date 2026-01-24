@@ -8,7 +8,7 @@ import MonthCalendar from '@/components/MonthCalendar';
 import TransactionEditPanel from '@/components/TransactionEditPanel';
 import FeeHistoryManager from '@/components/FeeHistoryManager';
 import ExtraChargesManager from '@/components/ExtraChargesManager';
-import { Unit, Transaction, Creditor, MonthPaymentStatus, FeeHistory, ExtraCharge } from '@/lib/types';
+import { Unit, Transaction, Creditor, MonthPaymentStatus, FeeHistory, ExtraCharge, Owner } from '@/lib/types';
 
 export default function UnitDetailPage() {
   const params = useParams();
@@ -29,8 +29,9 @@ export default function UnitDetailPage() {
     telefone: '',
     email: '',
   });
-  const [owners, setOwners] = useState<string[]>(['']);
+  const [owners, setOwners] = useState<Owner[]>([{ id: '', name: '', unitId: '' }]);
   const [activeTab, setActiveTab] = useState<'dados' | 'historico'>('dados');
+  const [selectedOwnerId, setSelectedOwnerId] = useState<string>(''); // For Historico filter
   const [selectedTx, setSelectedTx] = useState<Transaction | null>(null);
   const [allUnits, setAllUnits] = useState<Unit[]>([]);
   const [creditors, setCreditors] = useState<Creditor[]>([]);
@@ -80,10 +81,17 @@ export default function UnitDetailPage() {
   // Fetch monthly status when unit loads or year changes
   useEffect(() => {
     if (id) {
-      fetchMonthlyStatus();
-      fetchPastYearsDebt();
+      fetchMonthlyStatus(selectedOwnerId || undefined);
+      fetchPastYearsDebt(selectedOwnerId || undefined);
     }
-  }, [id, calendarYear]);
+  }, [id, calendarYear, selectedOwnerId]);
+
+  // Refetch payment history when owner filter changes
+  useEffect(() => {
+    if (id) {
+      fetchPaymentHistory(selectedOwnerId || undefined);
+    }
+  }, [selectedOwnerId]);
 
   async function fetchAllUnits() {
     try {
@@ -116,9 +124,10 @@ export default function UnitDetailPage() {
     }
   }
 
-  async function fetchMonthlyStatus() {
+  async function fetchMonthlyStatus(ownerId?: string) {
     try {
-      const res = await fetch(`/api/monthly-status?unitId=${id}&year=${calendarYear}`);
+      const ownerParam = ownerId ? `&ownerId=${ownerId}` : '';
+      const res = await fetch(`/api/monthly-status?unitId=${id}&year=${calendarYear}${ownerParam}`);
       if (res.ok) {
         const data = await res.json();
         setMonthStatus(data.months);
@@ -128,9 +137,10 @@ export default function UnitDetailPage() {
     }
   }
 
-  async function fetchPastYearsDebt() {
+  async function fetchPastYearsDebt(ownerId?: string) {
     try {
-      const res = await fetch(`/api/units/${id}/debt`);
+      const ownerParam = ownerId ? `?ownerId=${ownerId}` : '';
+      const res = await fetch(`/api/units/${id}/debt${ownerParam}`);
       if (res.ok) {
         const data = await res.json();
         setPastYearsDebt(data.pastYearsDebt);
@@ -140,9 +150,10 @@ export default function UnitDetailPage() {
     }
   }
 
-  async function fetchPaymentHistory() {
+  async function fetchPaymentHistory(ownerId?: string) {
     try {
-      const res = await fetch(`/api/units/${id}/payment-history`);
+      const ownerParam = ownerId ? `?ownerId=${ownerId}` : '';
+      const res = await fetch(`/api/units/${id}/payment-history${ownerParam}`);
       if (res.ok) {
         const data = await res.json();
         setPaymentHistory(data.payments || {});
@@ -356,8 +367,8 @@ export default function UnitDetailPage() {
         });
         setOwners(
           data.owners && data.owners.length > 0
-            ? data.owners.map((o: { name: string }) => o.name)
-            : ['']
+            ? data.owners
+            : [{ id: '', name: '', unitId: id }]
         );
       } else {
         router.push('/dashboard/units');
@@ -370,7 +381,7 @@ export default function UnitDetailPage() {
   }
 
   function addOwner() {
-    setOwners([...owners, '']);
+    setOwners([...owners, { id: '', name: '', unitId: id }]);
   }
 
   function removeOwner(index: number) {
@@ -378,9 +389,27 @@ export default function UnitDetailPage() {
     setOwners(owners.filter((_, i) => i !== index));
   }
 
-  function updateOwner(index: number, value: string) {
+  function updateOwnerField(index: number, field: keyof Owner, value: string | null) {
     const updated = [...owners];
-    updated[index] = value;
+    updated[index] = { ...updated[index], [field]: value };
+    setOwners(updated);
+  }
+
+  function handleChangeOwner() {
+    // End current owner's period and create a new blank owner
+    const now = new Date();
+    const currentMonth = `${now.getFullYear()}-${(now.getMonth() + 1).toString().padStart(2, '0')}`;
+    const nextMonth = now.getMonth() === 11
+      ? `${now.getFullYear() + 1}-01`
+      : `${now.getFullYear()}-${(now.getMonth() + 2).toString().padStart(2, '0')}`;
+
+    const updated = owners.map((o) => {
+      if (!o.endMonth) {
+        return { ...o, endMonth: currentMonth };
+      }
+      return o;
+    });
+    updated.push({ id: '', name: '', unitId: id, startMonth: nextMonth, endMonth: null });
     setOwners(updated);
   }
 
@@ -389,7 +418,17 @@ export default function UnitDetailPage() {
     setSaving(true);
 
     try {
-      const validOwners = owners.filter((name) => name.trim() !== '');
+      const validOwners = owners
+        .filter((o) => o.name.trim() !== '')
+        .map((o) => ({
+          id: o.id || undefined,
+          name: o.name,
+          email: o.email || null,
+          telefone: o.telefone || null,
+          nib: o.nib || null,
+          startMonth: o.startMonth || null,
+          endMonth: o.endMonth || null,
+        }));
 
       const res = await fetch(`/api/units/${id}`, {
         method: 'PUT',
@@ -552,38 +591,123 @@ export default function UnitDetailPage() {
                   </div>
 
                   {/* Owners */}
-                  <div className="mt-4">
-                    <div className="flex justify-between items-center mb-2">
+                  <div className="mt-6">
+                    <div className="flex justify-between items-center mb-3">
                       <label className="label mb-0">Proprietário(s)</label>
                       {isAdmin && (
-                        <button
-                          type="button"
-                          className="text-primary-600 hover:text-primary-800 text-sm font-medium"
-                          onClick={addOwner}
-                        >
-                          + Adicionar
-                        </button>
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            className="text-orange-600 hover:text-orange-800 text-sm font-medium"
+                            onClick={handleChangeOwner}
+                          >
+                            Mudar Proprietário
+                          </button>
+                          <button
+                            type="button"
+                            className="text-primary-600 hover:text-primary-800 text-sm font-medium"
+                            onClick={addOwner}
+                          >
+                            + Adicionar
+                          </button>
+                        </div>
                       )}
                     </div>
                     {owners.map((owner, index) => (
-                      <div key={index} className="flex gap-2 mb-2">
-                        <input
-                          type="text"
-                          className="input flex-1"
-                          value={owner}
-                          onChange={(e) => updateOwner(index, e.target.value)}
-                          placeholder="Nome do proprietário"
-                          disabled={!isAdmin}
-                        />
-                        {isAdmin && owners.length > 1 && (
-                          <button
-                            type="button"
-                            className="text-red-500 hover:text-red-700 px-2"
-                            onClick={() => removeOwner(index)}
-                          >
-                            x
-                          </button>
-                        )}
+                      <div key={owner.id || `new-${index}`} className="border border-gray-200 rounded-lg p-3 mb-3">
+                        <div className="flex justify-between items-start mb-2">
+                          <div className="flex items-center gap-2">
+                            {owner.endMonth === null || owner.endMonth === undefined ? (
+                              <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">Atual</span>
+                            ) : (
+                              <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">Anterior</span>
+                            )}
+                            {owner.startMonth && (
+                              <span className="text-xs text-gray-400">
+                                {owner.startMonth}{owner.endMonth ? ` → ${owner.endMonth}` : ' → presente'}
+                              </span>
+                            )}
+                          </div>
+                          {isAdmin && owners.length > 1 && (
+                            <button
+                              type="button"
+                              className="text-red-500 hover:text-red-700 text-sm"
+                              onClick={() => removeOwner(index)}
+                            >
+                              Remover
+                            </button>
+                          )}
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                          <div>
+                            <label className="text-xs text-gray-500">Nome</label>
+                            <input
+                              type="text"
+                              className="input text-sm"
+                              value={owner.name}
+                              onChange={(e) => updateOwnerField(index, 'name', e.target.value)}
+                              placeholder="Nome do proprietário"
+                              disabled={!isAdmin}
+                            />
+                          </div>
+                          <div>
+                            <label className="text-xs text-gray-500">Email</label>
+                            <input
+                              type="email"
+                              className="input text-sm"
+                              value={owner.email || ''}
+                              onChange={(e) => updateOwnerField(index, 'email', e.target.value || null)}
+                              placeholder="Email"
+                              disabled={!isAdmin}
+                            />
+                          </div>
+                          <div>
+                            <label className="text-xs text-gray-500">Telefone</label>
+                            <input
+                              type="text"
+                              className="input text-sm"
+                              value={owner.telefone || ''}
+                              onChange={(e) => updateOwnerField(index, 'telefone', e.target.value || null)}
+                              placeholder="Telefone"
+                              disabled={!isAdmin}
+                            />
+                          </div>
+                          <div>
+                            <label className="text-xs text-gray-500">NIB</label>
+                            <input
+                              type="text"
+                              className="input text-sm"
+                              value={owner.nib || ''}
+                              onChange={(e) => updateOwnerField(index, 'nib', e.target.value || null)}
+                              placeholder="NIB"
+                              disabled={!isAdmin}
+                            />
+                          </div>
+                          {isAdmin && (
+                            <>
+                              <div>
+                                <label className="text-xs text-gray-500">Início (AAAA-MM)</label>
+                                <input
+                                  type="text"
+                                  className="input text-sm"
+                                  value={owner.startMonth || ''}
+                                  onChange={(e) => updateOwnerField(index, 'startMonth', e.target.value || null)}
+                                  placeholder="2024-01"
+                                />
+                              </div>
+                              <div>
+                                <label className="text-xs text-gray-500">Fim (AAAA-MM)</label>
+                                <input
+                                  type="text"
+                                  className="input text-sm"
+                                  value={owner.endMonth || ''}
+                                  onChange={(e) => updateOwnerField(index, 'endMonth', e.target.value || null)}
+                                  placeholder="Vazio = atual"
+                                />
+                              </div>
+                            </>
+                          )}
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -806,7 +930,23 @@ export default function UnitDetailPage() {
 
               {/* Payment History Table */}
               <div className="card">
-                <h2 className="text-lg font-semibold mb-4">Histórico de Pagamentos</h2>
+                <div className="flex justify-between items-center mb-4">
+                  <h2 className="text-lg font-semibold">Histórico de Pagamentos</h2>
+                  {isAdmin && unit.owners && unit.owners.length > 1 && (
+                    <select
+                      className="input text-sm w-auto"
+                      value={selectedOwnerId}
+                      onChange={(e) => setSelectedOwnerId(e.target.value)}
+                    >
+                      <option value="">Todos os proprietários</option>
+                      {unit.owners.map((o) => (
+                        <option key={o.id} value={o.id}>
+                          {o.name}{o.endMonth ? ` (até ${o.endMonth})` : ' (atual)'}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </div>
                 {isAdmin && <p className="text-xs text-gray-500 mb-4">Clique numa célula para editar a alocação de meses</p>}
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">

@@ -195,8 +195,10 @@ export default function UnitsPage() {
 
                 {unit.owners && unit.owners.length > 0 && (
                   <div className="mt-3">
-                    <p className="text-xs text-gray-400 uppercase tracking-wide">Proprietários</p>
-                    <p className="text-gray-700 mt-0.5">{unit.owners.map(o => o.name).join(', ')}</p>
+                    <p className="text-xs text-gray-400 uppercase tracking-wide">Proprietário</p>
+                    <p className="text-gray-700 mt-0.5">
+                      {(unit.owners.find(o => !o.endMonth) || unit.owners[0]).name}
+                    </p>
                   </div>
                 )}
 

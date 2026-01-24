@@ -97,15 +97,55 @@ export async function PUT(
       },
     });
 
-    // Update owners: delete existing and recreate
+    // Update owners as objects with period fields
     if (body.owners !== undefined) {
-      await prisma.owner.deleteMany({ where: { unitId: params.id } });
+      const incomingOwners = body.owners as {
+        id?: string;
+        name: string;
+        email?: string | null;
+        telefone?: string | null;
+        nib?: string | null;
+        startMonth?: string | null;
+        endMonth?: string | null;
+      }[];
 
-      const validOwners = (body.owners as string[]).filter((name) => name.trim() !== '');
-      if (validOwners.length > 0) {
-        await prisma.owner.createMany({
-          data: validOwners.map((name) => ({ name, unitId: params.id })),
+      // Get existing owner IDs
+      const existingOwners = await prisma.owner.findMany({
+        where: { unitId: params.id },
+        select: { id: true },
+      });
+      const existingIds = new Set(existingOwners.map((o) => o.id));
+      const incomingIds = new Set(incomingOwners.filter((o) => o.id).map((o) => o.id!));
+
+      // Delete owners that are no longer present
+      const toDelete = Array.from(existingIds).filter((id) => !incomingIds.has(id));
+      if (toDelete.length > 0) {
+        await prisma.owner.deleteMany({
+          where: { id: { in: toDelete } },
         });
+      }
+
+      // Update existing and create new
+      for (const owner of incomingOwners) {
+        if (!owner.name.trim()) continue;
+        const data = {
+          name: owner.name.trim(),
+          email: owner.email || null,
+          telefone: owner.telefone || null,
+          nib: owner.nib || null,
+          startMonth: owner.startMonth || null,
+          endMonth: owner.endMonth || null,
+          unitId: params.id,
+        };
+
+        if (owner.id && existingIds.has(owner.id)) {
+          await prisma.owner.update({
+            where: { id: owner.id },
+            data,
+          });
+        } else {
+          await prisma.owner.create({ data });
+        }
       }
     }
 

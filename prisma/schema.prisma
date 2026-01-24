@@ -17,6 +17,8 @@ model User {
   role         String    @default("user") // "admin" or "user"
   unitId       String?   @unique // 1:1 with unit
   unit         Unit?     @relation(fields: [unitId], references: [id])
+  ownerId      String?
+  owner        Owner?    @relation(fields: [ownerId], references: [id])
   lastLogin    DateTime?
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
@@ -42,13 +44,19 @@ model Unit {
   updatedAt           DateTime      @updatedAt
 }
 
-// Unit owners/residents (multiple per unit)
+// Unit owners/residents (multiple per unit, with ownership periods)
 model Owner {
-  id        String   @id @default(cuid())
-  name      String
-  unitId    String
-  unit      Unit     @relation(fields: [unitId], references: [id], onDelete: Cascade)
-  createdAt DateTime @default(now())
+  id         String   @id @default(cuid())
+  name       String
+  email      String?
+  telefone   String?
+  nib        String?
+  startMonth String?  // "YYYY-MM" - null = from the beginning
+  endMonth   String?  // "YYYY-MM" - null = current owner
+  unitId     String
+  unit       Unit     @relation(fields: [unitId], references: [id], onDelete: Cascade)
+  users      User[]
+  createdAt  DateTime @default(now())
 }
 
 // Creditors (suppliers, service providers)

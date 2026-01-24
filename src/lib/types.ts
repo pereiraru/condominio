@@ -10,6 +10,11 @@ export interface User {
 export interface Owner {
   id: string;
   name: string;
+  email?: string | null;
+  telefone?: string | null;
+  nib?: string | null;
+  startMonth?: string | null; // "YYYY-MM"
+  endMonth?: string | null;   // "YYYY-MM"
   unitId: string;
 }
 

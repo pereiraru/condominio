@@ -166,10 +166,14 @@ export async function GET(request: NextRequest) {
 
       const yearDebt = Math.max(0, totalExpected - totalPaid);
 
+      // Current owner = the one with endMonth = null
+      const currentOwner = unit.owners?.find((o) => o.endMonth === null);
+      const ownerName = currentOwner?.name || unit.owners?.[0]?.name || unit.code;
+
       return {
         id: unit.id,
         code: unit.code,
-        name: unit.owners?.[0]?.name || unit.code,
+        name: ownerName,
         months,
         totalPaid,
         totalExpected,

@@ -6,6 +6,7 @@ declare module 'next-auth' {
     role: string;
     unitId: string | null;
     unitCode?: string;
+    ownerId?: string | null;
   }
 
   interface Session {
@@ -16,6 +17,7 @@ declare module 'next-auth' {
       role: string;
       unitId: string | null;
       unitCode?: string;
+      ownerId?: string | null;
     };
   }
 }
@@ -26,5 +28,6 @@ declare module 'next-auth/jwt' {
     role: string;
     unitId: string | null;
     unitCode?: string;
+    ownerId?: string | null;
   }
 }

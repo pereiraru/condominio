@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { prisma } from '@/lib/prisma';
 import { authOptions, canAccessUnit } from '@/lib/auth';
 import { getTotalFeeForMonth, FeeHistoryRecord, ExtraChargeRecord } from '@/lib/feeHistory';
+import { isMonthInOwnerPeriod } from '@/lib/ownerPeriod';
 
 export async function GET(
   request: NextRequest,
@@ -15,14 +16,38 @@ export async function GET(
   }
 
   try {
-    // Get unit with fee history
+    // Get unit with fee history and owners
     const unit = await prisma.unit.findUnique({
       where: { id: params.id },
-      include: { feeHistory: { orderBy: { effectiveFrom: 'asc' } } },
+      include: {
+        feeHistory: { orderBy: { effectiveFrom: 'asc' } },
+        owners: true,
+      },
     });
 
     if (!unit) {
       return NextResponse.json({ error: 'Unit not found' }, { status: 404 });
+    }
+
+    // Determine owner period filter
+    const searchParams = request.nextUrl.searchParams;
+    let ownerId = searchParams.get('ownerId');
+    const isAdmin = session?.user?.role === 'admin';
+
+    // Non-admin: auto-detect ownerId from session
+    if (!isAdmin && session?.user?.ownerId) {
+      ownerId = session.user.ownerId;
+    }
+
+    let ownerStartMonth: string | null = null;
+    let ownerEndMonth: string | null = null;
+
+    if (ownerId) {
+      const owner = unit.owners.find((o) => o.id === ownerId);
+      if (owner) {
+        ownerStartMonth = owner.startMonth;
+        ownerEndMonth = owner.endMonth;
+      }
     }
 
     // Get extra charges (global + unit-specific)
@@ -46,11 +71,24 @@ export async function GET(
       },
     });
 
+    // Filter allocations to owner period if applicable
+    const filteredAllocations = ownerId
+      ? allocations.filter((a) => isMonthInOwnerPeriod(a.month, ownerStartMonth, ownerEndMonth))
+      : allocations;
+
     // Find the earliest month with any activity
-    const allMonths = allocations.map((a) => a.month);
+    const allMonths = filteredAllocations.map((a) => a.month);
     const feeMonths = unit.feeHistory.map((f) => f.effectiveFrom);
     const extraMonths = extraCharges.map((e) => e.effectiveFrom);
-    const allDates = [...allMonths, ...feeMonths, ...extraMonths].filter(Boolean);
+    let allDates = [...allMonths, ...feeMonths, ...extraMonths].filter(Boolean);
+
+    // If filtering by owner, use owner's startMonth as the earliest
+    if (ownerId && ownerStartMonth) {
+      allDates = allDates.filter((d) => isMonthInOwnerPeriod(d, ownerStartMonth, ownerEndMonth));
+      if (!allDates.includes(ownerStartMonth)) {
+        allDates.push(ownerStartMonth);
+      }
+    }
 
     if (allDates.length === 0) {
       return NextResponse.json({
@@ -65,25 +103,39 @@ export async function GET(
     const currentYear = new Date().getFullYear();
     const currentMonth = new Date().getMonth() + 1;
 
+    // Determine end year/month based on owner period
+    let endYear = currentYear;
+    let endMonthOfYear = currentMonth;
+    if (ownerEndMonth) {
+      const [ey, em] = ownerEndMonth.split('-').map(Number);
+      if (ey < endYear || (ey === endYear && em < endMonthOfYear)) {
+        endYear = ey;
+        endMonthOfYear = em;
+      }
+    }
+
     // Build month-by-month data
     const payments: Record<string, number> = {};
     const expected: Record<string, number> = {};
 
     // Group allocations by month
-    for (const alloc of allocations) {
+    for (const alloc of filteredAllocations) {
       if (!payments[alloc.month]) {
         payments[alloc.month] = 0;
       }
       payments[alloc.month] += alloc.amount;
     }
 
-    // Calculate expected for each month from start to now
-    for (let year = startYear; year <= currentYear; year++) {
-      const endMonth = year === currentYear ? currentMonth : 12;
-      const startMonth = year === startYear ? parseInt(earliestMonth.split('-')[1]) : 1;
+    // Calculate expected for each month from start to end
+    for (let year = startYear; year <= endYear; year++) {
+      const lastMonth = year === endYear ? endMonthOfYear : 12;
+      const firstMonth = year === startYear ? parseInt(earliestMonth.split('-')[1]) : 1;
 
-      for (let m = startMonth; m <= endMonth; m++) {
+      for (let m = firstMonth; m <= lastMonth; m++) {
         const monthStr = `${year}-${m.toString().padStart(2, '0')}`;
+        if (ownerId && !isMonthInOwnerPeriod(monthStr, ownerStartMonth, ownerEndMonth)) {
+          continue;
+        }
         const feeData = getTotalFeeForMonth(
           unit.feeHistory as FeeHistoryRecord[],
           extraCharges as ExtraChargeRecord[],
@@ -106,7 +158,7 @@ export async function GET(
 
     let accumulatedDebt = 0;
 
-    for (let year = startYear; year <= currentYear; year++) {
+    for (let year = startYear; year <= endYear; year++) {
       let yearPaid = 0;
       let yearExpected = 0;
 
