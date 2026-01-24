@@ -10,15 +10,16 @@ datasource db {
 
 // Users (admin and residents)
 model User {
-  id           String   @id @default(cuid())
-  email        String   @unique
+  id           String    @id @default(cuid())
+  email        String    @unique
   passwordHash String
-  name         String
-  role         String   @default("resident") // "admin" or "resident"
-  unitId       String?
-  unit         Unit?    @relation(fields: [unitId], references: [id])
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  name         String?
+  role         String    @default("user") // "admin" or "user"
+  unitId       String?   @unique // 1:1 with unit
+  unit         Unit?     @relation(fields: [unitId], references: [id])
+  lastLogin    DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 }
 
 // Building units (apartments)
@@ -31,7 +32,7 @@ model Unit {
   nib          String?
   telefone     String?
   email        String?
-  residents           User[]
+  user                User?
   owners              Owner[]
   transactions        Transaction[]
   feeHistory          FeeHistory[]
