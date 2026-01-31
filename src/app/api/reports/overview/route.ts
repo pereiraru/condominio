@@ -66,7 +66,7 @@ export async function GET(request: NextRequest) {
       },
     });
 
-    // Calculate past years debt for each entity
+    // Calculate past years debt for each entity using year-by-year carry-forward
     const calculatePastYearsDebt = (
       entityId: string,
       entityType: 'unit' | 'creditor',
@@ -78,20 +78,45 @@ export async function GET(request: NextRequest) {
         entityType === 'unit' ? a.transaction.unitId === entityId : a.transaction.creditorId === entityId
       );
 
-      if (entityAllocs.length === 0) return 0;
+      // Collect all relevant years from allocations, feeHistory, and extra charges
+      const pastYears = new Set<number>();
+      entityAllocs.forEach((a) => {
+        const y = parseInt(a.month.split('-')[0]);
+        if (y < year) pastYears.add(y);
+      });
 
-      const earliestMonth = entityAllocs.map((a) => a.month).sort()[0];
-      if (!earliestMonth) return 0;
+      feeHistory.forEach((fh) => {
+        const startY = parseInt(fh.effectiveFrom.split('-')[0]);
+        const endY = fh.effectiveTo
+          ? parseInt(fh.effectiveTo.split('-')[0])
+          : year - 1;
+        for (let y = startY; y <= Math.min(endY, year - 1); y++) {
+          pastYears.add(y);
+        }
+      });
 
-      let totalExpected = 0;
-      let totalPaid = 0;
+      if (entityType === 'unit') {
+        extraCharges.forEach((ec) => {
+          const startY = parseInt(ec.effectiveFrom.split('-')[0]);
+          const endY = ec.effectiveTo
+            ? parseInt(ec.effectiveTo.split('-')[0])
+            : year - 1;
+          for (let y = startY; y <= Math.min(endY, year - 1); y++) {
+            pastYears.add(y);
+          }
+        });
+      }
 
-      const [earliestYear, earliestM] = earliestMonth.split('-').map(Number);
-      const endYear = year - 1;
+      if (pastYears.size === 0) return 0;
 
-      for (let y = earliestYear; y <= endYear; y++) {
-        const startMonth = y === earliestYear ? earliestM : 1;
-        for (let m = startMonth; m <= 12; m++) {
+      let accumulatedDebt = 0;
+      const sortedYears = Array.from(pastYears).sort((a, b) => a - b);
+
+      for (const y of sortedYears) {
+        let expectedForYear = 0;
+        let paidForYear = 0;
+
+        for (let m = 1; m <= 12; m++) {
           const monthStr = `${y}-${m.toString().padStart(2, '0')}`;
           const feeData = getTotalFeeForMonth(
             feeHistory,
@@ -100,16 +125,18 @@ export async function GET(request: NextRequest) {
             defaultFee,
             entityType === 'unit' ? entityId : undefined
           );
-          const paid = entityAllocs
+          expectedForYear += feeData.total;
+
+          paidForYear += entityAllocs
             .filter((a) => a.month === monthStr)
             .reduce((sum, a) => sum + a.amount, 0);
-
-          totalExpected += feeData.total;
-          totalPaid += paid;
         }
+
+        // Surplus from overpayment reduces previously accumulated debt
+        accumulatedDebt = Math.max(0, accumulatedDebt + expectedForYear - paidForYear);
       }
 
-      return Math.max(0, totalExpected - totalPaid);
+      return accumulatedDebt;
     };
 
     // Build unit data (receitas)

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { prisma } from '@/lib/prisma';
 import { authOptions } from '@/lib/auth';
-import { getFeeForMonth } from '@/lib/feeHistory';
+import { getTotalFeeForMonth, FeeHistoryRecord, ExtraChargeRecord } from '@/lib/feeHistory';
 
 export async function GET() {
   const session = await getServerSession(authOptions);
@@ -15,6 +15,9 @@ export async function GET() {
     const now = new Date();
     const currentYear = now.getFullYear();
     const currentMonth = now.getMonth() + 1;
+
+    // Get all extra charges
+    const allExtraCharges = await prisma.extraCharge.findMany();
 
     const units = await prisma.unit.findMany({
       where: isAdmin ? undefined : { id: userUnitId || 'none' },
@@ -32,6 +35,11 @@ export async function GET() {
     });
 
     const result = units.map((unit) => {
+      // Filter extra charges for this unit (global + unit-specific)
+      const unitExtraCharges = allExtraCharges.filter(
+        (e) => e.unitId === null || e.unitId === unit.id
+      ) as ExtraChargeRecord[];
+
       // Flatten all month allocations for this unit
       const allAllocations = unit.transactions.flatMap((t) => t.monthAllocations);
 
@@ -39,7 +47,14 @@ export async function GET() {
       let expectedYTD = 0;
       for (let m = 1; m <= currentMonth; m++) {
         const monthStr = `${currentYear}-${m.toString().padStart(2, '0')}`;
-        expectedYTD += getFeeForMonth(unit.feeHistory, monthStr, unit.monthlyFee);
+        const feeData = getTotalFeeForMonth(
+          unit.feeHistory as FeeHistoryRecord[],
+          unitExtraCharges,
+          monthStr,
+          unit.monthlyFee,
+          unit.id
+        );
+        expectedYTD += feeData.total;
       }
 
       // Calculate paid YTD (current year)
@@ -65,17 +80,38 @@ export async function GET() {
         }
       });
 
+      // Also add years covered by extra charges
+      unitExtraCharges.forEach((ec) => {
+        const ecStartYear = parseInt(ec.effectiveFrom.split('-')[0]);
+        const ecEndYear = ec.effectiveTo
+          ? parseInt(ec.effectiveTo.split('-')[0])
+          : currentYear - 1;
+        for (let y = ecStartYear; y <= Math.min(ecEndYear, currentYear - 1); y++) {
+          pastYears.add(y);
+        }
+      });
+
       let pastYearsDebt = 0;
-      for (const year of Array.from(pastYears)) {
+      // Sort years so surplus carries forward correctly
+      const sortedYears = Array.from(pastYears).sort((a, b) => a - b);
+      for (const year of sortedYears) {
         let expectedForYear = 0;
         for (let m = 1; m <= 12; m++) {
           const monthStr = `${year}-${m.toString().padStart(2, '0')}`;
-          expectedForYear += getFeeForMonth(unit.feeHistory, monthStr, unit.monthlyFee);
+          const feeData = getTotalFeeForMonth(
+            unit.feeHistory as FeeHistoryRecord[],
+            unitExtraCharges,
+            monthStr,
+            unit.monthlyFee,
+            unit.id
+          );
+          expectedForYear += feeData.total;
         }
         const paidForYear = allAllocations
           .filter((a) => a.month.startsWith(`${year}-`))
           .reduce((sum, a) => sum + a.amount, 0);
-        pastYearsDebt += Math.max(0, expectedForYear - paidForYear);
+        // Surplus from overpayment reduces previously accumulated debt
+        pastYearsDebt = Math.max(0, pastYearsDebt + expectedForYear - paidForYear);
       }
 
       const yearDebt = Math.max(0, expectedYTD - paidYTD);
