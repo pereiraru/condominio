@@ -55,9 +55,17 @@ COPY --from=builder /app/node_modules/prisma ./node_modules/prisma
 COPY --from=builder /app/scripts/migrate-month-allocations.js ./scripts/migrate-month-allocations.js
 COPY --from=builder /app/scripts/create-admin.js ./scripts/create-admin.js
 COPY --from=builder /app/scripts/clear-data.js ./scripts/clear-data.js
+COPY --from=builder /app/scripts/import-data.js ./scripts/import-data.js
 
 # Copy bcrypt for admin creation
 COPY --from=builder /app/node_modules/bcrypt ./node_modules/bcrypt
+
+# Copy xlsx library for data import
+COPY --from=builder /app/node_modules/xlsx ./node_modules/xlsx
+
+# Copy Excel data files for import
+COPY --from=builder /app/*.xlsm ./
+COPY --from=builder /app/*.xlsx ./
 
 # Create data directory for SQLite
 RUN mkdir -p /app/data && chown nextjs:nodejs /app/data
@@ -69,4 +77,4 @@ EXPOSE 3000
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
-CMD ["sh", "-c", "node node_modules/prisma/build/index.js db push --skip-generate && node scripts/create-admin.js && node server.js"]
+CMD ["sh", "-c", "node node_modules/prisma/build/index.js db push --skip-generate && node scripts/create-admin.js && node scripts/import-data.js && node server.js"]

@@ -2,7 +2,6 @@ node_modules
 .next
 .git
 *.md
-*.xlsm
-*.xlsx
 .env*
 !.env.example
+~$*
