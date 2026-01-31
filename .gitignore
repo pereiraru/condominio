@@ -36,8 +36,6 @@ npm-debug.log*
 public/uploads/*
 !public/uploads/.gitkeep
 
-# Excel files (source data - keep locally, don't commit)
-*.xlsx
-*.xlsm
+# Excel temp files
 ~$*.xlsx
 ~$*.xlsm
