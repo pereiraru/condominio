@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { getTotalFeeForMonth, FeeHistoryRecord, ExtraChargeRecord } from '@/lib/feeHistory';
 
 export async function GET(
   request: NextRequest,
@@ -24,7 +25,11 @@ export async function GET(
       include: {
         transaction: {
           include: {
-            monthAllocations: true,
+            monthAllocations: {
+              include: {
+                extraCharge: true,
+              },
+            },
           },
         },
       },
@@ -33,7 +38,41 @@ export async function GET(
     // Extract unique transactions
     const transactions = allocations.map((a) => a.transaction);
 
-    return NextResponse.json({ transactions });
+    // Get expected breakdown for this month
+    const unit = await prisma.unit.findUnique({
+      where: { id: params.id },
+      include: {
+        feeHistory: { orderBy: { effectiveFrom: 'asc' } },
+      },
+    });
+
+    const extraCharges = await prisma.extraCharge.findMany({
+      where: {
+        OR: [{ unitId: null }, { unitId: params.id }],
+      },
+    });
+
+    let expected = null;
+    if (unit) {
+      const feeData = getTotalFeeForMonth(
+        unit.feeHistory as FeeHistoryRecord[],
+        extraCharges as ExtraChargeRecord[],
+        month,
+        unit.monthlyFee,
+        params.id
+      );
+      expected = {
+        baseFee: feeData.baseFee,
+        extras: feeData.extras.map((e) => ({
+          id: e.id || '',
+          description: e.description,
+          amount: e.amount,
+        })),
+        total: feeData.total,
+      };
+    }
+
+    return NextResponse.json({ transactions, expected });
   } catch (error) {
     console.error('Error fetching month transactions:', error);
     return NextResponse.json(

@@ -114,12 +114,14 @@ model Transaction {
 
 // Month allocations for transactions (split a single transaction across multiple months)
 model TransactionMonth {
-  id            String      @id @default(cuid())
+  id            String       @id @default(cuid())
   transactionId String
-  transaction   Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
-  month         String      // "YYYY-MM"
-  amount        Float       // amount allocated to this month
-  createdAt     DateTime    @default(now())
+  transaction   Transaction  @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  month         String       // "YYYY-MM"
+  amount        Float        // amount allocated to this month
+  extraChargeId String?      // null = base fee, non-null = extra charge payment
+  extraCharge   ExtraCharge? @relation(fields: [extraChargeId], references: [id], onDelete: SetNull)
+  createdAt     DateTime     @default(now())
 }
 
 // Documents (invoices, receipts, minutes)
@@ -171,5 +173,6 @@ model ExtraCharge {
   effectiveTo   String?   // "YYYY-MM" format, null means ongoing
   createdAt     DateTime  @default(now())
 
-  unit Unit? @relation(fields: [unitId], references: [id], onDelete: Cascade)
+  unit              Unit?              @relation(fields: [unitId], references: [id], onDelete: Cascade)
+  transactionMonths TransactionMonth[]
 }

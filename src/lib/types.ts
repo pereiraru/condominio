@@ -62,6 +62,18 @@ export interface TransactionMonth {
   transactionId: string;
   month: string; // "YYYY-MM"
   amount: number;
+  extraChargeId?: string | null;
+  extraCharge?: ExtraCharge;
+}
+
+export interface MonthExpectedBreakdown {
+  baseFee: number;
+  extras: { id: string; description: string; amount: number }[];
+}
+
+export interface MonthPaymentBreakdown {
+  baseFee: number;
+  extras: { extraChargeId: string; description: string; paid: number }[];
 }
 
 export interface Transaction {

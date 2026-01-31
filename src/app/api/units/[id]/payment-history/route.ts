@@ -68,6 +68,10 @@ export async function GET(
       select: {
         month: true,
         amount: true,
+        extraChargeId: true,
+        extraCharge: {
+          select: { id: true, description: true },
+        },
       },
     });
 
@@ -121,13 +125,36 @@ export async function GET(
     // Build month-by-month data
     const payments: Record<string, number> = {};
     const expected: Record<string, number> = {};
+    const paymentBreakdown: Record<string, { baseFee: number; extras: { extraChargeId: string; description: string; paid: number }[] }> = {};
+    const expectedBreakdown: Record<string, { baseFee: number; extras: { id: string; description: string; amount: number }[] }> = {};
 
-    // Group allocations by month
+    // Group allocations by month, building breakdown
     for (const alloc of filteredAllocations) {
       if (!payments[alloc.month]) {
         payments[alloc.month] = 0;
       }
       payments[alloc.month] += alloc.amount;
+
+      // Build payment breakdown
+      if (!paymentBreakdown[alloc.month]) {
+        paymentBreakdown[alloc.month] = { baseFee: 0, extras: [] };
+      }
+      if (alloc.extraChargeId && alloc.extraCharge) {
+        const existing = paymentBreakdown[alloc.month].extras.find(
+          (e) => e.extraChargeId === alloc.extraChargeId
+        );
+        if (existing) {
+          existing.paid += alloc.amount;
+        } else {
+          paymentBreakdown[alloc.month].extras.push({
+            extraChargeId: alloc.extraChargeId,
+            description: alloc.extraCharge.description,
+            paid: alloc.amount,
+          });
+        }
+      } else {
+        paymentBreakdown[alloc.month].baseFee += alloc.amount;
+      }
     }
 
     // Calculate expected for each month from start to end
@@ -148,6 +175,18 @@ export async function GET(
           params.id
         );
         expected[monthStr] = feeData.total;
+
+        // Build expected breakdown
+        if (feeData.extras.length > 0) {
+          expectedBreakdown[monthStr] = {
+            baseFee: feeData.baseFee,
+            extras: feeData.extras.map((e) => ({
+              id: e.id || '',
+              description: e.description,
+              amount: e.amount,
+            })),
+          };
+        }
       }
     }
 
@@ -205,6 +244,8 @@ export async function GET(
     return NextResponse.json({
       payments,
       expected,
+      paymentBreakdown,
+      expectedBreakdown,
       yearlyData,
       previousDebt,
       previousDebtPaid,

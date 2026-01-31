@@ -62,7 +62,7 @@ export async function PATCH(
 
     // Handle month allocations if provided
     if ('monthAllocations' in body) {
-      const allocations: { month: string; amount: number }[] = body.monthAllocations || [];
+      const allocations: { month: string; amount: number; extraChargeId?: string | null }[] = body.monthAllocations || [];
 
       // Delete existing allocations
       await prisma.transactionMonth.deleteMany({
@@ -76,6 +76,7 @@ export async function PATCH(
             transactionId: params.id,
             month: a.month,
             amount: a.amount,
+            extraChargeId: a.extraChargeId || null,
           })),
         });
       }

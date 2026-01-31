@@ -6,9 +6,10 @@ import { useSession } from 'next-auth/react';
 import Sidebar from '@/components/Sidebar';
 import MonthCalendar from '@/components/MonthCalendar';
 import TransactionEditPanel from '@/components/TransactionEditPanel';
+import HistoryEditPanel from '@/components/HistoryEditPanel';
 import FeeHistoryManager from '@/components/FeeHistoryManager';
 import ExtraChargesManager from '@/components/ExtraChargesManager';
-import { Unit, Transaction, Creditor, MonthPaymentStatus, FeeHistory, ExtraCharge, Owner } from '@/lib/types';
+import { Unit, Transaction, Creditor, MonthPaymentStatus, FeeHistory, ExtraCharge, Owner, MonthExpectedBreakdown, MonthPaymentBreakdown } from '@/lib/types';
 
 export default function UnitDetailPage() {
   const params = useParams();
@@ -61,17 +62,10 @@ export default function UnitDetailPage() {
   // History edit panel state
   const [historyPanelOpen, setHistoryPanelOpen] = useState(false);
   const [historyPanelMonth, setHistoryPanelMonth] = useState('');
-  const [historyPanelTransactions, setHistoryPanelTransactions] = useState<Transaction[]>([]);
-  const [historyPanelSelectedTx, setHistoryPanelSelectedTx] = useState<Transaction | null>(null);
-  const [historyPanelSelectedMonths, setHistoryPanelSelectedMonths] = useState<string[]>([]);
-  const [historyPanelCustomAmounts, setHistoryPanelCustomAmounts] = useState<Record<string, string>>({});
-  const [historyPanelShowCustom, setHistoryPanelShowCustom] = useState(false);
-  const [historyPanelCalendarYear, setHistoryPanelCalendarYear] = useState(new Date().getFullYear());
-  const [historyPanelMonthStatus, setHistoryPanelMonthStatus] = useState<MonthPaymentStatus[]>([]);
-  const [historyPanelSaving, setHistoryPanelSaving] = useState(false);
-  const [historyPanelPrevDebt, setHistoryPanelPrevDebt] = useState(false);
-  const [historyPanelPrevDebtAmount, setHistoryPanelPrevDebtAmount] = useState('');
-  const [ownerRemainingPrevDebt, setOwnerRemainingPrevDebt] = useState(0);
+
+  // Breakdown data
+  const [paymentBreakdown, setPaymentBreakdown] = useState<Record<string, MonthPaymentBreakdown>>({});
+  const [expectedBreakdown, setExpectedBreakdown] = useState<Record<string, MonthExpectedBreakdown>>({});
 
   useEffect(() => {
     fetchUnit();
@@ -167,6 +161,8 @@ export default function UnitDetailPage() {
         setPaymentHistory(data.payments || {});
         setExpectedHistory(data.expected || {});
         setYearlyData(data.yearlyData || []);
+        setPaymentBreakdown(data.paymentBreakdown || {});
+        setExpectedBreakdown(data.expectedBreakdown || {});
       }
     } catch (error) {
       console.error('Error fetching payment history:', error);
@@ -218,210 +214,21 @@ export default function UnitDetailPage() {
     fetchMonthlyStatus();
   }
 
-  async function handleHistoryCellClick(month: string) {
+  function handleHistoryCellClick(month: string) {
     setHistoryPanelMonth(month);
-    setHistoryPanelCalendarYear(parseInt(month.split('-')[0]));
-    setHistoryPanelSelectedTx(null);
-    setHistoryPanelSelectedMonths([]);
-    setHistoryPanelCustomAmounts({});
-    setHistoryPanelShowCustom(false);
-    setHistoryPanelPrevDebt(false);
-    setHistoryPanelPrevDebtAmount('');
-
-    // Fetch owner's remaining previous debt
-    if (selectedOwnerId) {
-      try {
-        const res = await fetch(`/api/units/${id}/debt?ownerId=${selectedOwnerId}`);
-        if (res.ok) {
-          const data = await res.json();
-          setOwnerRemainingPrevDebt(data.previousDebtRemaining || 0);
-        }
-      } catch { /* ignore */ }
-    } else {
-      try {
-        const res = await fetch(`/api/units/${id}/debt`);
-        if (res.ok) {
-          const data = await res.json();
-          setOwnerRemainingPrevDebt(data.previousDebtRemaining || 0);
-        }
-      } catch { /* ignore */ }
-    }
-
-    try {
-      // Fetch transactions allocated to this month
-      const res = await fetch(`/api/units/${id}/month-transactions?month=${month}`);
-      if (res.ok) {
-        const data = await res.json();
-        setHistoryPanelTransactions(data.transactions);
-        // If single transaction, auto-select it
-        if (data.transactions.length === 1) {
-          selectHistoryPanelTransaction(data.transactions[0]);
-        }
-      }
-    } catch (error) {
-      console.error('Error fetching month transactions:', error);
-    }
-
-    // Fetch monthly status
-    fetchHistoryPanelMonthStatus(parseInt(month.split('-')[0]));
     setHistoryPanelOpen(true);
   }
 
-  function selectHistoryPanelTransaction(tx: Transaction) {
-    setHistoryPanelSelectedTx(tx);
-    if (tx.monthAllocations && tx.monthAllocations.length > 0) {
-      // Separate PREV-DEBT from regular allocations
-      const prevDebtAlloc = tx.monthAllocations.find((a) => a.month === 'PREV-DEBT');
-      const regularAllocs = tx.monthAllocations.filter((a) => a.month !== 'PREV-DEBT');
-
-      if (prevDebtAlloc) {
-        setHistoryPanelPrevDebt(true);
-        setHistoryPanelPrevDebtAmount(prevDebtAlloc.amount.toFixed(2));
-      } else {
-        setHistoryPanelPrevDebt(false);
-        setHistoryPanelPrevDebtAmount('');
-      }
-
-      const months = regularAllocs.map((a) => a.month);
-      setHistoryPanelSelectedMonths(months);
-
-      if (months.length > 0) {
-        const equalAmount = Math.abs(tx.amount) / tx.monthAllocations.length;
-        const isCustom = regularAllocs.some(
-          (a) => Math.abs(a.amount - equalAmount) > 0.01
-        ) || !!prevDebtAlloc;
-        if (isCustom) {
-          setHistoryPanelShowCustom(true);
-          const amounts: Record<string, string> = {};
-          regularAllocs.forEach((a) => {
-            amounts[a.month] = a.amount.toFixed(2);
-          });
-          setHistoryPanelCustomAmounts(amounts);
-        } else {
-          setHistoryPanelShowCustom(false);
-          setHistoryPanelCustomAmounts({});
-        }
-        setHistoryPanelCalendarYear(parseInt(months[0].split('-')[0]));
-      }
-    } else {
-      setHistoryPanelSelectedMonths([historyPanelMonth]);
-      setHistoryPanelCustomAmounts({});
-      setHistoryPanelShowCustom(false);
-      setHistoryPanelPrevDebt(false);
-      setHistoryPanelPrevDebtAmount('');
-    }
-  }
-
-  async function fetchHistoryPanelMonthStatus(year: number) {
-    try {
-      const res = await fetch(`/api/monthly-status?unitId=${id}&year=${year}`);
-      if (res.ok) {
-        const data = await res.json();
-        setHistoryPanelMonthStatus(data.months);
-      }
-    } catch (error) {
-      console.error('Error fetching monthly status:', error);
-    }
-  }
-
-  useEffect(() => {
-    if (historyPanelOpen && historyPanelSelectedTx) {
-      fetchHistoryPanelMonthStatus(historyPanelCalendarYear);
-    }
-  }, [historyPanelCalendarYear]);
-
-  function handleHistoryPanelToggleMonth(month: string) {
-    if (!historyPanelSelectedTx) return;
-    const txAmount = Math.abs(historyPanelSelectedTx.amount);
-
-    setHistoryPanelSelectedMonths((prev) => {
-      const next = prev.includes(month)
-        ? prev.filter((m) => m !== month)
-        : [...prev, month].sort();
-
-      if (!prev.includes(month) && !historyPanelCustomAmounts[month]) {
-        const equalAmount = txAmount / (next.length || 1);
-        if (!historyPanelShowCustom) {
-          const amounts: Record<string, string> = {};
-          next.forEach((m) => { amounts[m] = equalAmount.toFixed(2); });
-          setHistoryPanelCustomAmounts(amounts);
-        } else {
-          setHistoryPanelCustomAmounts((ca) => ({ ...ca, [month]: equalAmount.toFixed(2) }));
-        }
-      } else if (prev.includes(month)) {
-        setHistoryPanelCustomAmounts((ca) => {
-          const copy = { ...ca };
-          delete copy[month];
-          return copy;
-        });
-      }
-      return next;
-    });
-  }
-
-  function getHistoryPanelAllocations(): { month: string; amount: number }[] {
-    if (!historyPanelSelectedTx) return [];
-    const allocs: { month: string; amount: number }[] = [];
-    const txAmount = Math.abs(historyPanelSelectedTx.amount);
-
-    if (historyPanelSelectedMonths.length > 0) {
-      if (historyPanelShowCustom) {
-        historyPanelSelectedMonths.forEach((month) => {
-          allocs.push({ month, amount: parseFloat(historyPanelCustomAmounts[month] || '0') });
-        });
-      } else {
-        const prevDebtAmt = historyPanelPrevDebt ? (parseFloat(historyPanelPrevDebtAmount) || 0) : 0;
-        const remaining = txAmount - prevDebtAmt;
-        const perMonth = historyPanelSelectedMonths.length > 0 ? remaining / historyPanelSelectedMonths.length : 0;
-        historyPanelSelectedMonths.forEach((month) => {
-          allocs.push({ month, amount: perMonth });
-        });
-      }
-    }
-
-    if (historyPanelPrevDebt && parseFloat(historyPanelPrevDebtAmount) > 0) {
-      allocs.push({ month: 'PREV-DEBT', amount: parseFloat(historyPanelPrevDebtAmount) });
-    }
-
-    return allocs;
-  }
-
-  function getHistoryPanelAllocationTotal(): number {
-    return getHistoryPanelAllocations().reduce((sum, a) => sum + a.amount, 0);
-  }
-
-  async function handleHistoryPanelSave() {
-    if (!historyPanelSelectedTx) return;
-    setHistoryPanelSaving(true);
-    try {
-      const allocations = getHistoryPanelAllocations();
-      const res = await fetch(`/api/transactions/${historyPanelSelectedTx.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ monthAllocations: allocations }),
-      });
-
-      if (res.ok) {
-        setHistoryPanelOpen(false);
-        fetchPaymentHistory(selectedOwnerId || undefined);
-        fetchUnit();
-        fetchMonthlyStatus(selectedOwnerId || undefined);
-        fetchPastYearsDebt(selectedOwnerId || undefined);
-      } else {
-        const data = await res.json();
-        alert(`Erro: ${data.error}`);
-      }
-    } catch {
-      alert('Erro ao guardar');
-    } finally {
-      setHistoryPanelSaving(false);
-    }
+  function handleHistoryPanelSave() {
+    setHistoryPanelOpen(false);
+    fetchPaymentHistory(selectedOwnerId || undefined);
+    fetchUnit();
+    fetchMonthlyStatus(selectedOwnerId || undefined);
+    fetchPastYearsDebt(selectedOwnerId || undefined);
   }
 
   function closeHistoryPanel() {
     setHistoryPanelOpen(false);
-    setHistoryPanelSelectedTx(null);
-    setHistoryPanelTransactions([]);
   }
 
   async function fetchUnit() {
@@ -1071,7 +878,7 @@ export default function UnitDetailPage() {
                       <tr className="text-left text-gray-500 border-b">
                         <th className="pb-2 pr-3 font-medium sticky left-0 bg-white z-10"></th>
                         {['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'].map((m) => (
-                          <th key={m} className="pb-2 px-2 font-medium text-center min-w-[60px]">{m}</th>
+                          <th key={m} className="pb-2 px-2 font-medium text-center min-w-[80px]">{m}</th>
                         ))}
                         <th className="pb-2 px-2 font-medium text-right min-w-[80px]">Pago</th>
                         <th className="pb-2 px-2 font-medium text-right min-w-[80px]">Esperado</th>
@@ -1105,11 +912,13 @@ export default function UnitDetailPage() {
                               const isPaidInFull = paid >= expected && expected > 0;
                               const isPartial = paid > 0 && paid < expected;
                               const isUnpaid = paid === 0 && expected > 0;
+                              const eb = expectedBreakdown[monthStr];
+                              const pb = paymentBreakdown[monthStr];
 
                               return (
                                 <td
                                   key={monthStr}
-                                  className={`py-2 px-2 text-center transition-colors ${isAdmin ? 'cursor-pointer' : ''} ${
+                                  className={`py-1 px-1 text-center transition-colors ${isAdmin ? 'cursor-pointer' : ''} ${
                                     isSelected
                                       ? 'bg-primary-100 ring-2 ring-primary-500'
                                       : isPaidInFull
@@ -1123,7 +932,52 @@ export default function UnitDetailPage() {
                                   onClick={() => isAdmin && handleHistoryCellClick(monthStr)}
                                   title={expected > 0 ? `Esperado: ${expected.toFixed(2)}€` : ''}
                                 >
-                                  {paid > 0 ? (
+                                  {eb && eb.extras.length > 0 ? (
+                                    // Two-row display: base fee + extras
+                                    <div className="flex flex-col items-center gap-0.5">
+                                      {(() => {
+                                        const basePaid = pb ? pb.baseFee : 0;
+                                        const baseExpected = eb.baseFee;
+                                        const baseOk = basePaid >= baseExpected && baseExpected > 0;
+                                        const basePartial = basePaid > 0 && basePaid < baseExpected;
+                                        return (
+                                          <span className={`text-xs font-medium ${
+                                            basePaid > 0
+                                              ? baseOk ? 'text-green-700' : basePartial ? 'text-yellow-700' : 'text-red-400'
+                                              : baseExpected > 0 ? 'text-red-300' : 'text-gray-300'
+                                          }`}>
+                                            {basePaid > 0
+                                              ? (Number.isInteger(basePaid) ? basePaid : basePaid.toFixed(2))
+                                              : baseExpected > 0 ? baseExpected.toFixed(0) : '-'}
+                                          </span>
+                                        );
+                                      })()}
+                                      {eb.extras.map((extra) => {
+                                        const extraPaidEntry = pb?.extras.find((e) => e.extraChargeId === extra.id);
+                                        const extraPaid = extraPaidEntry?.paid || 0;
+                                        const extraOk = extraPaid >= extra.amount && extra.amount > 0;
+                                        const extraPartial = extraPaid > 0 && extraPaid < extra.amount;
+                                        const abbrev = extra.description.length > 5
+                                          ? extra.description.slice(0, 5) + '.'
+                                          : extra.description;
+                                        return (
+                                          <span
+                                            key={extra.id}
+                                            className={`text-[10px] leading-tight ${
+                                              extraPaid > 0
+                                                ? extraOk ? 'text-green-600' : extraPartial ? 'text-yellow-600' : 'text-red-400'
+                                                : extra.amount > 0 ? 'text-red-300' : 'text-gray-300'
+                                            }`}
+                                            title={`${extra.description}: ${extraPaid > 0 ? extraPaid.toFixed(2) : extra.amount.toFixed(2)}€`}
+                                          >
+                                            {extraPaid > 0
+                                              ? `${Number.isInteger(extraPaid) ? extraPaid : extraPaid.toFixed(0)} (${abbrev})`
+                                              : `${extra.amount.toFixed(0)} (${abbrev})`}
+                                          </span>
+                                        );
+                                      })}
+                                    </div>
+                                  ) : paid > 0 ? (
                                     <span className="text-sm font-medium">
                                       {Number.isInteger(paid) ? paid : paid.toFixed(2)}
                                     </span>
@@ -1158,178 +1012,15 @@ export default function UnitDetailPage() {
 
             {/* History Edit Side Panel (admin only) */}
             {isAdmin && historyPanelOpen && (
-              <div className="w-80 shrink-0">
-                <div className="card sticky top-8 max-h-[calc(100vh-4rem)] overflow-y-auto">
-                  <div className="flex justify-between items-center mb-4">
-                    <h3 className="text-lg font-bold text-gray-900">
-                      Editar Alocação
-                    </h3>
-                    <button
-                      className="p-1 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-all"
-                      onClick={closeHistoryPanel}
-                    >
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                      </svg>
-                    </button>
-                  </div>
-
-                  <div className="mb-4">
-                    <p className="text-sm text-gray-500">Mês selecionado:</p>
-                    <p className="font-medium text-gray-900">{historyPanelMonth}</p>
-                  </div>
-
-                  {historyPanelTransactions.length === 0 ? (
-                    <p className="text-gray-400 text-sm">Nenhum pagamento alocado a este mês.</p>
-                  ) : historyPanelTransactions.length > 1 && !historyPanelSelectedTx ? (
-                    <div className="space-y-2">
-                      <p className="text-sm text-gray-500 mb-2">
-                        {historyPanelTransactions.length} transações encontradas:
-                      </p>
-                      {historyPanelTransactions.map((tx) => (
-                        <button
-                          key={tx.id}
-                          className="w-full text-left p-3 rounded-lg border border-gray-200 hover:border-primary-500 hover:bg-primary-50 transition-colors"
-                          onClick={() => selectHistoryPanelTransaction(tx)}
-                        >
-                          <div className="flex justify-between items-center">
-                            <span className="font-medium">{Math.abs(tx.amount).toFixed(2)}€</span>
-                            <span className="text-sm text-gray-500">
-                              {new Date(tx.date).toLocaleDateString('pt-PT')}
-                            </span>
-                          </div>
-                          <p className="text-sm text-gray-600 truncate">{tx.description}</p>
-                        </button>
-                      ))}
-                    </div>
-                  ) : historyPanelSelectedTx ? (
-                    <div className="space-y-4">
-                      {historyPanelTransactions.length > 1 && (
-                        <button
-                          className="text-sm text-primary-600 hover:text-primary-700"
-                          onClick={() => setHistoryPanelSelectedTx(null)}
-                        >
-                          ← Voltar à lista
-                        </button>
-                      )}
-
-                      <div className="p-3 bg-gray-50 rounded-lg">
-                        <p className="text-xs text-gray-500 mb-1">Valor da transação</p>
-                        <p className="text-lg font-bold text-green-600">
-                          {Math.abs(historyPanelSelectedTx.amount).toFixed(2)} EUR
-                        </p>
-                        <p className="text-xs text-gray-500 mt-1">{historyPanelSelectedTx.description}</p>
-                        <p className="text-xs text-gray-400">
-                          {new Date(historyPanelSelectedTx.date).toLocaleDateString('pt-PT')}
-                        </p>
-                      </div>
-
-                      <div>
-                        <label className="label mb-2">Meses de referência</label>
-                        <MonthCalendar
-                          year={historyPanelCalendarYear}
-                          onYearChange={setHistoryPanelCalendarYear}
-                          monthStatus={historyPanelMonthStatus}
-                          selectedMonths={historyPanelSelectedMonths}
-                          onToggleMonth={handleHistoryPanelToggleMonth}
-                        />
-
-                        {ownerRemainingPrevDebt > 0 && (
-                          <div className="mt-3">
-                            <button
-                              type="button"
-                              className={`w-full text-sm px-3 py-2 rounded-lg font-medium transition-all ${
-                                historyPanelPrevDebt
-                                  ? 'bg-orange-100 text-orange-700 border border-orange-300'
-                                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200 border border-gray-200'
-                              }`}
-                              onClick={() => {
-                                const next = !historyPanelPrevDebt;
-                                setHistoryPanelPrevDebt(next);
-                                if (next) {
-                                  setHistoryPanelPrevDebtAmount(ownerRemainingPrevDebt.toFixed(2));
-                                } else {
-                                  setHistoryPanelPrevDebtAmount('');
-                                }
-                              }}
-                            >
-                              Dívida Anterior ({ownerRemainingPrevDebt.toFixed(2)} EUR restante)
-                            </button>
-                            {historyPanelPrevDebt && (
-                              <div className="mt-2 flex items-center gap-2">
-                                <input
-                                  type="number"
-                                  step="0.01"
-                                  className="input text-sm py-1 flex-1"
-                                  value={historyPanelPrevDebtAmount}
-                                  onChange={(e) => setHistoryPanelPrevDebtAmount(e.target.value)}
-                                />
-                                <span className="text-xs text-gray-400">EUR</span>
-                              </div>
-                            )}
-                          </div>
-                        )}
-                      </div>
-
-                      {historyPanelSelectedMonths.length > 0 && (
-                        <div className="space-y-2">
-                          <div className="flex items-center justify-between">
-                            <span className="text-sm text-gray-600">
-                              {historyPanelSelectedMonths.length} mês(es) &mdash; {(Math.abs(historyPanelSelectedTx.amount) / historyPanelSelectedMonths.length).toFixed(2)} EUR/mês
-                            </span>
-                            <button
-                              type="button"
-                              className={`text-xs px-2 py-1 rounded ${historyPanelShowCustom ? 'bg-primary-100 text-primary-700' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
-                              onClick={() => {
-                                setHistoryPanelShowCustom(!historyPanelShowCustom);
-                                if (!historyPanelShowCustom) {
-                                  const perMonth = Math.abs(historyPanelSelectedTx.amount) / historyPanelSelectedMonths.length;
-                                  const amounts: Record<string, string> = {};
-                                  historyPanelSelectedMonths.forEach((m) => { amounts[m] = perMonth.toFixed(2); });
-                                  setHistoryPanelCustomAmounts(amounts);
-                                }
-                              }}
-                            >
-                              Personalizar
-                            </button>
-                          </div>
-
-                          {historyPanelShowCustom && (
-                            <div className="space-y-1 p-2 bg-gray-50 rounded-lg">
-                              {historyPanelSelectedMonths.map((month) => (
-                                <div key={month} className="flex items-center gap-2">
-                                  <span className="text-xs text-gray-500 w-16">{month}</span>
-                                  <input
-                                    type="number"
-                                    step="0.01"
-                                    className="input text-sm py-1 flex-1"
-                                    value={historyPanelCustomAmounts[month] || ''}
-                                    onChange={(e) => setHistoryPanelCustomAmounts({ ...historyPanelCustomAmounts, [month]: e.target.value })}
-                                  />
-                                  <span className="text-xs text-gray-400">EUR</span>
-                                </div>
-                              ))}
-                              <div className={`text-xs mt-1 ${getHistoryPanelAllocationTotal() > Math.abs(historyPanelSelectedTx.amount) + 0.01 ? 'text-red-500' : 'text-gray-500'}`}>
-                                Total: {getHistoryPanelAllocationTotal().toFixed(2)} / {Math.abs(historyPanelSelectedTx.amount).toFixed(2)} EUR
-                                {historyPanelPrevDebt && ` (incl. ${historyPanelPrevDebtAmount || '0'} dív. ant.)`}
-                                {getHistoryPanelAllocationTotal() > Math.abs(historyPanelSelectedTx.amount) + 0.01 && ' (excede o valor!)'}
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      )}
-
-                      <button
-                        className="btn-primary w-full"
-                        onClick={handleHistoryPanelSave}
-                        disabled={historyPanelSaving || (historyPanelSelectedMonths.length === 0 && !historyPanelPrevDebt) || getHistoryPanelAllocationTotal() > Math.abs(historyPanelSelectedTx.amount) + 0.01}
-                      >
-                        {historyPanelSaving ? 'A guardar...' : 'Guardar'}
-                      </button>
-                    </div>
-                  ) : null}
-                </div>
-              </div>
+              <HistoryEditPanel
+                key={historyPanelMonth}
+                unitId={id}
+                month={historyPanelMonth}
+                expectedBreakdown={expectedBreakdown[historyPanelMonth] || null}
+                ownerId={selectedOwnerId || undefined}
+                onSave={handleHistoryPanelSave}
+                onClose={closeHistoryPanel}
+              />
             )}
           </div>
         )}
