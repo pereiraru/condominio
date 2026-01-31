@@ -54,6 +54,17 @@ export async function GET() {
         if (year < currentYear) pastYears.add(year);
       });
 
+      // Also add years covered by feeHistory (covers years with no payments)
+      unit.feeHistory.forEach((fh) => {
+        const startYear = parseInt(fh.effectiveFrom.split('-')[0]);
+        const endYear = fh.effectiveTo
+          ? parseInt(fh.effectiveTo.split('-')[0])
+          : currentYear - 1;
+        for (let y = startYear; y <= Math.min(endYear, currentYear - 1); y++) {
+          pastYears.add(y);
+        }
+      });
+
       let pastYearsDebt = 0;
       for (const year of Array.from(pastYears)) {
         let expectedForYear = 0;

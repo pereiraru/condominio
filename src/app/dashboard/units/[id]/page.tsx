@@ -55,6 +55,9 @@ export default function UnitDetailPage() {
   const [feeHistory, setFeeHistory] = useState<FeeHistory[]>([]);
   const [extraCharges, setExtraCharges] = useState<ExtraCharge[]>([]);
 
+  // Recalculate state
+  const [recalculating, setRecalculating] = useState(false);
+
   // History edit panel state
   const [historyPanelOpen, setHistoryPanelOpen] = useState(false);
   const [historyPanelMonth, setHistoryPanelMonth] = useState('');
@@ -189,6 +192,19 @@ export default function UnitDetailPage() {
       }
     } catch (error) {
       console.error('Error fetching extra charges:', error);
+    }
+  }
+
+  async function handleRecalculate() {
+    setRecalculating(true);
+    try {
+      await Promise.all([
+        fetchMonthlyStatus(selectedOwnerId || undefined),
+        fetchPastYearsDebt(selectedOwnerId || undefined),
+        fetchPaymentHistory(selectedOwnerId || undefined),
+      ]);
+    } finally {
+      setRecalculating(false);
     }
   }
 
@@ -989,7 +1005,7 @@ export default function UnitDetailPage() {
                   .reduce((sum, [, v]) => sum + v, 0);
 
                 return (
-                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                  <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
                     <div className="card">
                       <h3 className="text-sm text-gray-500 mb-1">Quota Mensal</h3>
                       <p className="text-2xl font-semibold text-gray-900">{unit.monthlyFee.toFixed(2)} EUR</p>
@@ -1012,6 +1028,18 @@ export default function UnitDetailPage() {
                           (inclui {previousDebtRemaining.toFixed(2)} dívida anterior)
                         </p>
                       )}
+                    </div>
+                    <div className="card flex flex-col items-center justify-center">
+                      <button
+                        onClick={handleRecalculate}
+                        disabled={recalculating}
+                        className="btn-secondary text-sm flex items-center gap-2"
+                      >
+                        <svg className={`w-4 h-4 ${recalculating ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
+                        {recalculating ? 'A recalcular...' : 'Recalcular Saldo'}
+                      </button>
                     </div>
                   </div>
                 );
@@ -1052,7 +1080,12 @@ export default function UnitDetailPage() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
-                      {Array.from({ length: new Date().getFullYear() - 2024 + 1 }, (_, i) => new Date().getFullYear() - i).map((year) => {
+                      {(() => {
+                        const startYear = yearlyData.length > 0
+                          ? Math.min(...yearlyData.map(y => y.year))
+                          : new Date().getFullYear();
+                        return Array.from({ length: new Date().getFullYear() - startYear + 1 }, (_, i) => new Date().getFullYear() - i);
+                      })().map((year) => {
                         const yearData = yearlyData.find((y) => y.year === year);
                         const yearPaid = yearData?.paid || 0;
                         const yearExpected = yearData?.expected || 0;

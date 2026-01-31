@@ -78,6 +78,17 @@ export async function GET(
       }
     });
 
+    // Also add years covered by feeHistory (covers years with no payments)
+    unit.feeHistory.forEach((fh) => {
+      const fhStartYear = parseInt(fh.effectiveFrom.split('-')[0]);
+      const fhEndYear = fh.effectiveTo
+        ? parseInt(fh.effectiveTo.split('-')[0])
+        : currentYear - 1;
+      for (let y = fhStartYear; y <= Math.min(fhEndYear, currentYear - 1); y++) {
+        years.add(y);
+      }
+    });
+
     // If owner has a start year, ensure all years from start are included
     if (startYear && startYear < currentYear) {
       for (let y = startYear; y < currentYear; y++) {

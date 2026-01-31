@@ -20,8 +20,8 @@ const UNIT_NAME_TO_CODE: Record<string, string> = {
   '1ºAndar Esquerdo': '1E',
   'Res-Chão Direito': 'RCD',
   'Res-Chão Esquerdo': 'RCE',
-  'Cave -1 (Garagem)': 'Garagem',
-  'Cave -2': 'CV',
+  'Cave -1 (Garagem)': 'CV',
+  'Cave -2': 'Garagem',
 };
 
 // Expense category to creditor name mapping
@@ -81,14 +81,14 @@ async function importHistorical() {
   });
   console.log(`Deleted ${deleted.count} existing pre-2024 transactions`);
 
-  // Update fee history to start from 2011
-  await prisma.feeHistory.updateMany({
-    where: { effectiveFrom: '2024-01' },
-    data: { effectiveFrom: '2011-01' },
-  });
-  console.log('Updated fee history effectiveFrom to 2011-01');
+  // Delete existing fee history (will be rebuilt from Excel)
+  const deletedFH = await prisma.feeHistory.deleteMany({});
+  console.log(`Deleted ${deletedFH.count} existing fee history records`);
 
   let totalImported = 0;
+
+  // Track expected fees per unit per year for fee history import
+  const unitFeesByYear: Record<string, Record<number, number>> = {};
 
   for (const { name, year } of YEAR_SHEETS) {
     const sheet = workbook.Sheets[name];
@@ -123,6 +123,19 @@ async function importHistorical() {
       monthCols.push(labelCol + 1 + m * 2);
     }
 
+    // Find "Valor Esperado" column for fee history
+    let valorEsperadoCol = -1;
+    for (let c = labelCol + 1; c <= Math.min(range.e.c, labelCol + 30); c++) {
+      for (let r = 0; r <= 10; r++) {
+        const cell = sheet[XLSX.utils.encode_cell({ r, c })];
+        if (cell && cell.v && cell.v.toString().toLowerCase().includes('valor esperado')) {
+          valorEsperadoCol = c;
+          break;
+        }
+      }
+      if (valorEsperadoCol >= 0) break;
+    }
+
     let yearImported = 0;
 
     // Process unit rows (scan for known unit labels)
@@ -136,6 +149,18 @@ async function importHistorical() {
       const unitId = unitCodeToId[unitCode];
       if (!unitId) continue;
 
+      // Read expected fee for this unit/year
+      if (valorEsperadoCol >= 0) {
+        const feeCell = sheet[XLSX.utils.encode_cell({ r, c: valorEsperadoCol })];
+        if (feeCell) {
+          const annualFee = parseAmount(feeCell.v);
+          if (annualFee > 0) {
+            if (!unitFeesByYear[unitCode]) unitFeesByYear[unitCode] = {};
+            unitFeesByYear[unitCode][year] = annualFee / 12;
+          }
+        }
+      }
+
       // Read monthly values
       for (let m = 0; m < 12; m++) {
         const valCell = sheet[XLSX.utils.encode_cell({ r, c: monthCols[m] })];
@@ -146,7 +171,7 @@ async function importHistorical() {
         const monthStr = `${year}-${(m + 1).toString().padStart(2, '0')}`;
         const date = new Date(year, m, 15); // Mid-month as date
 
-        await prisma.transaction.create({
+        const tx = await prisma.transaction.create({
           data: {
             date,
             description: `Pagamento ${unitCode} - ${monthStr}`,
@@ -157,6 +182,16 @@ async function importHistorical() {
             unitId,
           },
         });
+
+        // Create TransactionMonth allocation
+        await prisma.transactionMonth.create({
+          data: {
+            transactionId: tx.id,
+            month: monthStr,
+            amount,
+          },
+        });
+
         yearImported++;
       }
     }
@@ -191,7 +226,7 @@ async function importHistorical() {
         const monthStr = `${year}-${(m + 1).toString().padStart(2, '0')}`;
         const date = new Date(year, m, 15);
 
-        await prisma.transaction.create({
+        const tx = await prisma.transaction.create({
           data: {
             date,
             description: label,
@@ -202,6 +237,16 @@ async function importHistorical() {
             creditorId,
           },
         });
+
+        // Create TransactionMonth allocation
+        await prisma.transactionMonth.create({
+          data: {
+            transactionId: tx.id,
+            month: monthStr,
+            amount,
+          },
+        });
+
         yearImported++;
       }
     }
@@ -212,9 +257,81 @@ async function importHistorical() {
 
   console.log(`\nTotal historical transactions imported: ${totalImported}`);
 
+  // === Phase 3: Import fee history from Excel ===
+  console.log('\n=== Importing fee history ===');
+
+  for (const unitCode of Object.keys(unitFeesByYear)) {
+    const unitId = unitCodeToId[unitCode];
+    if (!unitId) continue;
+
+    const yearFees = unitFeesByYear[unitCode];
+    const sortedYears = Object.keys(yearFees).map(Number).sort();
+
+    if (sortedYears.length === 0) continue;
+
+    let previousFee: number | null = null;
+    let currentFrom: string | null = null;
+
+    for (const year of sortedYears) {
+      const monthlyFee = Math.round(yearFees[year] * 100) / 100; // round to cents
+
+      if (previousFee === null) {
+        // First record
+        currentFrom = `${year}-01`;
+        previousFee = monthlyFee;
+      } else if (Math.abs(monthlyFee - previousFee) > 0.01) {
+        // Fee changed - save previous period and start new one
+        await prisma.feeHistory.create({
+          data: {
+            unitId,
+            amount: previousFee,
+            effectiveFrom: currentFrom!,
+            effectiveTo: `${year - 1}-12`,
+          },
+        });
+        console.log(`  ${unitCode}: ${previousFee}/mo from ${currentFrom} to ${year - 1}-12`);
+
+        currentFrom = `${year}-01`;
+        previousFee = monthlyFee;
+      }
+    }
+
+    // Save the last (ongoing) period
+    if (previousFee !== null && currentFrom !== null) {
+      await prisma.feeHistory.create({
+        data: {
+          unitId,
+          amount: previousFee,
+          effectiveFrom: currentFrom,
+          effectiveTo: null, // ongoing
+        },
+      });
+      console.log(`  ${unitCode}: ${previousFee}/mo from ${currentFrom} (ongoing)`);
+    }
+  }
+
+  // For units not found in Excel fee data, create a default fee history from 2011
+  for (const unit of units) {
+    if (!unitFeesByYear[unit.code]) {
+      await prisma.feeHistory.create({
+        data: {
+          unitId: unit.id,
+          amount: unit.monthlyFee,
+          effectiveFrom: '2011-01',
+          effectiveTo: null,
+        },
+      });
+      console.log(`  ${unit.code}: ${unit.monthlyFee}/mo from 2011-01 (default, ongoing)`);
+    }
+  }
+
   // Summary
   const txCount = await prisma.transaction.count();
-  console.log(`Total transactions in database: ${txCount}`);
+  const tmCount = await prisma.transactionMonth.count();
+  const fhCount = await prisma.feeHistory.count();
+  console.log(`\nTotal transactions in database: ${txCount}`);
+  console.log(`Total transaction month allocations: ${tmCount}`);
+  console.log(`Total fee history records: ${fhCount}`);
 }
 
 function parseAmount(value: unknown): number {
