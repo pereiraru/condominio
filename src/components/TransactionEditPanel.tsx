@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import MonthCalendar from './MonthCalendar';
-import { Transaction, Unit, Creditor, MonthPaymentStatus, TransactionMonth } from '@/lib/types';
+import { Transaction, Unit, Creditor, MonthPaymentStatus, ExtraCharge, OutstandingExtra } from '@/lib/types';
 
 interface TransactionEditPanelProps {
   transaction: Transaction;
@@ -11,6 +11,12 @@ interface TransactionEditPanelProps {
   onSave: () => void;
   onDelete: () => void;
   onClose: () => void;
+}
+
+// Per-month allocation: base fee amount + per-extra amounts
+interface MonthCategoryAmounts {
+  baseFee: string;
+  extras: Record<string, string>; // extraChargeId -> amount string
 }
 
 export default function TransactionEditPanel({
@@ -30,6 +36,7 @@ export default function TransactionEditPanel({
   const [selectedMonths, setSelectedMonths] = useState<string[]>([]);
   const [monthStatus, setMonthStatus] = useState<MonthPaymentStatus[]>([]);
   const [customAmounts, setCustomAmounts] = useState<Record<string, string>>({});
+  const [categoryAmounts, setCategoryAmounts] = useState<Record<string, MonthCategoryAmounts>>({});
   const [showCustom, setShowCustom] = useState(false);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -37,6 +44,65 @@ export default function TransactionEditPanel({
   const [prevDebtEnabled, setPrevDebtEnabled] = useState(false);
   const [prevDebtAmount, setPrevDebtAmount] = useState('');
   const [ownerRemainingPrevDebt, setOwnerRemainingPrevDebt] = useState(0);
+  const [extraCharges, setExtraCharges] = useState<ExtraCharge[]>([]);
+  const [outstandingExtras, setOutstandingExtras] = useState<OutstandingExtra[]>([]);
+
+  // Build a merged list of all allocatable extras (from extra charges + outstanding)
+  const allAllocatableExtras = useMemo(() => {
+    const fromCharges = extraCharges.map((ec) => ({
+      id: ec.id,
+      description: ec.description,
+      amount: ec.amount,
+      effectiveFrom: ec.effectiveFrom,
+      effectiveTo: ec.effectiveTo,
+    }));
+    const chargeIds = new Set(fromCharges.map((e) => e.id));
+    const fromOutstanding = outstandingExtras
+      .filter((oe) => !chargeIds.has(oe.id) && oe.remaining > 0)
+      .map((oe) => ({
+        id: oe.id,
+        description: oe.description,
+        amount: oe.monthlyAmount,
+        effectiveFrom: '',
+        effectiveTo: null as string | null,
+      }));
+    return [...fromCharges, ...fromOutstanding];
+  }, [extraCharges, outstandingExtras]);
+
+  const hasExtras = allAllocatableExtras.length > 0;
+
+  function isMonthInChargeRange(month: string, charge: { effectiveFrom: string; effectiveTo?: string | null }): boolean {
+    if (!charge.effectiveFrom) return false;
+    if (month < charge.effectiveFrom) return false;
+    if (charge.effectiveTo && month > charge.effectiveTo) return false;
+    return true;
+  }
+
+  function buildDefaultCategoryAmounts(monthStr: string): MonthCategoryAmounts {
+    const unit = units.find((u) => u.id === unitId);
+    const baseFee = unit?.monthlyFee || 45;
+    const extras: Record<string, string> = {};
+    for (const extra of allAllocatableExtras) {
+      extras[extra.id] = isMonthInChargeRange(monthStr, extra) ? extra.amount.toFixed(2) : '0';
+    }
+    return { baseFee: baseFee.toFixed(2), extras };
+  }
+
+  function handleCategoryAmountChange(monthStr: string, field: 'baseFee' | string, value: string, isExtra?: boolean) {
+    setCategoryAmounts((prev) => {
+      const current = prev[monthStr] || { baseFee: '0', extras: {} };
+      let updated: MonthCategoryAmounts;
+      if (isExtra) {
+        updated = { ...current, extras: { ...current.extras, [field]: value } };
+      } else {
+        updated = { ...current, baseFee: value };
+      }
+      const total = parseFloat(updated.baseFee || '0') +
+        Object.values(updated.extras).reduce((s, v) => s + parseFloat(v || '0'), 0);
+      setCustomAmounts((ca) => ({ ...ca, [monthStr]: total.toFixed(2) }));
+      return { ...prev, [monthStr]: updated };
+    });
+  }
 
   // Initialize form from transaction
   useEffect(() => {
@@ -62,19 +128,37 @@ export default function TransactionEditPanel({
       const months = regularAllocs.map((a) => a.month);
       setSelectedMonths(months);
 
-      // Check if amounts are custom (not equal split)
       if (months.length > 0) {
         const equalAmount = Math.abs(transaction.amount) / transaction.monthAllocations.length;
+        const hasExtraChargeAllocs = regularAllocs.some((a) => a.extraChargeId);
         const isCustom = regularAllocs.some(
           (a) => Math.abs(a.amount - equalAmount) > 0.01
-        ) || !!prevDebtAlloc;
+        ) || !!prevDebtAlloc || hasExtraChargeAllocs;
+
         if (isCustom) {
           setShowCustom(true);
           const amounts: Record<string, string> = {};
+          const catAmounts: Record<string, MonthCategoryAmounts> = {};
+
+          for (const alloc of regularAllocs) {
+            if (!catAmounts[alloc.month]) {
+              catAmounts[alloc.month] = { baseFee: '0', extras: {} };
+            }
+            if (alloc.extraChargeId) {
+              catAmounts[alloc.month].extras[alloc.extraChargeId] =
+                (parseFloat(catAmounts[alloc.month].extras[alloc.extraChargeId] || '0') + alloc.amount).toFixed(2);
+            } else {
+              catAmounts[alloc.month].baseFee =
+                (parseFloat(catAmounts[alloc.month].baseFee) + alloc.amount).toFixed(2);
+            }
+          }
+
           regularAllocs.forEach((a) => {
-            amounts[a.month] = a.amount.toFixed(2);
+            amounts[a.month] = ((parseFloat(amounts[a.month] || '0')) + a.amount).toFixed(2);
           });
+
           setCustomAmounts(amounts);
+          setCategoryAmounts(catAmounts);
         }
 
         setCalendarYear(parseInt(months[0].split('-')[0]));
@@ -82,7 +166,7 @@ export default function TransactionEditPanel({
     }
   }, [transaction]);
 
-  // Fetch owner's remaining previous debt when unit changes
+  // Fetch extra charges and outstanding extras when unit changes
   useEffect(() => {
     if (type === 'unit' && unitId) {
       fetch(`/api/units/${unitId}/debt`)
@@ -90,13 +174,52 @@ export default function TransactionEditPanel({
         .then((data) => {
           if (data) {
             setOwnerRemainingPrevDebt(data.previousDebtRemaining || 0);
+            setOutstandingExtras(data.outstandingExtras || []);
           }
         })
-        .catch(() => setOwnerRemainingPrevDebt(0));
+        .catch(() => {
+          setOwnerRemainingPrevDebt(0);
+          setOutstandingExtras([]);
+        });
+
+      fetch(`/api/extra-charges?unitId=${unitId}`)
+        .then((res) => res.ok ? res.json() : [])
+        .then((data) => setExtraCharges(data))
+        .catch(() => setExtraCharges([]));
     } else {
       setOwnerRemainingPrevDebt(0);
+      setOutstandingExtras([]);
+      setExtraCharges([]);
     }
   }, [unitId, type]);
+
+  // Auto-enable custom mode and fill category amounts when extras data arrives
+  useEffect(() => {
+    if (!hasExtras || selectedMonths.length === 0) return;
+
+    if (!showCustom) {
+      setShowCustom(true);
+    }
+
+    const catAmounts: Record<string, MonthCategoryAmounts> = { ...categoryAmounts };
+    const amounts: Record<string, string> = { ...customAmounts };
+    let changed = false;
+
+    selectedMonths.forEach((m) => {
+      if (!catAmounts[m]) {
+        catAmounts[m] = buildDefaultCategoryAmounts(m);
+        const total = parseFloat(catAmounts[m].baseFee || '0') +
+          Object.values(catAmounts[m].extras).reduce((s, v) => s + parseFloat(v || '0'), 0);
+        amounts[m] = total.toFixed(2);
+        changed = true;
+      }
+    });
+
+    if (changed) {
+      setCategoryAmounts(catAmounts);
+      setCustomAmounts(amounts);
+    }
+  }, [hasExtras, selectedMonths.length]);
 
   // Fetch monthly status when entity or year changes
   useEffect(() => {
@@ -126,19 +249,32 @@ export default function TransactionEditPanel({
         ? prev.filter((m) => m !== month)
         : [...prev, month].sort();
 
-      // Update custom amounts
-      if (!prev.includes(month) && !customAmounts[month]) {
-        const equalAmount = Math.abs(transaction.amount) / (next.length || 1);
-        if (!showCustom) {
-          // Reset all to equal
-          const amounts: Record<string, string> = {};
-          next.forEach((m) => { amounts[m] = equalAmount.toFixed(2); });
-          setCustomAmounts(amounts);
-        } else {
-          setCustomAmounts((ca) => ({ ...ca, [month]: equalAmount.toFixed(2) }));
+      if (!prev.includes(month)) {
+        // Adding month
+        if (hasExtras && showCustom) {
+          const defaults = buildDefaultCategoryAmounts(month);
+          setCategoryAmounts((ca) => ({ ...ca, [month]: defaults }));
+          const total = parseFloat(defaults.baseFee || '0') +
+            Object.values(defaults.extras).reduce((s, v) => s + parseFloat(v || '0'), 0);
+          setCustomAmounts((ca) => ({ ...ca, [month]: total.toFixed(2) }));
+        } else if (!customAmounts[month]) {
+          const equalAmount = Math.abs(transaction.amount) / (next.length || 1);
+          if (!showCustom) {
+            const amounts: Record<string, string> = {};
+            next.forEach((m) => { amounts[m] = equalAmount.toFixed(2); });
+            setCustomAmounts(amounts);
+          } else {
+            setCustomAmounts((ca) => ({ ...ca, [month]: equalAmount.toFixed(2) }));
+          }
         }
-      } else if (prev.includes(month)) {
+      } else {
+        // Removing month
         setCustomAmounts((ca) => {
+          const copy = { ...ca };
+          delete copy[month];
+          return copy;
+        });
+        setCategoryAmounts((ca) => {
           const copy = { ...ca };
           delete copy[month];
           return copy;
@@ -148,12 +284,56 @@ export default function TransactionEditPanel({
     });
   }
 
-  function getAllocations(): { month: string; amount: number }[] {
-    const allocs: { month: string; amount: number }[] = [];
+  function enableCustomMode() {
+    setShowCustom(true);
+    if (hasExtras) {
+      const catAmounts: Record<string, MonthCategoryAmounts> = {};
+      const amounts: Record<string, string> = {};
+      selectedMonths.forEach((m) => {
+        if (categoryAmounts[m]) {
+          catAmounts[m] = categoryAmounts[m];
+        } else {
+          catAmounts[m] = buildDefaultCategoryAmounts(m);
+        }
+        const total = parseFloat(catAmounts[m].baseFee || '0') +
+          Object.values(catAmounts[m].extras).reduce((s, v) => s + parseFloat(v || '0'), 0);
+        amounts[m] = total.toFixed(2);
+      });
+      setCategoryAmounts(catAmounts);
+      setCustomAmounts(amounts);
+    } else {
+      const perMonth = Math.abs(transaction.amount) / (selectedMonths.length || 1);
+      const amounts: Record<string, string> = {};
+      selectedMonths.forEach((m) => { amounts[m] = perMonth.toFixed(2); });
+      setCustomAmounts(amounts);
+    }
+  }
+
+  function getAllocations(): { month: string; amount: number; extraChargeId?: string | null }[] {
+    const allocs: { month: string; amount: number; extraChargeId?: string | null }[] = [];
     const txAmount = Math.abs(transaction.amount);
 
     if (selectedMonths.length > 0) {
-      if (showCustom) {
+      if (showCustom && hasExtras) {
+        // Category mode: emit separate allocations per category per month
+        selectedMonths.forEach((month) => {
+          const cat = categoryAmounts[month];
+          if (cat) {
+            const baseFeeAmt = parseFloat(cat.baseFee || '0');
+            if (baseFeeAmt > 0) {
+              allocs.push({ month, amount: baseFeeAmt, extraChargeId: null });
+            }
+            for (const [ecId, amtStr] of Object.entries(cat.extras)) {
+              const amt = parseFloat(amtStr || '0');
+              if (amt > 0) {
+                allocs.push({ month, amount: amt, extraChargeId: ecId });
+              }
+            }
+          } else {
+            allocs.push({ month, amount: parseFloat(customAmounts[month] || '0'), extraChargeId: null });
+          }
+        });
+      } else if (showCustom) {
         selectedMonths.forEach((month) => {
           allocs.push({ month, amount: parseFloat(customAmounts[month] || '0') });
         });
@@ -296,6 +476,7 @@ export default function TransactionEditPanel({
               setCreditorId('');
               setSelectedMonths([]);
               setCustomAmounts({});
+              setCategoryAmounts({});
             }}
           >
             <option value="unit">Fração</option>
@@ -314,6 +495,7 @@ export default function TransactionEditPanel({
                 setUnitId(e.target.value);
                 setSelectedMonths([]);
                 setCustomAmounts({});
+                setCategoryAmounts({});
               }}
             >
               <option value="">-- Selecionar --</option>
@@ -336,6 +518,7 @@ export default function TransactionEditPanel({
                 setCreditorId(e.target.value);
                 setSelectedMonths([]);
                 setCustomAmounts({});
+                setCategoryAmounts({});
               }}
             >
               <option value="">-- Selecionar --</option>
@@ -345,6 +528,21 @@ export default function TransactionEditPanel({
                 </option>
               ))}
             </select>
+          </div>
+        )}
+
+        {/* Outstanding extras info */}
+        {type === 'unit' && unitId && outstandingExtras.some((oe) => oe.remaining > 0) && (
+          <div className="mb-3 p-3 bg-orange-50 rounded-lg border border-orange-100">
+            <p className="text-xs font-semibold text-orange-700 mb-2">Extras com dívida pendente:</p>
+            <div className="space-y-1 text-sm">
+              {outstandingExtras.filter((oe) => oe.remaining > 0).map((oe) => (
+                <div key={oe.id} className="flex justify-between">
+                  <span className="text-gray-600">{oe.description}</span>
+                  <span className="font-medium text-orange-600">{oe.remaining.toFixed(2)} € restante</span>
+                </div>
+              ))}
+            </div>
           </div>
         )}
 
@@ -408,13 +606,10 @@ export default function TransactionEditPanel({
                     type="button"
                     className={`text-xs px-2 py-1 rounded ${showCustom ? 'bg-primary-100 text-primary-700' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
                     onClick={() => {
-                      setShowCustom(!showCustom);
                       if (!showCustom) {
-                        // Initialize custom amounts with equal split
-                        const perMonth = transAmount / selectedMonths.length;
-                        const amounts: Record<string, string> = {};
-                        selectedMonths.forEach((m) => { amounts[m] = perMonth.toFixed(2); });
-                        setCustomAmounts(amounts);
+                        enableCustomMode();
+                      } else {
+                        setShowCustom(false);
                       }
                     }}
                   >
@@ -424,20 +619,59 @@ export default function TransactionEditPanel({
 
                 {/* Custom amount inputs */}
                 {showCustom && (
-                  <div className="space-y-1 p-2 bg-gray-50 rounded-lg">
-                    {selectedMonths.map((month) => (
-                      <div key={month} className="flex items-center gap-2">
-                        <span className="text-xs text-gray-500 w-16">{month}</span>
-                        <input
-                          type="number"
-                          step="0.01"
-                          className="input text-sm py-1 flex-1"
-                          value={customAmounts[month] || ''}
-                          onChange={(e) => setCustomAmounts({ ...customAmounts, [month]: e.target.value })}
-                        />
-                        <span className="text-xs text-gray-400">EUR</span>
-                      </div>
-                    ))}
+                  <div className="space-y-2 p-2 bg-gray-50 rounded-lg">
+                    {selectedMonths.map((month) => {
+                      const cat = categoryAmounts[month];
+                      if (hasExtras && allAllocatableExtras.length > 0) {
+                        // Category mode: show base fee + each extra
+                        const currentCat = cat || { baseFee: customAmounts[month] || '0', extras: {} };
+                        return (
+                          <div key={month} className="space-y-1">
+                            <div className="text-xs font-semibold text-gray-600 mb-1">{month}</div>
+                            <div className="flex items-center gap-2 pl-2">
+                              <span className="text-xs text-gray-500 w-20 truncate" title="Quota mensal">Quota</span>
+                              <input
+                                type="number"
+                                step="0.01"
+                                className="input text-sm py-1 flex-1"
+                                value={currentCat.baseFee}
+                                onChange={(e) => handleCategoryAmountChange(month, 'baseFee', e.target.value)}
+                              />
+                              <span className="text-xs text-gray-400">€</span>
+                            </div>
+                            {allAllocatableExtras.map((extra) => (
+                              <div key={extra.id} className="flex items-center gap-2 pl-2">
+                                <span className="text-xs text-gray-500 w-20 truncate" title={extra.description}>
+                                  {extra.description.length > 10 ? extra.description.slice(0, 10) + '.' : extra.description}
+                                </span>
+                                <input
+                                  type="number"
+                                  step="0.01"
+                                  className="input text-sm py-1 flex-1"
+                                  value={currentCat.extras[extra.id] || ''}
+                                  onChange={(e) => handleCategoryAmountChange(month, extra.id, e.target.value, true)}
+                                />
+                                <span className="text-xs text-gray-400">€</span>
+                              </div>
+                            ))}
+                          </div>
+                        );
+                      }
+                      // Flat mode (no extras)
+                      return (
+                        <div key={month} className="flex items-center gap-2">
+                          <span className="text-xs text-gray-500 w-16">{month}</span>
+                          <input
+                            type="number"
+                            step="0.01"
+                            className="input text-sm py-1 flex-1"
+                            value={customAmounts[month] || ''}
+                            onChange={(e) => setCustomAmounts({ ...customAmounts, [month]: e.target.value })}
+                          />
+                          <span className="text-xs text-gray-400">EUR</span>
+                        </div>
+                      );
+                    })}
                     <div className={`text-xs mt-1 ${isOverAllocated ? 'text-red-500' : 'text-gray-500'}`}>
                       Total: {allocationTotal.toFixed(2)} / {transAmount.toFixed(2)} EUR
                       {isOverAllocated && ' (excede o valor!)'}
