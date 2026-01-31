@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { prisma } from '@/lib/prisma';
 import { authOptions } from '@/lib/auth';
-import { getFeeForMonth } from '@/lib/feeHistory';
+import { getTotalFeeForMonth, FeeHistoryRecord, ExtraChargeRecord, countMonthsInRange } from '@/lib/feeHistory';
 import { isMonthInOwnerPeriod } from '@/lib/ownerPeriod';
 
 export async function GET(
@@ -43,6 +43,13 @@ export async function GET(
         ownerEndMonth = owner.endMonth;
       }
     }
+
+    // Get extra charges (global + unit-specific)
+    const extraCharges = await prisma.extraCharge.findMany({
+      where: {
+        OR: [{ unitId: null }, { unitId: params.id }],
+      },
+    });
 
     const currentYear = new Date().getFullYear();
 
@@ -98,22 +105,32 @@ export async function GET(
 
     let pastYearsDebt = 0;
 
-    for (const year of Array.from(years)) {
+    // Sort years so surplus carries forward correctly
+    const sortedYears = Array.from(years).sort((a, b) => a - b);
+
+    for (const year of sortedYears) {
       let expectedForYear = 0;
       for (let m = 1; m <= 12; m++) {
         const monthStr = `${year}-${m.toString().padStart(2, '0')}`;
         if (ownerId && !isMonthInOwnerPeriod(monthStr, ownerStartMonth, ownerEndMonth)) {
           continue;
         }
-        expectedForYear += getFeeForMonth(unit.feeHistory, monthStr, unit.monthlyFee);
+        const feeData = getTotalFeeForMonth(
+          unit.feeHistory as FeeHistoryRecord[],
+          extraCharges as ExtraChargeRecord[],
+          monthStr,
+          unit.monthlyFee,
+          params.id
+        );
+        expectedForYear += feeData.total;
       }
 
       const paidForYear = filteredAllocations
         .filter((a) => a.month.startsWith(`${year}-`))
         .reduce((sum, a) => sum + a.amount, 0);
 
-      const yearDebt = Math.max(0, expectedForYear - paidForYear);
-      pastYearsDebt += yearDebt;
+      // Surplus from overpayment reduces previously accumulated debt
+      pastYearsDebt = Math.max(0, pastYearsDebt + expectedForYear - paidForYear);
     }
 
     // Calculate previousDebtRemaining
@@ -129,7 +146,38 @@ export async function GET(
     const previousDebtPaid = prevDebtAllocations.reduce((sum, a) => sum + a.amount, 0);
     const previousDebtRemaining = Math.max(0, previousDebt - previousDebtPaid);
 
-    return NextResponse.json({ pastYearsDebt, previousDebtRemaining });
+    // Compute outstanding extras summary
+    const outstandingExtras: {
+      id: string;
+      description: string;
+      totalExpected: number;
+      totalPaid: number;
+      remaining: number;
+    }[] = [];
+
+    for (const charge of extraCharges) {
+      const totalExpected = charge.amount * countMonthsInRange(charge.effectiveFrom, charge.effectiveTo);
+
+      const paidResult = await prisma.transactionMonth.aggregate({
+        where: {
+          extraChargeId: charge.id,
+          transaction: { unitId: params.id },
+        },
+        _sum: { amount: true },
+      });
+      const totalPaid = paidResult._sum.amount || 0;
+      const remaining = Math.max(0, totalExpected - totalPaid);
+
+      outstandingExtras.push({
+        id: charge.id,
+        description: charge.description,
+        totalExpected,
+        totalPaid,
+        remaining,
+      });
+    }
+
+    return NextResponse.json({ pastYearsDebt, previousDebtRemaining, outstandingExtras });
   } catch (error) {
     console.error('Error calculating debt:', error);
     return NextResponse.json(

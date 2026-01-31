@@ -67,6 +67,9 @@ export default function UnitDetailPage() {
   const [paymentBreakdown, setPaymentBreakdown] = useState<Record<string, MonthPaymentBreakdown>>({});
   const [expectedBreakdown, setExpectedBreakdown] = useState<Record<string, MonthExpectedBreakdown>>({});
 
+  // Extras summary from debt API
+  const [extrasSummary, setExtrasSummary] = useState<{ id: string; description: string; totalExpected: number; totalPaid: number; remaining: number }[]>([]);
+
   useEffect(() => {
     fetchUnit();
     fetchPaymentHistory();
@@ -146,6 +149,7 @@ export default function UnitDetailPage() {
         const data = await res.json();
         setPastYearsDebt(data.pastYearsDebt);
         setPreviousDebtRemaining(data.previousDebtRemaining || 0);
+        setExtrasSummary(data.outstandingExtras || []);
       }
     } catch (error) {
       console.error('Error fetching past years debt:', error);
@@ -812,6 +816,7 @@ export default function UnitDetailPage() {
                   .reduce((sum, [, v]) => sum + v, 0);
 
                 return (
+                  <>
                   <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
                     <div className="card">
                       <h3 className="text-sm text-gray-500 mb-1">Quota Mensal</h3>
@@ -849,6 +854,31 @@ export default function UnitDetailPage() {
                       </button>
                     </div>
                   </div>
+                  {extrasSummary.length > 0 && (
+                    <div className={`grid grid-cols-1 ${extrasSummary.length === 1 ? 'md:grid-cols-1 max-w-xs' : extrasSummary.length === 2 ? 'md:grid-cols-2 max-w-lg' : 'md:grid-cols-3'} gap-4 mb-6`}>
+                      {extrasSummary.map((extra) => {
+                        const isFullyPaid = extra.remaining === 0;
+                        return (
+                          <div
+                            key={extra.id}
+                            className={`card border-l-4 ${isFullyPaid ? 'border-l-green-500 bg-green-50' : 'border-l-yellow-500 bg-yellow-50'}`}
+                          >
+                            <h3 className="text-sm text-gray-600 mb-1 capitalize">{extra.description}</h3>
+                            {isFullyPaid ? (
+                              <p className="text-lg font-semibold text-green-600">
+                                {extra.totalPaid.toFixed(2)}€ - Pago
+                              </p>
+                            ) : (
+                              <p className="text-lg font-semibold text-yellow-700">
+                                {extra.totalPaid.toFixed(2)}€ / {extra.totalExpected.toFixed(2)}€ - Em falta
+                              </p>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                  </>
                 );
               })()}
 
