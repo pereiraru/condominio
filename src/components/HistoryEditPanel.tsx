@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import MonthCalendar from '@/components/MonthCalendar';
 import { Transaction, MonthPaymentStatus, MonthExpectedBreakdown } from '@/lib/types';
 
@@ -47,7 +47,20 @@ export default function HistoryEditPanel({
   const [ownerRemainingPrevDebt, setOwnerRemainingPrevDebt] = useState(0);
   const [monthExpected, setMonthExpected] = useState<MonthExpected | null>(null);
 
-  const hasExtras = expectedBreakdown && expectedBreakdown.extras.length > 0;
+  // Combine prop + API data: prefer API (fresh) over prop (may be stale)
+  const effectiveExpected = useMemo<MonthExpected | null>(() => {
+    if (monthExpected) return monthExpected;
+    if (expectedBreakdown) {
+      return {
+        baseFee: expectedBreakdown.baseFee,
+        extras: expectedBreakdown.extras,
+        total: expectedBreakdown.baseFee + expectedBreakdown.extras.reduce((s, e) => s + e.amount, 0),
+      };
+    }
+    return null;
+  }, [monthExpected, expectedBreakdown]);
+
+  const hasExtras = !!(effectiveExpected && effectiveExpected.extras && effectiveExpected.extras.length > 0);
 
   useEffect(() => {
     loadData();
@@ -58,6 +71,28 @@ export default function HistoryEditPanel({
       fetchMonthStatus(calendarYear);
     }
   }, [calendarYear]);
+
+  // When extras data arrives after initial load, re-initialize category amounts
+  // if we're already in custom mode but don't have category data yet
+  useEffect(() => {
+    if (hasExtras && showCustom && selectedMonths.length > 0) {
+      const needsInit = selectedMonths.some((m) => !categoryAmounts[m]);
+      if (needsInit) {
+        const catAmounts: Record<string, MonthCategoryAmounts> = { ...categoryAmounts };
+        const amounts: Record<string, string> = { ...customAmounts };
+        selectedMonths.forEach((m) => {
+          if (!catAmounts[m]) {
+            catAmounts[m] = buildDefaultCategoryAmountsFromExpected(m);
+            const total = parseFloat(catAmounts[m].baseFee || '0') +
+              Object.values(catAmounts[m].extras).reduce((s, v) => s + parseFloat(v || '0'), 0);
+            amounts[m] = total.toFixed(2);
+          }
+        });
+        setCategoryAmounts(catAmounts);
+        setCustomAmounts(amounts);
+      }
+    }
+  }, [hasExtras, showCustom, selectedMonths]);
 
   async function loadData() {
     // Fetch owner's remaining previous debt
@@ -80,7 +115,7 @@ export default function HistoryEditPanel({
           setMonthExpected(data.expected);
         }
         if (data.transactions.length === 1) {
-          selectTransaction(data.transactions[0]);
+          selectTransaction(data.transactions[0], data.expected);
         }
       }
     } catch (error) {
@@ -102,8 +137,13 @@ export default function HistoryEditPanel({
     }
   }
 
-  function selectTransaction(tx: Transaction) {
+  function selectTransaction(tx: Transaction, apiExpected?: MonthExpected | null) {
     setSelectedTx(tx);
+
+    // Use the freshest extras info we have
+    const extrasInfo = apiExpected || effectiveExpected;
+    const extrasExist = !!(extrasInfo && extrasInfo.extras && extrasInfo.extras.length > 0);
+
     if (tx.monthAllocations && tx.monthAllocations.length > 0) {
       const prevDebtAlloc = tx.monthAllocations.find((a) => a.month === 'PREV-DEBT');
       const regularAllocs = tx.monthAllocations.filter((a) => a.month !== 'PREV-DEBT');
@@ -124,12 +164,11 @@ export default function HistoryEditPanel({
         const hasExtraChargeAllocs = regularAllocs.some((a) => a.extraChargeId);
         const isCustom = regularAllocs.some(
           (a) => Math.abs(a.amount - equalAmount) > 0.01
-        ) || !!prevDebtAlloc || hasExtraChargeAllocs;
+        ) || !!prevDebtAlloc || hasExtraChargeAllocs || extrasExist;
 
         if (isCustom) {
           setShowCustom(true);
           const amounts: Record<string, string> = {};
-          // Build category amounts from existing allocations
           const catAmounts: Record<string, MonthCategoryAmounts> = {};
 
           for (const alloc of regularAllocs) {
@@ -145,7 +184,7 @@ export default function HistoryEditPanel({
             }
           }
 
-          // Also build flat amounts for non-breakdown mode
+          // Build flat amounts
           regularAllocs.forEach((a) => {
             amounts[a.month] = ((parseFloat(amounts[a.month] || '0')) + a.amount).toFixed(2);
           });
@@ -169,15 +208,16 @@ export default function HistoryEditPanel({
     }
   }
 
-  function buildDefaultCategoryAmounts(monthStr: string): MonthCategoryAmounts {
-    if (!expectedBreakdown) {
+  function buildDefaultCategoryAmountsFromExpected(monthStr: string): MonthCategoryAmounts {
+    const expected = effectiveExpected;
+    if (!expected || !expected.extras || expected.extras.length === 0) {
       return { baseFee: '0', extras: {} };
     }
     const extras: Record<string, string> = {};
-    for (const e of expectedBreakdown.extras) {
+    for (const e of expected.extras) {
       extras[e.id] = e.amount.toFixed(2);
     }
-    return { baseFee: expectedBreakdown.baseFee.toFixed(2), extras };
+    return { baseFee: expected.baseFee.toFixed(2), extras };
   }
 
   function handleToggleMonth(monthStr: string) {
@@ -194,11 +234,10 @@ export default function HistoryEditPanel({
         if (hasExtras && showCustom) {
           setCategoryAmounts((ca) => ({
             ...ca,
-            [monthStr]: buildDefaultCategoryAmounts(monthStr),
+            [monthStr]: buildDefaultCategoryAmountsFromExpected(monthStr),
           }));
-          // Also update flat amounts
-          const total = expectedBreakdown
-            ? expectedBreakdown.baseFee + expectedBreakdown.extras.reduce((s, e) => s + e.amount, 0)
+          const total = effectiveExpected
+            ? effectiveExpected.baseFee + effectiveExpected.extras.reduce((s, e) => s + e.amount, 0)
             : 0;
           setCustomAmounts((ca) => ({ ...ca, [monthStr]: total.toFixed(2) }));
         } else if (!customAmounts[monthStr]) {
@@ -328,11 +367,10 @@ export default function HistoryEditPanel({
       const catAmounts: Record<string, MonthCategoryAmounts> = {};
       const amounts: Record<string, string> = {};
       selectedMonths.forEach((m) => {
-        // Check if we already have category amounts for this month
         if (categoryAmounts[m]) {
           catAmounts[m] = categoryAmounts[m];
         } else {
-          catAmounts[m] = buildDefaultCategoryAmounts(m);
+          catAmounts[m] = buildDefaultCategoryAmountsFromExpected(m);
         }
         const total = parseFloat(catAmounts[m].baseFee || '0') +
           Object.values(catAmounts[m].extras).reduce((s, v) => s + parseFloat(v || '0'), 0);
@@ -349,12 +387,6 @@ export default function HistoryEditPanel({
       }
     }
   }
-
-  const effectiveExpected = monthExpected || (expectedBreakdown ? {
-    baseFee: expectedBreakdown.baseFee,
-    extras: expectedBreakdown.extras,
-    total: expectedBreakdown.baseFee + expectedBreakdown.extras.reduce((s, e) => s + e.amount, 0),
-  } : null);
 
   return (
     <div className="w-80 shrink-0">
@@ -518,8 +550,9 @@ export default function HistoryEditPanel({
                   <div className="space-y-2 p-2 bg-gray-50 rounded-lg">
                     {selectedMonths.map((m) => {
                       const cat = categoryAmounts[m];
-                      if (hasExtras && cat) {
+                      if (hasExtras && effectiveExpected) {
                         // Category mode: show base fee + each extra
+                        const currentCat = cat || { baseFee: customAmounts[m] || '0', extras: {} };
                         return (
                           <div key={m} className="space-y-1">
                             <div className="text-xs font-semibold text-gray-600 mb-1">{m}</div>
@@ -529,12 +562,12 @@ export default function HistoryEditPanel({
                                 type="number"
                                 step="0.01"
                                 className="input text-sm py-1 flex-1"
-                                value={cat.baseFee}
+                                value={currentCat.baseFee}
                                 onChange={(e) => handleCategoryAmountChange(m, 'baseFee', e.target.value)}
                               />
                               <span className="text-xs text-gray-400">€</span>
                             </div>
-                            {expectedBreakdown!.extras.map((extra) => (
+                            {effectiveExpected.extras.map((extra) => (
                               <div key={extra.id} className="flex items-center gap-2 pl-2">
                                 <span className="text-xs text-gray-500 w-20 truncate" title={extra.description}>
                                   {extra.description.length > 10 ? extra.description.slice(0, 10) + '.' : extra.description}
@@ -543,7 +576,7 @@ export default function HistoryEditPanel({
                                   type="number"
                                   step="0.01"
                                   className="input text-sm py-1 flex-1"
-                                  value={cat.extras[extra.id] || ''}
+                                  value={currentCat.extras[extra.id] || ''}
                                   onChange={(e) => handleCategoryAmountChange(m, extra.id, e.target.value, true)}
                                 />
                                 <span className="text-xs text-gray-400">€</span>
