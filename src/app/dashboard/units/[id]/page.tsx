@@ -932,15 +932,30 @@ export default function UnitDetailPage() {
                                   onClick={() => isAdmin && handleHistoryCellClick(monthStr)}
                                   title={expected > 0 ? `Esperado: ${expected.toFixed(2)}€` : ''}
                                 >
-                                  {eb && eb.extras.length > 0 ? (
-                                    // Two-row display: base fee + extras
-                                    <div className="flex flex-col items-center gap-0.5">
-                                      {(() => {
-                                        const basePaid = pb ? pb.baseFee : 0;
-                                        const baseExpected = eb.baseFee;
-                                        const baseOk = basePaid >= baseExpected && baseExpected > 0;
-                                        const basePartial = basePaid > 0 && basePaid < baseExpected;
-                                        return (
+                                  {(() => {
+                                    // Merge extras from expected (eb) and paid (pb) breakdowns
+                                    const mergedExtras: { id: string; description: string; expectedAmount: number; paidAmount: number }[] = [];
+                                    if (eb?.extras) {
+                                      for (const extra of eb.extras) {
+                                        const paidEntry = pb?.extras.find((e) => e.extraChargeId === extra.id);
+                                        mergedExtras.push({ id: extra.id, description: extra.description, expectedAmount: extra.amount, paidAmount: paidEntry?.paid || 0 });
+                                      }
+                                    }
+                                    if (pb?.extras) {
+                                      for (const paidExtra of pb.extras) {
+                                        if (!mergedExtras.some((e) => e.id === paidExtra.extraChargeId)) {
+                                          mergedExtras.push({ id: paidExtra.extraChargeId, description: paidExtra.description, expectedAmount: 0, paidAmount: paidExtra.paid });
+                                        }
+                                      }
+                                    }
+
+                                    if (mergedExtras.length > 0) {
+                                      const basePaid = pb ? pb.baseFee : 0;
+                                      const baseExpected = eb ? eb.baseFee : expected;
+                                      const baseOk = basePaid >= baseExpected && baseExpected > 0;
+                                      const basePartial = basePaid > 0 && basePaid < baseExpected;
+                                      return (
+                                        <div className="flex flex-col items-center gap-0.5">
                                           <span className={`text-xs font-medium ${
                                             basePaid > 0
                                               ? baseOk ? 'text-green-700' : basePartial ? 'text-yellow-700' : 'text-red-400'
@@ -950,34 +965,33 @@ export default function UnitDetailPage() {
                                               ? (Number.isInteger(basePaid) ? basePaid : basePaid.toFixed(2))
                                               : baseExpected > 0 ? baseExpected.toFixed(0) : '-'}
                                           </span>
-                                        );
-                                      })()}
-                                      {eb.extras.map((extra) => {
-                                        const extraPaidEntry = pb?.extras.find((e) => e.extraChargeId === extra.id);
-                                        const extraPaid = extraPaidEntry?.paid || 0;
-                                        const extraOk = extraPaid >= extra.amount && extra.amount > 0;
-                                        const extraPartial = extraPaid > 0 && extraPaid < extra.amount;
-                                        const abbrev = extra.description.length > 5
-                                          ? extra.description.slice(0, 5) + '.'
-                                          : extra.description;
-                                        return (
-                                          <span
-                                            key={extra.id}
-                                            className={`text-[10px] leading-tight ${
-                                              extraPaid > 0
-                                                ? extraOk ? 'text-green-600' : extraPartial ? 'text-yellow-600' : 'text-red-400'
-                                                : extra.amount > 0 ? 'text-red-300' : 'text-gray-300'
-                                            }`}
-                                            title={`${extra.description}: ${extraPaid > 0 ? extraPaid.toFixed(2) : extra.amount.toFixed(2)}€`}
-                                          >
-                                            {extraPaid > 0
-                                              ? `${Number.isInteger(extraPaid) ? extraPaid : extraPaid.toFixed(0)} (${abbrev})`
-                                              : `${extra.amount.toFixed(0)} (${abbrev})`}
-                                          </span>
-                                        );
-                                      })}
-                                    </div>
-                                  ) : paid > 0 ? (
+                                          {mergedExtras.map((extra) => {
+                                            const abbrev = extra.description.length > 5
+                                              ? extra.description.slice(0, 5) + '.'
+                                              : extra.description;
+                                            const extraOk = extra.paidAmount >= extra.expectedAmount && extra.expectedAmount > 0;
+                                            const extraPartial = extra.paidAmount > 0 && extra.expectedAmount > 0 && extra.paidAmount < extra.expectedAmount;
+                                            return (
+                                              <span
+                                                key={extra.id}
+                                                className={`text-[10px] leading-tight ${
+                                                  extra.paidAmount > 0
+                                                    ? extraOk || extra.expectedAmount === 0 ? 'text-green-600' : extraPartial ? 'text-yellow-600' : 'text-red-400'
+                                                    : extra.expectedAmount > 0 ? 'text-red-300' : 'text-gray-300'
+                                                }`}
+                                                title={`${extra.description}: ${extra.paidAmount > 0 ? extra.paidAmount.toFixed(2) : extra.expectedAmount.toFixed(2)}€`}
+                                              >
+                                                {extra.paidAmount > 0
+                                                  ? `${Number.isInteger(extra.paidAmount) ? extra.paidAmount : extra.paidAmount.toFixed(0)} (${abbrev})`
+                                                  : `${extra.expectedAmount.toFixed(0)} (${abbrev})`}
+                                              </span>
+                                            );
+                                          })}
+                                        </div>
+                                      );
+                                    }
+                                    return null;
+                                  })() || (paid > 0 ? (
                                     <span className="text-sm font-medium">
                                       {Number.isInteger(paid) ? paid : paid.toFixed(2)}
                                     </span>
@@ -985,7 +999,7 @@ export default function UnitDetailPage() {
                                     <span className="text-sm text-red-300">{expected.toFixed(0)}</span>
                                   ) : (
                                     <span className="text-sm text-gray-300">-</span>
-                                  )}
+                                  ))}
                                 </td>
                               );
                             })}

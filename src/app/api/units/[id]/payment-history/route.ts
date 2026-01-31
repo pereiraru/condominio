@@ -212,7 +212,8 @@ export async function GET(
       }
 
       const yearDebt = Math.max(0, yearExpected - yearPaid);
-      accumulatedDebt += yearDebt;
+      // Surplus from overpayment reduces previously accumulated debt
+      accumulatedDebt = Math.max(0, accumulatedDebt + yearExpected - yearPaid);
 
       yearlyData.push({
         year,
