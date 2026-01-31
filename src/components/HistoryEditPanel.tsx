@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useMemo } from 'react';
 import MonthCalendar from '@/components/MonthCalendar';
-import { Transaction, MonthPaymentStatus, MonthExpectedBreakdown } from '@/lib/types';
+import { Transaction, MonthPaymentStatus, MonthExpectedBreakdown, OutstandingExtra } from '@/lib/types';
 
 interface HistoryEditPanelProps {
   unitId: string;
@@ -46,6 +46,7 @@ export default function HistoryEditPanel({
   const [prevDebtAmount, setPrevDebtAmount] = useState('');
   const [ownerRemainingPrevDebt, setOwnerRemainingPrevDebt] = useState(0);
   const [monthExpected, setMonthExpected] = useState<MonthExpected | null>(null);
+  const [outstandingExtras, setOutstandingExtras] = useState<OutstandingExtra[]>([]);
 
   // Combine prop + API data: prefer API (fresh) over prop (may be stale)
   const effectiveExpected = useMemo<MonthExpected | null>(() => {
@@ -60,7 +61,23 @@ export default function HistoryEditPanel({
     return null;
   }, [monthExpected, expectedBreakdown]);
 
-  const hasExtras = !!(effectiveExpected && effectiveExpected.extras && effectiveExpected.extras.length > 0);
+  const hasExtras = !!(
+    (effectiveExpected && effectiveExpected.extras && effectiveExpected.extras.length > 0) ||
+    outstandingExtras.length > 0
+  );
+
+  // Merge this month's expected extras with outstanding extras (those with remaining debt)
+  const allAllocatableExtras = useMemo(() => {
+    const expectedExtras = effectiveExpected?.extras || [];
+    const expectedIds = new Set(expectedExtras.map((e) => e.id));
+    const merged = [
+      ...expectedExtras,
+      ...outstandingExtras
+        .filter((oe) => !expectedIds.has(oe.id))
+        .map((oe) => ({ id: oe.id, description: oe.description, amount: 0 })),
+    ];
+    return merged;
+  }, [effectiveExpected, outstandingExtras]);
 
   useEffect(() => {
     loadData();
@@ -114,6 +131,9 @@ export default function HistoryEditPanel({
         if (data.expected) {
           setMonthExpected(data.expected);
         }
+        if (data.outstandingExtras) {
+          setOutstandingExtras(data.outstandingExtras);
+        }
         if (data.transactions.length === 1) {
           selectTransaction(data.transactions[0], data.expected);
         }
@@ -140,9 +160,12 @@ export default function HistoryEditPanel({
   function selectTransaction(tx: Transaction, apiExpected?: MonthExpected | null) {
     setSelectedTx(tx);
 
-    // Use the freshest extras info we have
+    // Use the freshest extras info we have (including outstanding extras with debt)
     const extrasInfo = apiExpected || effectiveExpected;
-    const extrasExist = !!(extrasInfo && extrasInfo.extras && extrasInfo.extras.length > 0);
+    const extrasExist = !!(
+      (extrasInfo && extrasInfo.extras && extrasInfo.extras.length > 0) ||
+      outstandingExtras.length > 0
+    );
 
     if (tx.monthAllocations && tx.monthAllocations.length > 0) {
       const prevDebtAlloc = tx.monthAllocations.find((a) => a.month === 'PREV-DEBT');
@@ -210,14 +233,16 @@ export default function HistoryEditPanel({
 
   function buildDefaultCategoryAmountsFromExpected(monthStr: string): MonthCategoryAmounts {
     const expected = effectiveExpected;
-    if (!expected || !expected.extras || expected.extras.length === 0) {
+    if (allAllocatableExtras.length === 0) {
       return { baseFee: '0', extras: {} };
     }
     const extras: Record<string, string> = {};
-    for (const e of expected.extras) {
-      extras[e.id] = e.amount.toFixed(2);
+    const expectedIds = new Set((expected?.extras || []).map((e) => e.id));
+    for (const e of allAllocatableExtras) {
+      // Extras in this month's expected range get their monthly amount; outstanding-only extras default to 0
+      extras[e.id] = expectedIds.has(e.id) ? e.amount.toFixed(2) : '0';
     }
-    return { baseFee: expected.baseFee.toFixed(2), extras };
+    return { baseFee: (expected?.baseFee || 0).toFixed(2), extras };
   }
 
   function handleToggleMonth(monthStr: string) {
@@ -232,13 +257,13 @@ export default function HistoryEditPanel({
       if (!prev.includes(monthStr)) {
         // Adding month
         if (hasExtras && showCustom) {
+          const defaults = buildDefaultCategoryAmountsFromExpected(monthStr);
           setCategoryAmounts((ca) => ({
             ...ca,
-            [monthStr]: buildDefaultCategoryAmountsFromExpected(monthStr),
+            [monthStr]: defaults,
           }));
-          const total = effectiveExpected
-            ? effectiveExpected.baseFee + effectiveExpected.extras.reduce((s, e) => s + e.amount, 0)
-            : 0;
+          const total = parseFloat(defaults.baseFee || '0') +
+            Object.values(defaults.extras).reduce((s, v) => s + parseFloat(v || '0'), 0);
           setCustomAmounts((ca) => ({ ...ca, [monthStr]: total.toFixed(2) }));
         } else if (!customAmounts[monthStr]) {
           const equalAmount = txAmount / (next.length || 1);
@@ -419,12 +444,18 @@ export default function HistoryEditPanel({
                 <span className="text-gray-600">Quota mensal</span>
                 <span className="font-medium">{effectiveExpected.baseFee.toFixed(2)} €</span>
               </div>
-              {effectiveExpected.extras.map((e) => (
-                <div key={e.id} className="flex justify-between">
-                  <span className="text-gray-600">{e.description}</span>
-                  <span className="font-medium">+{e.amount.toFixed(2)} €</span>
-                </div>
-              ))}
+              {effectiveExpected.extras.map((e) => {
+                const oe = outstandingExtras.find((o) => o.id === e.id);
+                return (
+                  <div key={e.id} className="flex justify-between">
+                    <span className="text-gray-600">{e.description}</span>
+                    <span className="font-medium">
+                      +{e.amount.toFixed(2)} €
+                      {oe && <span className="text-xs text-orange-600 ml-1">(restam {oe.remaining.toFixed(2)} €)</span>}
+                    </span>
+                  </div>
+                );
+              })}
               <div className="border-t border-blue-200 pt-1 flex justify-between font-semibold">
                 <span className="text-gray-700">Total</span>
                 <span>{effectiveExpected.total.toFixed(2)} €</span>
@@ -432,6 +463,26 @@ export default function HistoryEditPanel({
             </div>
           </div>
         )}
+
+        {/* Outstanding extras with remaining debt (not in this month's expected) */}
+        {(() => {
+          const expectedIds = new Set((effectiveExpected?.extras || []).map((e) => e.id));
+          const extraDebt = outstandingExtras.filter((oe) => !expectedIds.has(oe.id));
+          if (extraDebt.length === 0) return null;
+          return (
+            <div className="mb-4 p-3 bg-orange-50 rounded-lg border border-orange-100">
+              <p className="text-xs font-semibold text-orange-700 mb-2">Extras com dívida pendente:</p>
+              <div className="space-y-1 text-sm">
+                {extraDebt.map((oe) => (
+                  <div key={oe.id} className="flex justify-between">
+                    <span className="text-gray-600">{oe.description}</span>
+                    <span className="font-medium text-orange-600">{oe.remaining.toFixed(2)} € restante</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })()}
 
         {transactions.length === 0 ? (
           <p className="text-gray-400 text-sm">Nenhum pagamento alocado a este mês.</p>
@@ -550,8 +601,8 @@ export default function HistoryEditPanel({
                   <div className="space-y-2 p-2 bg-gray-50 rounded-lg">
                     {selectedMonths.map((m) => {
                       const cat = categoryAmounts[m];
-                      if (hasExtras && effectiveExpected) {
-                        // Category mode: show base fee + each extra
+                      if (hasExtras && allAllocatableExtras.length > 0) {
+                        // Category mode: show base fee + each extra (including outstanding)
                         const currentCat = cat || { baseFee: customAmounts[m] || '0', extras: {} };
                         return (
                           <div key={m} className="space-y-1">
@@ -567,7 +618,7 @@ export default function HistoryEditPanel({
                               />
                               <span className="text-xs text-gray-400">€</span>
                             </div>
-                            {effectiveExpected.extras.map((extra) => (
+                            {allAllocatableExtras.map((extra) => (
                               <div key={extra.id} className="flex items-center gap-2 pl-2">
                                 <span className="text-xs text-gray-500 w-20 truncate" title={extra.description}>
                                   {extra.description.length > 10 ? extra.description.slice(0, 10) + '.' : extra.description}

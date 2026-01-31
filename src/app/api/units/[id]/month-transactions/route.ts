@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { getTotalFeeForMonth, FeeHistoryRecord, ExtraChargeRecord } from '@/lib/feeHistory';
+import { getTotalFeeForMonth, countMonthsInRange, FeeHistoryRecord, ExtraChargeRecord } from '@/lib/feeHistory';
 
 export async function GET(
   request: NextRequest,
@@ -72,7 +72,43 @@ export async function GET(
       };
     }
 
-    return NextResponse.json({ transactions, expected });
+    // Compute outstanding balances for ALL extra charges applicable to this unit
+    const outstandingExtras: {
+      id: string;
+      description: string;
+      monthlyAmount: number;
+      totalExpected: number;
+      totalPaid: number;
+      remaining: number;
+    }[] = [];
+
+    for (const charge of extraCharges) {
+      const totalExpected = charge.amount * countMonthsInRange(charge.effectiveFrom, charge.effectiveTo);
+
+      // Sum all TransactionMonth amounts allocated to this extra charge for this unit
+      const paidResult = await prisma.transactionMonth.aggregate({
+        where: {
+          extraChargeId: charge.id,
+          transaction: { unitId: params.id },
+        },
+        _sum: { amount: true },
+      });
+      const totalPaid = paidResult._sum.amount || 0;
+      const remaining = Math.max(0, totalExpected - totalPaid);
+
+      if (remaining > 0) {
+        outstandingExtras.push({
+          id: charge.id,
+          description: charge.description,
+          monthlyAmount: charge.amount,
+          totalExpected,
+          totalPaid,
+          remaining,
+        });
+      }
+    }
+
+    return NextResponse.json({ transactions, expected, outstandingExtras });
   } catch (error) {
     console.error('Error fetching month transactions:', error);
     return NextResponse.json(

@@ -78,6 +78,22 @@ export function getExtraChargesForMonth(
 }
 
 /**
+ * Count how many months an extra charge spans (inclusive).
+ */
+export function countMonthsInRange(effectiveFrom: string, effectiveTo: string | null | undefined): number {
+  const [fromYear, fromMonth] = effectiveFrom.split('-').map(Number);
+  let toYear: number, toMonth: number;
+  if (effectiveTo) {
+    [toYear, toMonth] = effectiveTo.split('-').map(Number);
+  } else {
+    const now = new Date();
+    toYear = now.getFullYear();
+    toMonth = now.getMonth() + 1;
+  }
+  return (toYear - fromYear) * 12 + (toMonth - fromMonth) + 1;
+}
+
+/**
  * Calculate the total expected fee for a month (base fee + extra charges)
  */
 export function getTotalFeeForMonth(

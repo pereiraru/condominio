@@ -121,6 +121,15 @@ export interface ExtraCharge {
   effectiveTo?: string | null; // "YYYY-MM"
 }
 
+export interface OutstandingExtra {
+  id: string;
+  description: string;
+  monthlyAmount: number;
+  totalExpected: number;
+  totalPaid: number;
+  remaining: number;
+}
+
 export interface Document {
   id: string;
   name: string;
