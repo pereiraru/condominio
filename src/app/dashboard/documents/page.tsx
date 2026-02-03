@@ -189,7 +189,7 @@ export default function DocumentsPage() {
                       </div>
                     </div>
                     <a
-                      href={`/uploads/${doc.filename}`}
+                      href={`/api/documents/file?name=${encodeURIComponent(doc.filename)}`}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="btn-secondary"

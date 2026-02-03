@@ -204,7 +204,7 @@ export default function CreditorsPage() {
                       {creditor.attachments.map((att) => (
                         <a
                           key={att.id}
-                          href={`/uploads/attachments/${att.filename}`}
+                          href={`/api/documents/attachment?name=${encodeURIComponent(att.filename)}`}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="text-xs text-gray-600 hover:text-gray-900"
