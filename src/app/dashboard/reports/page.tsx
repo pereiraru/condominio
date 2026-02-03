@@ -19,6 +19,14 @@ interface DebtSummaryUnit {
   name: string;
   years: Record<number, { expected: number; paid: number; debt: number }>;
   totalDebt: number;
+  totalPaid: number;
+  totalExpected: number;
+}
+
+interface DebtExtraCharge {
+  id: string;
+  description: string;
+  yearlyTotals: Record<number, number>;
 }
 
 interface DebtSummaryData {
@@ -27,7 +35,11 @@ interface DebtSummaryData {
   years: number[];
   units: DebtSummaryUnit[];
   yearTotals: Record<number, { expected: number; paid: number; debt: number }>;
+  yearBaseFees: Record<number, number>;
+  extraCharges: DebtExtraCharge[];
   grandTotalDebt: number;
+  grandTotalPaid: number;
+  grandTotalExpected: number;
 }
 
 interface MonthTransaction {
@@ -73,7 +85,6 @@ export default function ReportsPage() {
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [resumoYear, setResumoYear] = useState<number | 'all'>(new Date().getFullYear());
   const [resumoSortAsc, setResumoSortAsc] = useState(false);
-  const [debtViewMode, setDebtViewMode] = useState<'debt' | 'expected' | 'paid'>('debt');
 
   // Side panel state
   const [panelOpen, setPanelOpen] = useState(false);
@@ -493,129 +504,154 @@ export default function ReportsPage() {
           <>
             {debtData && (
               <div className="space-y-6">
-                {/* Summary card */}
-                <div className="card">
-                  <h3 className="text-sm font-medium text-gray-500">Divida Total Acumulada</h3>
-                  <p className={`text-2xl font-bold ${debtData.grandTotalDebt > 0 ? 'text-red-600' : 'text-gray-400'}`}>
-                    {debtData.grandTotalDebt.toFixed(2)} EUR
-                  </p>
-                </div>
-
-                {/* View mode toggle */}
-                <div className="flex items-center gap-3">
-                  <span className="text-sm text-gray-500">Ver:</span>
-                  <div className="flex gap-1 bg-gray-100 p-1 rounded-lg">
-                    <button
-                      className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all ${
-                        debtViewMode === 'debt' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
-                      }`}
-                      onClick={() => setDebtViewMode('debt')}
-                    >
-                      Em divida
-                    </button>
-                    <button
-                      className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all ${
-                        debtViewMode === 'expected' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
-                      }`}
-                      onClick={() => setDebtViewMode('expected')}
-                    >
-                      Esperado
-                    </button>
-                    <button
-                      className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all ${
-                        debtViewMode === 'paid' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
-                      }`}
-                      onClick={() => setDebtViewMode('paid')}
-                    >
-                      Pago
-                    </button>
+                {/* Summary cards */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  <div className="card">
+                    <h3 className="text-sm font-medium text-gray-500">Total Esperado</h3>
+                    <p className="text-2xl font-bold text-gray-900">{debtData.grandTotalExpected.toFixed(2)} EUR</p>
+                  </div>
+                  <div className="card">
+                    <h3 className="text-sm font-medium text-gray-500">Total Pago</h3>
+                    <p className="text-2xl font-bold text-green-600">{debtData.grandTotalPaid.toFixed(2)} EUR</p>
+                  </div>
+                  <div className="card">
+                    <h3 className="text-sm font-medium text-gray-500">Divida Total</h3>
+                    <p className={`text-2xl font-bold ${debtData.grandTotalDebt > 0 ? 'text-red-600' : 'text-gray-400'}`}>
+                      {debtData.grandTotalDebt.toFixed(2)} EUR
+                    </p>
                   </div>
                 </div>
 
                 {/* Debt table */}
                 <div className="card">
-                  <h2 className="text-lg font-semibold text-gray-900 mb-4">
-                    {debtViewMode === 'debt' ? 'Divida por Ano' : debtViewMode === 'expected' ? 'Valor Esperado por Ano' : 'Valor Pago por Ano'}
-                  </h2>
+                  <h2 className="text-lg font-semibold text-gray-900 mb-4">Divida por Ano</h2>
                   <div className="overflow-x-auto">
                     <table className="w-full text-sm">
                       <thead>
-                        <tr className="text-left text-gray-500 border-b">
-                          <th className="pb-2 pr-4 font-medium">Fração</th>
+                        {/* Expected breakdown header rows */}
+                        <tr className="text-gray-400 text-xs">
+                          <th className="pb-1 pr-4 font-normal text-left">Esperado</th>
                           {debtData.years.map((year) => (
-                            <th key={year} className="pb-2 px-3 font-medium text-center min-w-[90px]">{year}</th>
+                            <th key={year} className="pb-1 px-3 font-semibold text-center text-gray-600">
+                              {debtData.yearTotals[year].expected.toFixed(0)}€
+                            </th>
                           ))}
-                          <th className="pb-2 pl-3 font-medium text-right">Total</th>
+                          <th className="pb-1 pl-3 font-semibold text-right text-gray-600">
+                            {debtData.grandTotalExpected.toFixed(0)}€
+                          </th>
+                        </tr>
+                        <tr className="text-gray-400 text-xs">
+                          <th className="pb-1 pr-4 font-normal text-left pl-4">Quotas</th>
+                          {debtData.years.map((year) => (
+                            <th key={year} className="pb-1 px-3 font-normal text-center">
+                              {debtData.yearBaseFees[year] > 0 ? `${debtData.yearBaseFees[year].toFixed(0)}€` : '-'}
+                            </th>
+                          ))}
+                          <th className="pb-1 pl-3 font-normal text-right">
+                            {debtData.years.reduce((sum, y) => sum + debtData.yearBaseFees[y], 0).toFixed(0)}€
+                          </th>
+                        </tr>
+                        {debtData.extraCharges.map((ec) => (
+                          <tr key={ec.id} className="text-gray-400 text-xs">
+                            <th className="pb-1 pr-4 font-normal text-left pl-4 truncate max-w-[200px]">{ec.description}</th>
+                            {debtData.years.map((year) => (
+                              <th key={year} className="pb-1 px-3 font-normal text-center">
+                                {ec.yearlyTotals[year] > 0 ? `${ec.yearlyTotals[year].toFixed(0)}€` : '-'}
+                              </th>
+                            ))}
+                            <th className="pb-1 pl-3 font-normal text-right">
+                              {debtData.years.reduce((sum, y) => sum + ec.yearlyTotals[y], 0).toFixed(0)}€
+                            </th>
+                          </tr>
+                        ))}
+                        {/* Main header */}
+                        <tr className="text-left text-gray-500 border-b border-t border-gray-200">
+                          <th className="py-2 pr-4 font-medium">Fração</th>
+                          {debtData.years.map((year) => (
+                            <th key={year} className="py-2 px-3 font-medium text-center min-w-[120px]">{year}</th>
+                          ))}
+                          <th className="py-2 pl-3 font-medium text-right min-w-[120px]">Total</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-100">
-                        {debtData.units.map((unit) => {
-                          const unitTotal = debtViewMode === 'debt'
-                            ? unit.totalDebt
-                            : debtData.years.reduce((sum, y) => sum + unit.years[y][debtViewMode], 0);
-                          return (
-                            <tr key={unit.id} className="hover:bg-gray-50">
-                              <td className="py-2 pr-4">
-                                <button
-                                  className="font-medium text-gray-900 hover:text-primary-600 hover:underline text-left"
-                                  onClick={() => router.push(`/dashboard/units/${unit.id}`)}
-                                >
-                                  {unit.code}
-                                </button>
-                                <span className="text-xs text-gray-400 ml-2">{unit.name}</span>
-                              </td>
-                              {debtData.years.map((year) => {
-                                const value = unit.years[year][debtViewMode];
-                                const cellColor = debtViewMode === 'debt'
-                                  ? value > 0 ? 'text-red-600 font-medium' : 'text-gray-300'
-                                  : debtViewMode === 'paid'
-                                    ? value > 0 ? 'text-green-600' : 'text-gray-300'
-                                    : 'text-gray-600';
+                        {debtData.units.map((unit) => (
+                          <tr key={unit.id} className="hover:bg-gray-50">
+                            <td className="py-2 pr-4">
+                              <button
+                                className="font-medium text-gray-900 hover:text-primary-600 hover:underline text-left"
+                                onClick={() => router.push(`/dashboard/units/${unit.id}`)}
+                              >
+                                {unit.code}
+                              </button>
+                              <span className="text-xs text-gray-400 ml-2">{unit.name}</span>
+                            </td>
+                            {debtData.years.map((year) => {
+                              const { paid, debt } = unit.years[year];
+                              if (paid === 0 && debt === 0) {
                                 return (
-                                  <td key={year} className={`py-2 px-3 text-center ${cellColor}`}>
-                                    {value > 0 ? `${value.toFixed(2)}` : '-'}
-                                  </td>
+                                  <td key={year} className="py-2 px-3 text-center text-gray-300">-</td>
                                 );
-                              })}
-                              <td className={`py-2 pl-3 text-right font-semibold ${
-                                debtViewMode === 'debt'
-                                  ? unitTotal > 0 ? 'text-red-600' : 'text-gray-300'
-                                  : debtViewMode === 'paid'
-                                    ? unitTotal > 0 ? 'text-green-600' : 'text-gray-300'
-                                    : 'text-gray-900'
-                              }`}>
-                                {unitTotal > 0 ? `${unitTotal.toFixed(2)}` : '-'}
-                              </td>
-                            </tr>
-                          );
-                        })}
+                              }
+                              return (
+                                <td key={year} className="py-2 px-3 text-center">
+                                  {paid > 0 && (
+                                    <span className="text-green-600">{paid.toFixed(0)}€</span>
+                                  )}
+                                  {paid > 0 && debt > 0 && (
+                                    <span className="text-gray-300"> / </span>
+                                  )}
+                                  {debt > 0 && (
+                                    <span className="text-red-600 font-medium">{debt.toFixed(0)}€</span>
+                                  )}
+                                </td>
+                              );
+                            })}
+                            <td className="py-2 pl-3 text-right">
+                              {unit.totalPaid > 0 && (
+                                <span className="text-green-600">{unit.totalPaid.toFixed(0)}€</span>
+                              )}
+                              {unit.totalPaid > 0 && unit.totalDebt > 0 && (
+                                <span className="text-gray-300"> / </span>
+                              )}
+                              {unit.totalDebt > 0 && (
+                                <span className="text-red-600 font-semibold">{unit.totalDebt.toFixed(0)}€</span>
+                              )}
+                              {unit.totalPaid === 0 && unit.totalDebt === 0 && (
+                                <span className="text-gray-300">-</span>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
                         {/* Totals row */}
                         <tr className="bg-gray-50 font-bold border-t-2 border-gray-300">
                           <td className="py-3 pr-4 text-gray-900">Total</td>
                           {debtData.years.map((year) => {
-                            const value = debtData.yearTotals[year][debtViewMode];
-                            const cellColor = debtViewMode === 'debt'
-                              ? value > 0 ? 'text-red-600' : 'text-gray-300'
-                              : debtViewMode === 'paid'
-                                ? value > 0 ? 'text-green-600' : 'text-gray-300'
-                                : 'text-gray-900';
+                            const { paid, debt } = debtData.yearTotals[year];
                             return (
-                              <td key={year} className={`py-3 px-3 text-center ${cellColor}`}>
-                                {value > 0 ? `${value.toFixed(2)}` : '-'}
+                              <td key={year} className="py-3 px-3 text-center">
+                                {paid > 0 && (
+                                  <span className="text-green-600">{paid.toFixed(0)}€</span>
+                                )}
+                                {paid > 0 && debt > 0 && (
+                                  <span className="text-gray-300"> / </span>
+                                )}
+                                {debt > 0 && (
+                                  <span className="text-red-600">{debt.toFixed(0)}€</span>
+                                )}
+                                {paid === 0 && debt === 0 && (
+                                  <span className="text-gray-300">-</span>
+                                )}
                               </td>
                             );
                           })}
-                          <td className={`py-3 pl-3 text-right ${
-                            debtViewMode === 'debt'
-                              ? debtData.grandTotalDebt > 0 ? 'text-red-600' : 'text-gray-300'
-                              : 'text-gray-900'
-                          }`}>
-                            {(() => {
-                              const total = debtViewMode === 'debt'
-                                ? debtData.grandTotalDebt
-                                : debtData.years.reduce((sum, y) => sum + debtData.yearTotals[y][debtViewMode], 0);
-                              return total > 0 ? `${total.toFixed(2)}` : '-';
-                            })()}
+                          <td className="py-3 pl-3 text-right">
+                            <span className="text-green-600">{debtData.grandTotalPaid.toFixed(0)}€</span>
+                            {debtData.grandTotalDebt > 0 && (
+                              <>
+                                <span className="text-gray-300"> / </span>
+                                <span className="text-red-600">{debtData.grandTotalDebt.toFixed(0)}€</span>
+                              </>
+                            )}
                           </td>
                         </tr>
                       </tbody>
