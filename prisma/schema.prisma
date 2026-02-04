@@ -30,8 +30,9 @@ model Unit {
   code         String        @unique // e.g., "1D", "1E", "2D", "RCE", "CV"
   floor        Int?
   description  String?
-  monthlyFee   Float         @default(45.0)
-  nib          String?
+  monthlyFee      Float         @default(45.0)
+  previousBalance Float         @default(0) // Pre-2024 balance (positive = credit, negative = debt)
+  nib             String?
   telefone     String?
   email        String?
   user                User?
