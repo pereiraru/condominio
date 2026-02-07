@@ -67,7 +67,6 @@ export default function UnitDetailV2Page() {
   const [historyPanelMonth, setHistoryPanelMonth] = useState('');
 
   // Breakdown data
-  const [paymentBreakdown, setPaymentBreakdown] = useState<Record<string, MonthPaymentBreakdown>>({});
   const [expectedBreakdown, setExpectedBreakdown] = useState<Record<string, MonthExpectedBreakdown>>({});
 
   // Extras summary
@@ -152,7 +151,6 @@ export default function UnitDetailV2Page() {
         setPaymentHistory(data.payments || {});
         setExpectedHistory(data.expected || {});
         setYearlyData(data.yearlyData || []);
-        setPaymentBreakdown(data.paymentBreakdown || {});
         setExpectedBreakdown(data.expectedBreakdown || {});
       }
     } catch (error) { console.error(error); }
@@ -210,7 +208,8 @@ export default function UnitDetailV2Page() {
     } finally { setLoading(false); }
   }
 
-  function updateOwnerField(index: number, field: keyof Owner, value: string | number | null) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  function updateOwnerField(index: number, field: keyof Owner, value: any) {
     const updated = [...owners];
     updated[index] = { ...updated[index], [field]: value };
     setOwners(updated);
