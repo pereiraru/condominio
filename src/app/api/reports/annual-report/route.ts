@@ -141,7 +141,6 @@ export async function GET(request: NextRequest) {
 
     // Revenue: income allocations for the year
     const incomeAllocations = yearAllocations.filter((a) => a.transaction.amount > 0);
-    const expenseAllocations = yearAllocations.filter((a) => a.transaction.amount < 0);
 
     // Calculate opening balance (approximated from earliest bank snapshot of the year or Dec of previous year)
     const openingSnapshots = await prisma.bankAccountSnapshot.findMany({
@@ -193,9 +192,6 @@ export async function GET(request: NextRequest) {
       }
     }
     totalExtraChargesExpected = Object.values(extraChargeBreakdown).reduce((sum, e) => sum + e.amount, 0);
-
-    // Actual revenue received (income allocations for current year)
-    const totalReceitasReceived = incomeAllocations.reduce((sum, a) => sum + a.amount, 0);
 
     // Revenue from previous years (allocations to months before current year in current year transactions)
     const currentYearIncomeTransactions = await prisma.transaction.findMany({

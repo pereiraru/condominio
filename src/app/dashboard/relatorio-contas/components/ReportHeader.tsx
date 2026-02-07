@@ -5,7 +5,7 @@ interface ReportHeaderProps {
   subtitle?: string;
 }
 
-export default function ReportHeader({ buildingName, year, title, subtitle }: ReportHeaderProps) {
+export default function ReportHeader({ buildingName, title, subtitle }: ReportHeaderProps) {
   return (
     <div className="text-center mb-12 border-b-4 border-double border-gray-800 pb-6">
       <p className="text-xs uppercase tracking-widest text-gray-500 font-bold mb-2">Administração de Condomínio</p>

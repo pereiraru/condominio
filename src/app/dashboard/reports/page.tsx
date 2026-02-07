@@ -536,6 +536,7 @@ export default function ReportsPage() {
                         <tr className="text-gray-400 text-[10px] bg-gray-50/30 uppercase tracking-widest">
                           <th className="py-2 px-4 font-normal text-left">Esperado</th>
                           {debtData.years.map((year) => {
+                            // eslint-disable-next-line @typescript-eslint/no-explicit-any
                             const yearTotal = (debtData.yearTotals as any)[year];
                             return (
                               <th key={year} className="py-2 px-3 font-semibold text-center text-gray-600 border-l border-gray-100">
@@ -571,6 +572,7 @@ export default function ReportsPage() {
                               <div className="text-[10px] text-gray-400 font-normal uppercase truncate max-w-[120px]">{unit.name}</div>
                             </td>
                             {debtData.years.map((year) => {
+                              // eslint-disable-next-line @typescript-eslint/no-explicit-any
                               const yearInfo = (unit.years as any)[year];
                               if (!yearInfo || (yearInfo.paid === 0 && yearInfo.debt === 0)) {
                                 return (
@@ -705,7 +707,7 @@ export default function ReportsPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200">
-                    {filteredMonthlyData.map((d, i) => (
+                    {filteredMonthlyData.map((d) => (
                       <tr key={d.month} className="hover:bg-blue-50/30 transition-colors">
                         <td className="py-4 px-6 text-sm font-bold text-gray-900">{formatMonth(d.month)}</td>
                         <td className="py-4 px-6 text-sm text-right text-green-600 font-bold">+{d.income.toFixed(2)} EUR</td>
