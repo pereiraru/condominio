@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { prisma } from '@/lib/prisma';
 import { authOptions } from '@/lib/auth';
 import { getTotalFeeForMonth, FeeHistoryRecord, ExtraChargeRecord } from '@/lib/feeHistory';
+import { Owner } from '@prisma/client';
 
 export async function GET(request: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -88,7 +89,7 @@ export async function GET(request: NextRequest) {
       feeHistory: FeeHistoryRecord[],
       defaultFee: number,
       extraCharges: ExtraChargeRecord[],
-      unitOwners: any[]
+      unitOwners: Owner[]
     ): { pastYearsDebt: number; previousDebtRemaining: number } => {
       const entityAllocs = pastAllocations.filter(
         (a) => a.transaction.unitId === unitId && a.transaction.amount > 0
