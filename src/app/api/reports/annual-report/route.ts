@@ -87,14 +87,23 @@ export async function GET(request: NextRequest) {
       unitId: string,
       feeHistory: FeeHistoryRecord[],
       defaultFee: number,
-      extraCharges: ExtraChargeRecord[]
-    ): number => {
+      extraCharges: ExtraChargeRecord[],
+      unitOwners: any[]
+    ): { pastYearsDebt: number; previousDebtRemaining: number } => {
       const entityAllocs = pastAllocations.filter(
         (a) => a.transaction.unitId === unitId && a.transaction.amount > 0
       );
 
+      // 1. Calculate Pre-2024 Debt (Manual)
+      const previousDebt = unitOwners.reduce((sum, o) => sum + (o.previousDebt || 0), 0);
+      const previousDebtPaid = entityAllocs
+        .filter((a) => a.month === 'PREV-DEBT')
+        .reduce((sum, a) => sum + a.amount, 0);
+      const previousDebtRemaining = Math.max(0, previousDebt - previousDebtPaid);
+
+      // 2. Calculate 2024-Present Past Debt
       const pastYears = new Set<number>();
-      entityAllocs.forEach((a) => {
+      entityAllocs.filter(a => a.month !== 'PREV-DEBT').forEach((a) => {
         const y = parseInt(a.month.split('-')[0]);
         if (y < year) pastYears.add(y);
       });
@@ -102,7 +111,8 @@ export async function GET(request: NextRequest) {
       feeHistory.forEach((fh) => {
         const startY = parseInt(fh.effectiveFrom.split('-')[0]);
         const endY = fh.effectiveTo ? parseInt(fh.effectiveTo.split('-')[0]) : year - 1;
-        for (let y = startY; y <= Math.min(endY, year - 1); y++) {
+        // Focus on post-2023 for digital records
+        for (let y = Math.max(2024, startY); y <= Math.min(endY, year - 1); y++) {
           pastYears.add(y);
         }
       });
@@ -110,33 +120,33 @@ export async function GET(request: NextRequest) {
       extraCharges.forEach((ec) => {
         const startY = parseInt(ec.effectiveFrom.split('-')[0]);
         const endY = ec.effectiveTo ? parseInt(ec.effectiveTo.split('-')[0]) : year - 1;
-        for (let y = startY; y <= Math.min(endY, year - 1); y++) {
+        for (let y = Math.max(2024, startY); y <= Math.min(endY, year - 1); y++) {
           pastYears.add(y);
         }
       });
 
-      if (pastYears.size === 0) return 0;
-
       let accumulatedDebt = 0;
-      const sortedYears = Array.from(pastYears).sort((a, b) => a - b);
+      if (pastYears.size > 0) {
+        const sortedYears = Array.from(pastYears).sort((a, b) => a - b);
 
-      for (const y of sortedYears) {
-        let expectedForYear = 0;
-        let paidForYear = 0;
+        for (const y of sortedYears) {
+          let expectedForYear = 0;
+          let paidForYear = 0;
 
-        for (let m = 1; m <= 12; m++) {
-          const monthStr = `${y}-${m.toString().padStart(2, '0')}`;
-          const feeData = getTotalFeeForMonth(feeHistory, extraCharges, monthStr, defaultFee, unitId);
-          expectedForYear += feeData.total;
-          paidForYear += entityAllocs
-            .filter((a) => a.month === monthStr)
-            .reduce((sum, a) => sum + a.amount, 0);
+          for (let m = 1; m <= 12; m++) {
+            const monthStr = `${y}-${m.toString().padStart(2, '0')}`;
+            const feeData = getTotalFeeForMonth(feeHistory, extraCharges, monthStr, defaultFee, unitId);
+            expectedForYear += feeData.total;
+            paidForYear += entityAllocs
+              .filter((a) => a.month === monthStr)
+              .reduce((sum, a) => sum + a.amount, 0);
+          }
+
+          accumulatedDebt = Math.max(0, accumulatedDebt + expectedForYear - paidForYear);
         }
-
-        accumulatedDebt = Math.max(0, accumulatedDebt + expectedForYear - paidForYear);
       }
 
-      return accumulatedDebt;
+      return { pastYearsDebt: accumulatedDebt, previousDebtRemaining };
     };
 
     // Revenue: income allocations for the year
@@ -270,12 +280,14 @@ export async function GET(request: NextRequest) {
       ) as ExtraChargeRecord[];
 
       // Opening balance (debt at start of year)
-      const saldoInicial = calculatePastYearsDebt(
+      const debtInfo = calculatePastYearsDebt(
         unit.id,
         unit.feeHistory as FeeHistoryRecord[],
         unit.monthlyFee,
-        unitExtraCharges
+        unitExtraCharges,
+        unit.owners
       );
+      const saldoInicial = debtInfo.pastYearsDebt + debtInfo.previousDebtRemaining;
 
       // Expected for this year
       let previsto = 0;
@@ -396,6 +408,30 @@ export async function GET(request: NextRequest) {
 
         const items: { description: string; amount: number }[] = [];
 
+        // 1. Past Debts (Pre-2024 and Previous Years)
+        const debtInfo = calculatePastYearsDebt(
+          unit.id,
+          unit.feeHistory as FeeHistoryRecord[],
+          unit.monthlyFee,
+          unitExtraCharges,
+          unit.owners
+        );
+
+        if (debtInfo.previousDebtRemaining > 0.01) {
+          items.push({
+            description: 'Dívida Anterior a 2024 (Pré-Digital)',
+            amount: debtInfo.previousDebtRemaining,
+          });
+        }
+
+        if (debtInfo.pastYearsDebt > 0.01) {
+          items.push({
+            description: `Dívida de Anos Anteriores (2024-${year - 1})`,
+            amount: debtInfo.pastYearsDebt,
+          });
+        }
+
+        // 2. Current Year Debts
         // Check each month for unpaid base fees
         for (let m = 1; m <= 12; m++) {
           const monthStr = `${year}-${m.toString().padStart(2, '0')}`;

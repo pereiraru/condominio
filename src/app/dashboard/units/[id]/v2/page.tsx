@@ -319,7 +319,7 @@ export default function UnitDetailV2Page() {
   if (!unit) return null;
 
   const currentOwnerLocal = owners.find(o => !o.endMonth) || owners[0];
-  const totalDebt = (pastYearsDebt + previousDebtRemaining + (unit.totalOwed ?? 0) + (unit.pre2024?.remaining ?? 0));
+  const totalDebt = (pastYearsDebt + previousDebtRemaining + (unit.totalOwed ?? 0));
 
   return (
     <div className="flex min-h-screen bg-gray-50/50">
