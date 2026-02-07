@@ -160,6 +160,9 @@ export default function UnitsPage() {
   function formatUnitCode(code: string) {
     if (code === 'RCD') return 'RC Direito';
     if (code === 'RCE') return 'RC Esquerdo';
+    if (code === 'CVD') return 'Cave Direito';
+    if (code === 'CVE') return 'Cave Esquerdo';
+    if (code === 'CV') return 'Cave';
     
     const match = code.match(/^(\d+)([DE])$/);
     if (match) {
@@ -265,7 +268,7 @@ export default function UnitsPage() {
                               </div>
                               <div>
                                 <h3 className={`${isGaragem ? 'text-sm' : 'text-lg'} font-bold text-gray-900 group-hover:text-primary-600 transition-colors`}>
-                                  {isGaragem ? `Garagem ${unit.code.replace('G', '')}` : formatUnitCode(unit.code)}
+                                  {isGaragem ? (unit.code.startsWith('G') ? `Garagem ${unit.code.substring(1)}` : unit.code) : formatUnitCode(unit.code)}
                                 </h3>
                                 <p className="text-[10px] text-gray-400 font-medium uppercase tracking-wider">
                                   {isGaragem ? 'Lugar de Estacionamento' : (unit.floor != null ? `${unit.floor}º Andar` : 'Fração Autónoma')}
