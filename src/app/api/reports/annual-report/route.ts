@@ -286,8 +286,10 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Expenses by creditor
+    // Expenses by creditor (excluding savings transfers)
     const expensesByCreditor: Record<string, { label: string; category: string; amount: number }> = {};
+    let totalReforcoPoupanca = 0;
+
     const currentYearExpenseTransactions = await prisma.transaction.findMany({
       where: {
         date: { gte: new Date(`${year}-01-01`), lte: new Date(`${year}-12-31T23:59:59`) },
@@ -297,8 +299,14 @@ export async function GET(request: NextRequest) {
 
     for (const tx of currentYearExpenseTransactions) {
       const creditor = creditors.find((c) => c.id === tx.creditorId);
-      const label = creditor?.name || tx.category || 'Outros';
       const category = creditor?.category || tx.category || 'other';
+      
+      if (category === 'savings') {
+        totalReforcoPoupanca += Math.abs(tx.amount);
+        continue; // Don't count as standard expense
+      }
+
+      const label = creditor?.name || tx.category || 'Outros';
 
       if (!expensesByCreditor[label]) {
         expensesByCreditor[label] = { label, category, amount: 0 };
@@ -331,14 +339,26 @@ export async function GET(request: NextRequest) {
     const saldoExercicio = (receitasAnosAnteriores + receitasDesteExercicio) - totalDespesas;
     const saldoFinalDisponivel = saldoInicialTransitar + saldoExercicio;
 
-    // Bank account balances
-    const contasBancarias = bankAccounts.map((account) => ({
-      id: account.id,
-      name: account.name,
-      accountType: account.accountType,
-      balance: account.snapshots[0]?.balance ?? 0,
-      description: account.snapshots[0]?.description ?? null,
-    }));
+    // Bank account balances (Calculating current balance from snapshot + reinforcements)
+    const contasBancarias = bankAccounts.map((account) => {
+      const snapshot = account.snapshots[0];
+      let balance = snapshot?.balance ?? 0;
+      
+      // If it's a savings account, we might want to add reinforcements since the last snapshot
+      // but usually snapshots are end-of-period. 
+      // If snapshot is from start of year, we add this year's reinforcements.
+      if (account.accountType === 'savings' && snapshot && new Date(snapshot.date) < new Date(`${year}-01-10`)) {
+        balance += totalReforcoPoupanca;
+      }
+
+      return {
+        id: account.id,
+        name: account.name,
+        accountType: account.accountType,
+        balance,
+        description: snapshot?.description ?? null,
+      };
+    });
     const totalBankBalance = contasBancarias.reduce((sum, c) => sum + c.balance, 0);
 
     // =========================================
@@ -695,6 +715,7 @@ export async function GET(request: NextRequest) {
           categories: despesasCategories,
           totalDespesas,
           totalFixedExpected,
+          totalReforcoPoupanca,
         },
         saldoExercicio,
         saldoTransitar: saldoInicialTransitar,

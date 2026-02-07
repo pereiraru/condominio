@@ -17,6 +17,7 @@ const CATEGORIES = [
   { value: 'cleaning', label: 'Limpeza' },
   { value: 'elevator', label: 'Elevador' },
   { value: 'bank_fee', label: 'Taxa Bancária' },
+  { value: 'savings', label: 'Poupança / Fundo Reserva' },
   { value: 'other', label: 'Outro' },
 ];
 

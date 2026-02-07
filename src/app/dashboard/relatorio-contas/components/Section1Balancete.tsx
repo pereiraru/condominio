@@ -13,6 +13,7 @@ interface Section1Props {
       categories: { label: string; category: string; amount: number }[];
       totalDespesas: number;
       totalFixedExpected?: number;
+      totalReforcoPoupanca?: number;
     };
     saldoExercicio: number;
     saldoTransitar: number;
@@ -91,6 +92,13 @@ export default function Section1Balancete({ data, year }: Section1Props) {
                   <td className="text-right">{fmt(cat.amount)}</td>
                 </tr>
               ))}
+
+              {data.despesas.totalReforcoPoupanca && data.despesas.totalReforcoPoupanca > 0 && (
+                <tr className="border-b border-blue-50 bg-blue-50/20">
+                  <td className="pl-4 py-1 font-semibold text-blue-800 italic">1.{data.despesas.categories.length + 1} Reforço de Poupança (Transferência)</td>
+                  <td className="text-right font-semibold text-blue-800">{fmt(data.despesas.totalReforcoPoupanca)}</td>
+                </tr>
+              )}
               
               <tr className="border-t-2 border-gray-400 font-bold">
                 <td className="py-2">TOTAL DAS DESPESAS</td>
