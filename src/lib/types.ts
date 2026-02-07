@@ -31,6 +31,7 @@ export interface Unit {
   owners?: Owner[];
   totalPaid?: number;
   totalOwed?: number;
+  pastDebt?: number;
 }
 
 export interface Creditor {

@@ -157,6 +157,20 @@ export default function UnitsPage() {
     }
   }
 
+  function formatUnitCode(code: string) {
+    if (code === 'RCD') return 'RC Direito';
+    if (code === 'RCE') return 'RC Esquerdo';
+    
+    const match = code.match(/^(\d+)([DE])$/);
+    if (match) {
+      const floor = match[1];
+      const side = match[2] === 'D' ? 'Direito' : 'Esquerdo';
+      return `${floor}º ${side}`;
+    }
+    
+    return code;
+  }
+
   return (
     <div className="flex min-h-screen bg-gray-50/50">
       <Sidebar />
@@ -221,29 +235,32 @@ export default function UnitsPage() {
           ) : (
             <>
               {filteredUnits.length > 0 ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 auto-rows-fr">
                   {filteredUnits.map((unit) => {
                     const currentOwner = unit.owners?.find(o => !o.endMonth) || unit.owners?.[0];
-                    const hasDebt = (unit.totalOwed ?? 0) > 0.01;
+                    // RED if previous months unpaid, GREEN if only current month unpaid
+                    const hasPastDebt = (unit.pastDebt ?? 0) > 0.01;
+                    const totalOwed = unit.totalOwed ?? 0;
+                    const isGaragem = unit.code.startsWith('G');
                     
                     return (
                       <div 
                         key={unit.id} 
-                        className="group bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-xl hover:border-primary-100 transition-all duration-300 cursor-pointer overflow-hidden"
+                        className={`group bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-xl hover:border-primary-100 transition-all duration-300 cursor-pointer overflow-hidden flex flex-col ${isGaragem ? 'opacity-90 scale-[0.98]' : ''}`}
                         onClick={() => router.push(`/dashboard/units/${unit.id}`)}
                       >
-                        <div className="p-5">
+                        <div className="p-5 flex-1">
                           <div className="flex justify-between items-start mb-4">
                             <div className="flex items-center gap-3">
-                              <div className={`w-12 h-12 rounded-xl flex items-center justify-center font-bold text-lg ${hasDebt ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-600'}`}>
+                              <div className={`w-12 h-12 rounded-xl flex items-center justify-center font-bold text-lg ${hasPastDebt ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-600'}`}>
                                 {unit.code}
                               </div>
                               <div>
                                 <h3 className="text-lg font-bold text-gray-900 group-hover:text-primary-600 transition-colors">
-                                  {unit.floor != null ? `${unit.floor}º Andar` : 'Unidade'}
+                                  {isGaragem ? `Garagem ${unit.code.replace('G', '')}` : formatUnitCode(unit.code)}
                                 </h3>
                                 <p className="text-xs text-gray-400 font-medium uppercase tracking-wider">
-                                  {unit.description || 'Fração Autónoma'}
+                                  {isGaragem ? 'Lugar de Garagem' : (unit.floor != null ? `${unit.floor}º Andar` : 'Fração Autónoma')}
                                 </p>
                               </div>
                             </div>
@@ -282,15 +299,15 @@ export default function UnitsPage() {
                           </div>
                         </div>
 
-                        <div className={`mt-auto px-5 py-3 border-t flex justify-between items-center ${hasDebt ? 'bg-red-50/30 border-red-100' : 'bg-green-50/30 border-green-100'}`}>
+                        <div className={`mt-auto px-5 py-3 border-t flex justify-between items-center ${hasPastDebt ? 'bg-red-50/30 border-red-100' : 'bg-green-50/30 border-green-100'}`}>
                           <div className="flex flex-col">
                             <span className="text-[10px] text-gray-400 font-bold uppercase">Estado Financeiro</span>
-                            <span className={`text-xs font-bold ${hasDebt ? 'text-red-600' : 'text-green-600'}`}>
-                              {hasDebt ? `${(unit.totalOwed ?? 0).toFixed(2)}€ em falta` : 'Regularizado'}
+                            <span className={`text-xs font-bold ${hasPastDebt ? 'text-red-600' : 'text-green-600'}`}>
+                              {totalOwed > 0.01 ? `${totalOwed.toFixed(2)}€ em falta` : 'Regularizado'}
                             </span>
                           </div>
-                          <div className={`w-8 h-8 rounded-full flex items-center justify-center ${hasDebt ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'}`}>
-                            {hasDebt ? (
+                          <div className={`w-8 h-8 rounded-full flex items-center justify-center ${hasPastDebt ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'}`}>
+                            {hasPastDebt ? (
                               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                               </svg>

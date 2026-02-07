@@ -45,6 +45,7 @@ export async function GET() {
 
       // Calculate expected YTD (current year, up to current month)
       let expectedYTD = 0;
+      let expectedUpToLastMonth = 0;
       for (let m = 1; m <= currentMonth; m++) {
         const monthStr = `${currentYear}-${m.toString().padStart(2, '0')}`;
         const feeData = getTotalFeeForMonth(
@@ -55,11 +56,17 @@ export async function GET() {
           unit.id
         );
         expectedYTD += feeData.total;
+        if (m < currentMonth) {
+          expectedUpToLastMonth += feeData.total;
+        }
       }
 
       // Calculate paid YTD (current year)
-      const paidYTD = allAllocations
-        .filter((a) => a.month.startsWith(`${currentYear}-`))
+      const allocationsThisYear = allAllocations.filter((a) => a.month.startsWith(`${currentYear}-`));
+      const paidYTD = allocationsThisYear.reduce((sum, a) => sum + a.amount, 0);
+      
+      const paidUpToLastMonth = allocationsThisYear
+        .filter(a => parseInt(a.month.split('-')[1]) < currentMonth)
         .reduce((sum, a) => sum + a.amount, 0);
 
       // Calculate past years debt
@@ -115,7 +122,9 @@ export async function GET() {
       }
 
       const yearDebt = Math.max(0, expectedYTD - paidYTD);
+      const pastDebtInCurrentYear = Math.max(0, expectedUpToLastMonth - paidUpToLastMonth);
       const totalOwed = yearDebt + pastYearsDebt;
+      const pastDebt = pastDebtInCurrentYear + pastYearsDebt;
 
       return {
         id: unit.id,
@@ -129,6 +138,7 @@ export async function GET() {
         owners: unit.owners,
         totalPaid: paidYTD,
         totalOwed,
+        pastDebt,
       };
     });
 
