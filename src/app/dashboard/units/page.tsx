@@ -158,12 +158,23 @@ export default function UnitsPage() {
   }
 
   function formatUnitCode(code: string) {
-    if (code === 'RCD') return 'RC Direito';
-    if (code === 'RCE') return 'RC Esquerdo';
-    if (code === 'CVD') return 'Cave Direito';
-    if (code === 'CVE') return 'Cave Esquerdo';
-    if (code === 'CV') return 'Cave';
+    // Exact matches
+    const exacts: Record<string, string> = {
+      'RCD': 'RC Direito',
+      'RCE': 'RC Esquerdo',
+      'CVD': 'Cave Direito',
+      'CVE': 'Cave Esquerdo',
+      'CV': 'Cave',
+    };
+    if (exacts[code]) return exacts[code];
+
+    // Garage handling
+    if (code.startsWith('G')) {
+      const num = code.replace(/^Garagem\s*/i, '').replace(/^G/, '');
+      return `Garagem ${num}`;
+    }
     
+    // Standard floor logic (e.g. 1D -> 1º Direito)
     const match = code.match(/^(\d+)([DE])$/);
     if (match) {
       const floor = match[1];
@@ -244,7 +255,7 @@ export default function UnitsPage() {
                     // RED if previous months unpaid, GREEN if only current month unpaid
                     const hasPastDebt = (unit.pastDebt ?? 0) > 0.01;
                     const totalOwed = unit.totalOwed ?? 0;
-                    const isGaragem = unit.code.startsWith('G');
+                    const isGaragem = unit.code.startsWith('G') || unit.code.toLowerCase().startsWith('garagem');
                     
                     return (
                       <div 
@@ -268,7 +279,7 @@ export default function UnitsPage() {
                               </div>
                               <div>
                                 <h3 className={`${isGaragem ? 'text-sm' : 'text-lg'} font-bold text-gray-900 group-hover:text-primary-600 transition-colors`}>
-                                  {isGaragem ? (unit.code.startsWith('G') ? `Garagem ${unit.code.substring(1)}` : unit.code) : formatUnitCode(unit.code)}
+                                  {formatUnitCode(unit.code)}
                                 </h3>
                                 <p className="text-[10px] text-gray-400 font-medium uppercase tracking-wider">
                                   {isGaragem ? 'Lugar de Estacionamento' : (unit.floor != null ? `${unit.floor}º Andar` : 'Fração Autónoma')}
