@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import Sidebar from '@/components/Sidebar';
 import { Unit } from '@/lib/types';
@@ -12,6 +12,8 @@ export default function UnitsPage() {
   const [importResult, setImportResult] = useState<string | null>(null);
   const [showModal, setShowModal] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [searchTerm, setSearchString] = useState('');
+  
   const [formData, setFormData] = useState({
     code: '',
     floor: '',
@@ -41,6 +43,16 @@ export default function UnitsPage() {
   useEffect(() => {
     fetchUnits();
   }, []);
+
+  const filteredUnits = useMemo(() => {
+    if (!searchTerm) return units;
+    const s = searchTerm.toLowerCase();
+    return units.filter(u => 
+      u.code.toLowerCase().includes(s) || 
+      u.owners?.some(o => o.name.toLowerCase().includes(s)) ||
+      u.description?.toLowerCase().includes(s)
+    );
+  }, [units, searchTerm]);
 
   async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -146,242 +158,347 @@ export default function UnitsPage() {
   }
 
   return (
-    <div className="flex min-h-screen">
+    <div className="flex min-h-screen bg-gray-50/50">
       <Sidebar />
 
       <main className="flex-1 p-8">
-        <div className="flex justify-between items-center mb-6">
-          <h1 className="text-2xl font-semibold text-gray-900">Frações</h1>
-          <div className="flex gap-2">
-            <input
-              type="file"
-              ref={fileInputRef}
-              onChange={handleFileChange}
-              accept=".xlsx,.xlsm,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel.sheet.macroEnabled.12,application/vnd.ms-excel"
-              className="hidden"
-            />
-            <button
-              className="btn-secondary"
-              onClick={handleImportClick}
-              disabled={importing}
-            >
-              {importing ? 'A importar...' : 'Importar Excel'}
-            </button>
-            <button className="btn-primary" onClick={() => setShowModal(true)}>
-              + Nova Fração
-            </button>
+        <div className="max-w-7xl mx-auto">
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900 tracking-tight">Frações</h1>
+              <p className="text-gray-500 mt-1">Gestão de unidades e proprietários do edifício</p>
+            </div>
+            <div className="flex gap-3 w-full md:w-auto">
+              <input
+                type="file"
+                ref={fileInputRef}
+                onChange={handleFileChange}
+                accept=".xlsx,.xlsm,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel.sheet.macroEnabled.12,application/vnd.ms-excel"
+                className="hidden"
+              />
+              <button
+                className="btn-secondary flex-1 md:flex-none justify-center gap-2"
+                onClick={handleImportClick}
+                disabled={importing}
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                </svg>
+                {importing ? 'A importar...' : 'Importar Excel'}
+              </button>
+              <button className="btn-primary flex-1 md:flex-none justify-center gap-2" onClick={() => setShowModal(true)}>
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+                Nova Unidade
+              </button>
+            </div>
           </div>
+
+          {/* Search and Filters */}
+          <div className="mb-6">
+            <div className="relative group max-w-md">
+              <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-400 group-focus-within:text-primary-500 transition-colors">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+              </span>
+              <input
+                type="text"
+                placeholder="Procurar fração, proprietário ou descrição..."
+                className="input pl-10 bg-white border-gray-200 focus:ring-primary-500 focus:border-primary-500 transition-all shadow-sm"
+                value={searchTerm}
+                onChange={(e) => setSearchString(e.target.value)}
+              />
+            </div>
+          </div>
+
+          {loading ? (
+            <div className="flex flex-col items-center justify-center py-24">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mb-4"></div>
+              <p className="text-gray-500 font-medium">A carregar frações...</p>
+            </div>
+          ) : (
+            <>
+              {filteredUnits.length > 0 ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                  {filteredUnits.map((unit) => {
+                    const currentOwner = unit.owners?.find(o => !o.endMonth) || unit.owners?.[0];
+                    const hasDebt = (unit.totalOwed ?? 0) > 0.01;
+                    
+                    return (
+                      <div 
+                        key={unit.id} 
+                        className="group bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-xl hover:border-primary-100 transition-all duration-300 cursor-pointer overflow-hidden"
+                        onClick={() => router.push(`/dashboard/units/${unit.id}`)}
+                      >
+                        <div className="p-5">
+                          <div className="flex justify-between items-start mb-4">
+                            <div className="flex items-center gap-3">
+                              <div className={`w-12 h-12 rounded-xl flex items-center justify-center font-bold text-lg ${hasDebt ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-600'}`}>
+                                {unit.code}
+                              </div>
+                              <div>
+                                <h3 className="text-lg font-bold text-gray-900 group-hover:text-primary-600 transition-colors">
+                                  {unit.floor != null ? `${unit.floor}º Andar` : 'Unidade'}
+                                </h3>
+                                <p className="text-xs text-gray-400 font-medium uppercase tracking-wider">
+                                  {unit.description || 'Fração Autónoma'}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="text-right">
+                              <p className="text-sm font-bold text-gray-900">{unit.monthlyFee.toFixed(2)}€</p>
+                              <p className="text-[10px] text-gray-400 uppercase font-bold">/ mês</p>
+                            </div>
+                          </div>
+
+                          <div className="space-y-3">
+                            <div className="p-3 bg-gray-50/50 rounded-xl border border-gray-100/50">
+                              <p className="text-[10px] text-gray-400 font-bold uppercase mb-1">Proprietário Atual</p>
+                              <p className="text-sm font-semibold text-gray-700 truncate">
+                                {currentOwner?.name || 'N/A'}
+                              </p>
+                            </div>
+
+                            <div className="flex flex-wrap gap-2">
+                              {unit.email && (
+                                <span className="inline-flex items-center px-2 py-1 rounded-md bg-blue-50 text-blue-600 text-[10px] font-bold uppercase">
+                                  <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                                  </svg>
+                                  Email
+                                </span>
+                              )}
+                              {unit.telefone && (
+                                <span className="inline-flex items-center px-2 py-1 rounded-md bg-purple-50 text-purple-600 text-[10px] font-bold uppercase">
+                                  <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 011.94.86l-.85 4.48a1 1 0 01-1.03.79H6.22a9.62 9.62 0 004.42 4.42v-2.04a1 1 0 01.79-1.03l4.48-.85a1 1 0 011.23.96V19a2 2 0 01-2 2h-1.27a9.91 9.91 0 01-9.91-9.91V5z" />
+                                  </svg>
+                                  Tel
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className={`mt-auto px-5 py-3 border-t flex justify-between items-center ${hasDebt ? 'bg-red-50/30 border-red-100' : 'bg-green-50/30 border-green-100'}`}>
+                          <div className="flex flex-col">
+                            <span className="text-[10px] text-gray-400 font-bold uppercase">Estado Financeiro</span>
+                            <span className={`text-xs font-bold ${hasDebt ? 'text-red-600' : 'text-green-600'}`}>
+                              {hasDebt ? `${(unit.totalOwed ?? 0).toFixed(2)}€ em falta` : 'Regularizado'}
+                            </span>
+                          </div>
+                          <div className={`w-8 h-8 rounded-full flex items-center justify-center ${hasDebt ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'}`}>
+                            {hasDebt ? (
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                              </svg>
+                            ) : (
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                              </svg>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="bg-white rounded-3xl border-2 border-dashed border-gray-200 py-24 text-center">
+                  <div className="mx-auto w-20 h-20 bg-gray-50 rounded-full flex items-center justify-center mb-4">
+                    <svg className="w-10 h-10 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                    </svg>
+                  </div>
+                  <h3 className="text-xl font-bold text-gray-900 mb-2">Nenhuma fração encontrada</h3>
+                  <p className="text-gray-500 max-w-xs mx-auto mb-8">
+                    {searchTerm 
+                      ? `Não encontramos resultados para "${searchTerm}". Tente outro termo.` 
+                      : 'Comece por adicionar frações manualmente ou importar de um ficheiro Excel.'}
+                  </p>
+                  <div className="flex gap-3 justify-center">
+                    <button className="btn-primary" onClick={() => setShowModal(true)}>+ Nova Fração</button>
+                    {!searchTerm && <button className="btn-secondary" onClick={handleImportClick}>Importar Excel</button>}
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+
+          {importResult && (
+            <div className={`mt-6 p-4 rounded-2xl flex items-center gap-3 ${importResult.startsWith('Sucesso') ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+              <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={importResult.startsWith('Sucesso') ? "M5 13l4 4L19 7" : "M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"} />
+              </svg>
+              <span className="font-semibold text-sm">{importResult}</span>
+            </div>
+          )}
         </div>
-
-        {loading ? (
-          <p className="text-gray-500">A carregar...</p>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {units.map((unit) => (
-              <div key={unit.id} className="card-hover" onClick={() => router.push(`/dashboard/units/${unit.id}`)}>
-                <div className="flex justify-between items-start">
-                  <div>
-                    <h3 className="text-xl font-semibold text-gray-900">
-                      {unit.code}
-                    </h3>
-                    {unit.floor != null && (
-                      <p className="text-sm text-gray-500">{unit.floor}o Andar</p>
-                    )}
-                  </div>
-                  <span className="bg-gray-100 text-gray-700 px-3 py-1 rounded-lg text-sm font-medium">
-                    {unit.monthlyFee.toFixed(2)} EUR/mes
-                  </span>
-                </div>
-
-                {unit.owners && unit.owners.length > 0 && (
-                  <div className="mt-3">
-                    <p className="text-xs text-gray-400 uppercase tracking-wide">Proprietário</p>
-                    <p className="text-gray-700 mt-0.5">
-                      {(unit.owners.find(o => !o.endMonth) || unit.owners[0]).name}
-                    </p>
-                  </div>
-                )}
-
-                {unit.description && (
-                  <p className="mt-3 text-gray-600">{unit.description}</p>
-                )}
-
-                <div className="mt-3 flex flex-wrap gap-2 text-xs text-gray-400">
-                  {unit.telefone && <span>Tel: {unit.telefone}</span>}
-                  {unit.email && <span>Email: {unit.email}</span>}
-                  {unit.nib && <span>NIB: {unit.nib}</span>}
-                </div>
-
-                <div className="mt-4 pt-4 border-t border-gray-100 flex justify-between text-sm">
-                  <div>
-                    <span className="text-gray-400">Pago {new Date().getFullYear()}: </span>
-                    <span className="font-medium text-green-600">
-                      {(unit.totalPaid ?? 0).toFixed(2)} EUR
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-gray-400">Divida: </span>
-                    <span className={`font-medium ${(unit.totalOwed ?? 0) > 0 ? 'text-red-600' : 'text-green-600'}`}>
-                      {(unit.totalOwed ?? 0).toFixed(2)} EUR
-                    </span>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {!loading && units.length === 0 && (
-          <div className="card text-center py-12">
-            <p className="text-gray-500 mb-4">Sem fraccoes registadas</p>
-            <button
-              className="btn-primary"
-              onClick={handleImportClick}
-              disabled={importing}
-            >
-              {importing ? 'A importar...' : 'Importar do Excel'}
-            </button>
-          </div>
-        )}
-
-        {importResult && (
-          <div className={`mt-4 p-4 rounded-lg ${importResult.startsWith('Sucesso') ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-            {importResult}
-          </div>
-        )}
 
         {/* Modal */}
         {showModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
-              <h2 className="text-xl font-bold mb-4">Nova Fração</h2>
-              <form onSubmit={handleSubmit}>
-                <div className="mb-4">
-                  <label className="label">Código *</label>
-                  <input
-                    type="text"
-                    className="input"
-                    value={formData.code}
-                    onChange={(e) => setFormData({ ...formData, code: e.target.value })}
-                    placeholder="Ex: 1D, 2E, RCE"
-                    required
-                  />
+          <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-xl max-h-[90vh] overflow-hidden flex flex-col animate-in fade-in zoom-in duration-200">
+              <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
+                <div>
+                  <h2 className="text-xl font-bold text-gray-900">Nova Fração</h2>
+                  <p className="text-sm text-gray-500 mt-0.5">Preencha os dados da nova unidade</p>
                 </div>
-
-                <div className="mb-4">
-                  <label className="label">Andar</label>
-                  <input
-                    type="number"
-                    className="input"
-                    value={formData.floor}
-                    onChange={(e) => setFormData({ ...formData, floor: e.target.value })}
-                    placeholder="Ex: 1, 2, 3"
-                  />
-                </div>
-
-                <div className="mb-4">
-                  <div className="flex justify-between items-center mb-1">
-                    <label className="label mb-0">Nome(s)</label>
-                    <button
-                      type="button"
-                      className="text-primary-600 hover:text-primary-800 text-sm font-medium"
-                      onClick={addOwner}
-                    >
-                      + Adicionar
-                    </button>
+                <button 
+                  onClick={() => setShowModal(false)}
+                  className="p-2 hover:bg-gray-200 rounded-full transition-colors"
+                >
+                  <svg className="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+              
+              <form onSubmit={handleSubmit} className="overflow-y-auto p-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+                  <div>
+                    <label className="label">Código *</label>
+                    <input
+                      type="text"
+                      className="input"
+                      value={formData.code}
+                      onChange={(e) => setFormData({ ...formData, code: e.target.value })}
+                      placeholder="Ex: 1D, 2E, RCE"
+                      required
+                    />
                   </div>
-                  {owners.map((owner, index) => (
-                    <div key={index} className="flex gap-2 mb-2">
+
+                  <div>
+                    <label className="label">Andar</label>
+                    <input
+                      type="number"
+                      className="input"
+                      value={formData.floor}
+                      onChange={(e) => setFormData({ ...formData, floor: e.target.value })}
+                      placeholder="Ex: 1, 2, 3"
+                    />
+                  </div>
+
+                  <div className="md:col-span-2">
+                    <div className="flex justify-between items-center mb-2">
+                      <label className="label mb-0">Proprietários</label>
+                      <button
+                        type="button"
+                        className="text-primary-600 hover:text-primary-800 text-xs font-bold uppercase tracking-wider"
+                        onClick={addOwner}
+                      >
+                        + Adicionar
+                      </button>
+                    </div>
+                    <div className="space-y-2">
+                      {owners.map((owner, index) => (
+                        <div key={index} className="flex gap-2">
+                          <input
+                            type="text"
+                            className="input flex-1"
+                            value={owner}
+                            onChange={(e) => updateOwner(index, e.target.value)}
+                            placeholder="Nome do proprietário"
+                          />
+                          {owners.length > 1 && (
+                            <button
+                              type="button"
+                              className="text-red-500 hover:bg-red-50 p-2 rounded-lg transition-colors"
+                              onClick={() => removeOwner(index)}
+                            >
+                              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                              </svg>
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-6">
+                  <h3 className="text-sm font-bold text-gray-400 uppercase tracking-widest border-b pb-2">Informação de Contacto</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                      <label className="label">Telefone</label>
                       <input
                         type="text"
-                        className="input flex-1"
-                        value={owner}
-                        onChange={(e) => updateOwner(index, e.target.value)}
-                        placeholder="Nome do proprietário"
+                        className="input"
+                        value={formData.telefone}
+                        onChange={(e) => setFormData({ ...formData, telefone: e.target.value })}
+                        placeholder="Ex: 912 345 678"
                       />
-                      {owners.length > 1 && (
-                        <button
-                          type="button"
-                          className="text-red-500 hover:text-red-700 px-2"
-                          onClick={() => removeOwner(index)}
-                        >
-                          x
-                        </button>
-                      )}
                     </div>
-                  ))}
+                    <div>
+                      <label className="label">Email</label>
+                      <input
+                        type="email"
+                        className="input"
+                        value={formData.email}
+                        onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                        placeholder="Ex: joao@exemplo.com"
+                      />
+                    </div>
+                    <div className="md:col-span-2">
+                      <label className="label">NIB Bancário</label>
+                      <input
+                        type="text"
+                        className="input font-mono text-sm"
+                        value={formData.nib}
+                        onChange={(e) => setFormData({ ...formData, nib: e.target.value })}
+                        placeholder="0000 0000 0000 0000 0000 0"
+                      />
+                    </div>
+                  </div>
                 </div>
 
-                <div className="mb-4">
-                  <label className="label">NIB</label>
-                  <input
-                    type="text"
-                    className="input"
-                    value={formData.nib}
-                    onChange={(e) => setFormData({ ...formData, nib: e.target.value })}
-                    placeholder="NIB bancario"
-                  />
+                <div className="space-y-6 mt-8">
+                  <h3 className="text-sm font-bold text-gray-400 uppercase tracking-widest border-b pb-2">Configuração Financeira</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="md:col-span-2">
+                      <label className="label">Descrição da Fração</label>
+                      <input
+                        type="text"
+                        className="input"
+                        value={formData.description}
+                        onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                        placeholder="Ex: Tipologia T3, Garagem, Arrecadação..."
+                      />
+                    </div>
+                    <div>
+                      <label className="label">Quota Mensal (EUR) *</label>
+                      <div className="relative">
+                        <input
+                          type="number"
+                          step="0.01"
+                          className="input pr-12 font-bold"
+                          value={formData.monthlyFee}
+                          onChange={(e) => setFormData({ ...formData, monthlyFee: e.target.value })}
+                          required
+                        />
+                        <span className="absolute inset-y-0 right-0 pr-4 flex items-center text-gray-400 font-bold">€</span>
+                      </div>
+                    </div>
+                  </div>
                 </div>
 
-                <div className="mb-4">
-                  <label className="label">Telefone</label>
-                  <input
-                    type="text"
-                    className="input"
-                    value={formData.telefone}
-                    onChange={(e) => setFormData({ ...formData, telefone: e.target.value })}
-                    placeholder="Numero de telefone"
-                  />
-                </div>
-
-                <div className="mb-4">
-                  <label className="label">Email</label>
-                  <input
-                    type="email"
-                    className="input"
-                    value={formData.email}
-                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                    placeholder="Email de contacto"
-                  />
-                </div>
-
-                <div className="mb-4">
-                  <label className="label">Descrição</label>
-                  <input
-                    type="text"
-                    className="input"
-                    value={formData.description}
-                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                    placeholder="Descrição opcional"
-                  />
-                </div>
-
-                <div className="mb-6">
-                  <label className="label">Quota Mensal (EUR) *</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    className="input"
-                    value={formData.monthlyFee}
-                    onChange={(e) => setFormData({ ...formData, monthlyFee: e.target.value })}
-                    required
-                  />
-                </div>
-
-                <div className="flex gap-2 justify-end">
+                <div className="flex gap-3 justify-end mt-12 pb-2">
                   <button
                     type="button"
-                    className="btn-secondary"
+                    className="btn-secondary px-8"
                     onClick={() => { setShowModal(false); resetForm(); }}
                   >
                     Cancelar
                   </button>
                   <button
                     type="submit"
-                    className="btn-primary"
+                    className="btn-primary px-8"
                     disabled={saving}
                   >
-                    {saving ? 'A guardar...' : 'Guardar'}
+                    {saving ? 'A guardar...' : 'Criar Fração'}
                   </button>
                 </div>
               </form>
