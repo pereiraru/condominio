@@ -2,11 +2,10 @@
 
 import { useEffect, useState } from 'react';
 import Sidebar from '@/components/Sidebar';
-import { BankAccount, BankAccountSnapshot } from '@/lib/types';
+import { BankAccount } from '@/lib/types';
 
 export default function BankAccountsPage() {
   const [accounts, setAccounts] = useState<BankAccount[]>([]);
-  const [loading, setLoading] = useState(true);
   const [showAccountModal, setShowAccountModal] = useState(false);
   const [showSnapshotModal, setShowSnapshotModal] = useState(false);
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
@@ -29,12 +28,11 @@ export default function BankAccountsPage() {
   }, []);
 
   async function fetchAccounts() {
-    setLoading(true);
     try {
       const res = await fetch('/api/bank-accounts');
       if (res.ok) setAccounts(await res.json());
-    } finally {
-      setLoading(false);
+    } catch (e) {
+      console.error(e);
     }
   }
 

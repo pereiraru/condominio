@@ -2,11 +2,10 @@
 
 import { useEffect, useState } from 'react';
 import Sidebar from '@/components/Sidebar';
-import { Budget, BudgetLine } from '@/lib/types';
+import { Budget } from '@/lib/types';
 
 export default function BudgetsPage() {
   const [budgets, setBudgets] = useState<Budget[]>([]);
-  const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [saving, setSaving] = useState(false);
   
@@ -28,8 +27,8 @@ export default function BudgetsPage() {
     try {
       const res = await fetch('/api/budgets');
       if (res.ok) setBudgets(await res.json());
-    } finally {
-      setLoading(false);
+    } catch (e) {
+      console.error(e);
     }
   }
 
