@@ -19,7 +19,7 @@ interface TransactionRow {
 }
 
 async function importExcel() {
-  const excelPath = path.join(process.cwd(), 'contas predio.xlsm');
+  const excelPath = path.join(process.cwd(), 'data', 'contas predio.xlsm');
   console.log(`Reading Excel file: ${excelPath}`);
 
   const workbook = XLSX.readFile(excelPath);

@@ -141,6 +141,55 @@ export interface Document {
   uploadedAt: string;
 }
 
+export interface BankAccount {
+  id: string;
+  name: string;
+  accountType: string;
+  description?: string;
+  snapshots?: BankAccountSnapshot[];
+}
+
+export interface BankAccountSnapshot {
+  id: string;
+  bankAccountId: string;
+  date: string;
+  balance: number;
+  description?: string;
+}
+
+export interface SupplierInvoice {
+  id: string;
+  invoiceNumber?: string;
+  entryNumber?: string;
+  date: string;
+  creditorId: string;
+  creditor?: Creditor;
+  description: string;
+  category: string;
+  amountDue: number;
+  amountPaid: number;
+  isPaid: boolean;
+  transactionId?: string;
+}
+
+export interface Budget {
+  id: string;
+  year: number;
+  notes?: string;
+  lines?: BudgetLine[];
+}
+
+export interface BudgetLine {
+  id: string;
+  budgetId: string;
+  category: string;
+  description: string;
+  monthlyAmount: number;
+  annualAmount: number;
+  percentage?: number;
+  sortOrder: number;
+}
+
 export interface DashboardStats {
   currentBalance: number;
   balanceTrend?: number;

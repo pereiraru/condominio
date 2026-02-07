@@ -15,7 +15,10 @@
     "import": "npx tsx scripts/import-excel.ts",
     "seed:fee-history": "npx tsx scripts/seed-fee-history.ts",
     "import:full": "npx tsx scripts/import-full.ts",
-    "clear-data": "npx tsx scripts/clear-data.ts"
+    "clear-data": "npx tsx scripts/clear-data.ts",
+    "audit": "npx tsx scripts/audit-data.ts",
+    "verify:2024": "npx tsx scripts/verify-2024.ts",
+    "create-admin": "node scripts/create-admin.js"
   },
   "dependencies": {
     "@prisma/client": "^5.17.0",

@@ -76,7 +76,7 @@ function nextMonth(month: string): string {
 }
 
 async function importFull() {
-  const excelPath = path.join(process.cwd(), 'contas predio.xlsm');
+  const excelPath = path.join(process.cwd(), 'data', 'contas predio.xlsm');
   console.log(`Reading Excel file: ${excelPath}`);
   const workbook = XLSX.readFile(excelPath);
 

@@ -60,7 +60,7 @@ const YEAR_SHEETS: { name: string; year: number }[] = [
 ];
 
 async function importHistorical() {
-  const excelPath = path.join(process.cwd(), 'Condominio Actual 2023.xlsx');
+  const excelPath = path.join(process.cwd(), 'data', 'Condominio Actual 2023.xlsx');
   console.log(`Reading: ${excelPath}`);
   const workbook = XLSX.readFile(excelPath);
 

@@ -1,0 +1,577 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { getServerSession } from 'next-auth';
+import { prisma } from '@/lib/prisma';
+import { authOptions } from '@/lib/auth';
+import { getTotalFeeForMonth, FeeHistoryRecord, ExtraChargeRecord } from '@/lib/feeHistory';
+
+export async function GET(request: NextRequest) {
+  const session = await getServerSession(authOptions);
+
+  if (!session || session.user.role !== 'admin') {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
+  }
+
+  try {
+    const year = parseInt(
+      request.nextUrl.searchParams.get('year') ?? new Date().getFullYear().toString()
+    );
+
+    // --- Fetch all required data ---
+
+    const [units, creditors, allExtraCharges, yearAllocations, pastAllocations, bankAccounts, supplierInvoices, budget] = await Promise.all([
+      prisma.unit.findMany({
+        include: {
+          owners: true,
+          feeHistory: { orderBy: { effectiveFrom: 'asc' } },
+        },
+        orderBy: { code: 'asc' },
+      }),
+      prisma.creditor.findMany({
+        include: {
+          feeHistory: { orderBy: { effectiveFrom: 'asc' } },
+        },
+        orderBy: { name: 'asc' },
+      }),
+      prisma.extraCharge.findMany(),
+      prisma.transactionMonth.findMany({
+        where: { month: { gte: `${year}-01`, lte: `${year}-12` } },
+        include: {
+          transaction: {
+            select: { id: true, unitId: true, creditorId: true, amount: true, date: true, description: true, type: true, category: true },
+          },
+          extraCharge: true,
+        },
+      }),
+      prisma.transactionMonth.findMany({
+        where: { month: { lt: `${year}-01` } },
+        include: {
+          transaction: { select: { unitId: true, creditorId: true, amount: true } },
+        },
+      }),
+      prisma.bankAccount.findMany({
+        include: {
+          snapshots: {
+            where: {
+              date: {
+                gte: new Date(`${year}-12-01`),
+                lte: new Date(`${year}-12-31T23:59:59`),
+              },
+            },
+            orderBy: { date: 'desc' },
+            take: 1,
+          },
+        },
+      }),
+      prisma.supplierInvoice.findMany({
+        where: {
+          date: {
+            gte: new Date(`${year}-01-01`),
+            lte: new Date(`${year}-12-31T23:59:59`),
+          },
+        },
+        include: {
+          creditor: { select: { name: true, category: true } },
+        },
+        orderBy: [{ category: 'asc' }, { date: 'asc' }],
+      }),
+      prisma.budget.findFirst({
+        where: { year: year + 1 },
+        include: {
+          lines: { orderBy: { sortOrder: 'asc' } },
+        },
+      }),
+    ]);
+
+    // --- Helper: calculate past years debt for a unit ---
+    const calculatePastYearsDebt = (
+      unitId: string,
+      feeHistory: FeeHistoryRecord[],
+      defaultFee: number,
+      extraCharges: ExtraChargeRecord[]
+    ): number => {
+      const entityAllocs = pastAllocations.filter(
+        (a) => a.transaction.unitId === unitId && a.transaction.amount > 0
+      );
+
+      const pastYears = new Set<number>();
+      entityAllocs.forEach((a) => {
+        const y = parseInt(a.month.split('-')[0]);
+        if (y < year) pastYears.add(y);
+      });
+
+      feeHistory.forEach((fh) => {
+        const startY = parseInt(fh.effectiveFrom.split('-')[0]);
+        const endY = fh.effectiveTo ? parseInt(fh.effectiveTo.split('-')[0]) : year - 1;
+        for (let y = startY; y <= Math.min(endY, year - 1); y++) {
+          pastYears.add(y);
+        }
+      });
+
+      extraCharges.forEach((ec) => {
+        const startY = parseInt(ec.effectiveFrom.split('-')[0]);
+        const endY = ec.effectiveTo ? parseInt(ec.effectiveTo.split('-')[0]) : year - 1;
+        for (let y = startY; y <= Math.min(endY, year - 1); y++) {
+          pastYears.add(y);
+        }
+      });
+
+      if (pastYears.size === 0) return 0;
+
+      let accumulatedDebt = 0;
+      const sortedYears = Array.from(pastYears).sort((a, b) => a - b);
+
+      for (const y of sortedYears) {
+        let expectedForYear = 0;
+        let paidForYear = 0;
+
+        for (let m = 1; m <= 12; m++) {
+          const monthStr = `${y}-${m.toString().padStart(2, '0')}`;
+          const feeData = getTotalFeeForMonth(feeHistory, extraCharges, monthStr, defaultFee, unitId);
+          expectedForYear += feeData.total;
+          paidForYear += entityAllocs
+            .filter((a) => a.month === monthStr)
+            .reduce((sum, a) => sum + a.amount, 0);
+        }
+
+        accumulatedDebt = Math.max(0, accumulatedDebt + expectedForYear - paidForYear);
+      }
+
+      return accumulatedDebt;
+    };
+
+    // =========================================
+    // SECTION 1: Balancete de Receitas e Despesas
+    // =========================================
+
+    // Revenue: income allocations for the year
+    const incomeAllocations = yearAllocations.filter((a) => a.transaction.amount > 0);
+    const expenseAllocations = yearAllocations.filter((a) => a.transaction.amount < 0);
+
+    // Calculate total expected revenue and breakdown
+    let totalBaseFeeExpected = 0;
+    let totalExtraChargesExpected = 0;
+    const extraChargeBreakdown: Record<string, { description: string; amount: number }> = {};
+
+    for (const unit of units) {
+      const unitExtraCharges = allExtraCharges.filter(
+        (e) => e.unitId === null || e.unitId === unit.id
+      ) as ExtraChargeRecord[];
+
+      for (let m = 1; m <= 12; m++) {
+        const monthStr = `${year}-${m.toString().padStart(2, '0')}`;
+        const feeData = getTotalFeeForMonth(
+          unit.feeHistory as FeeHistoryRecord[],
+          unitExtraCharges,
+          monthStr,
+          unit.monthlyFee,
+          unit.id
+        );
+        totalBaseFeeExpected += feeData.baseFee;
+        for (const extra of feeData.extras) {
+          const key = extra.id || extra.description;
+          if (!extraChargeBreakdown[key]) {
+            extraChargeBreakdown[key] = { description: extra.description, amount: 0 };
+          }
+          extraChargeBreakdown[key].amount += extra.amount;
+        }
+      }
+    }
+    totalExtraChargesExpected = Object.values(extraChargeBreakdown).reduce((sum, e) => sum + e.amount, 0);
+
+    // Actual revenue received (income allocations for current year)
+    const totalReceitasReceived = incomeAllocations.reduce((sum, a) => sum + a.amount, 0);
+
+    // Revenue from previous years (income allocations for past months but in current year transactions)
+    const previousYearPayments = pastAllocations.filter(
+      (a) => a.transaction.amount > 0
+    );
+    // We compute this from debt calculation instead - payments covering past year debts
+    // In this report, we sum income that was allocated to months in the current year
+    const receitasAnosAnteriores = incomeAllocations
+      .filter((a) => a.month < `${year}-01`)
+      .reduce((sum, a) => sum + a.amount, 0);
+
+    // Expenses by creditor (grouped by creditor name for the report)
+    const expensesByCreditor: Record<string, { label: string; category: string; amount: number }> = {};
+    const seenExpenseTransactions = new Set<string>();
+
+    for (const alloc of expenseAllocations) {
+      const tx = alloc.transaction;
+      if (seenExpenseTransactions.has(tx.id)) continue;
+      seenExpenseTransactions.add(tx.id);
+
+      const creditor = creditors.find((c) => c.id === tx.creditorId);
+      const label = creditor?.name || tx.category || 'Outros';
+      const category = creditor?.category || tx.category || 'other';
+
+      if (!expensesByCreditor[label]) {
+        expensesByCreditor[label] = { label, category, amount: 0 };
+      }
+      expensesByCreditor[label].amount += Math.abs(tx.amount);
+    }
+
+    const despesasCategories = Object.values(expensesByCreditor).sort((a, b) =>
+      a.label.localeCompare(b.label)
+    );
+    const totalDespesas = despesasCategories.reduce((sum, c) => sum + c.amount, 0);
+
+    // Saldo do exercício
+    const saldoExercicio = totalReceitasReceived - totalDespesas;
+
+    // Previous year saldo (carry-forward) — compute from previous year's report data
+    // We approximate this by looking at the overall balance from past years
+    const prevYearIncome = pastAllocations
+      .filter((a) => a.transaction.amount > 0 && a.month >= `${year - 1}-01` && a.month <= `${year - 1}-12`)
+      .reduce((sum, a) => sum + a.amount, 0);
+    const prevYearExpenseAllocs = pastAllocations
+      .filter((a) => a.transaction.amount < 0 && a.month >= `${year - 1}-01` && a.month <= `${year - 1}-12`);
+    const prevYearExpenseIds = new Set<string>();
+    // We can't easily get the actual past saldo without a recursive computation,
+    // so we'll allow it to be manually set or computed from bank balances
+
+    // Bank account balances
+    const contasBancarias = bankAccounts.map((account) => ({
+      id: account.id,
+      name: account.name,
+      accountType: account.accountType,
+      balance: account.snapshots[0]?.balance ?? 0,
+      description: account.snapshots[0]?.description ?? null,
+    }));
+    const totalBankBalance = contasBancarias.reduce((sum, c) => sum + c.balance, 0);
+
+    // =========================================
+    // SECTION 2: Valores em Débito por Fração
+    // =========================================
+
+    const unitDebtData = units.map((unit) => {
+      const unitExtraCharges = allExtraCharges.filter(
+        (e) => e.unitId === null || e.unitId === unit.id
+      ) as ExtraChargeRecord[];
+
+      // Opening balance (debt at start of year)
+      const saldoInicial = calculatePastYearsDebt(
+        unit.id,
+        unit.feeHistory as FeeHistoryRecord[],
+        unit.monthlyFee,
+        unitExtraCharges
+      );
+
+      // Expected for this year
+      let previsto = 0;
+      for (let m = 1; m <= 12; m++) {
+        const monthStr = `${year}-${m.toString().padStart(2, '0')}`;
+        const feeData = getTotalFeeForMonth(
+          unit.feeHistory as FeeHistoryRecord[],
+          unitExtraCharges,
+          monthStr,
+          unit.monthlyFee,
+          unit.id
+        );
+        previsto += feeData.total;
+      }
+
+      // Received this year
+      const recebido = incomeAllocations
+        .filter((a) => a.transaction.unitId === unit.id)
+        .reduce((sum, a) => sum + a.amount, 0);
+
+      // Closing balance
+      const saldo = saldoInicial + previsto - recebido;
+
+      const currentOwner = unit.owners?.find((o) => o.endMonth === null);
+      const ownerName = currentOwner?.name || unit.owners?.[0]?.name || '';
+
+      return {
+        code: unit.code,
+        description: unit.description || '',
+        ownerName,
+        saldoInicial: Math.max(0, saldoInicial),
+        previsto,
+        recebido,
+        saldo: Math.max(0, saldo),
+      };
+    });
+
+    const debtTotals = {
+      saldoInicial: unitDebtData.reduce((sum, u) => sum + u.saldoInicial, 0),
+      previsto: unitDebtData.reduce((sum, u) => sum + u.previsto, 0),
+      recebido: unitDebtData.reduce((sum, u) => sum + u.recebido, 0),
+      saldo: unitDebtData.reduce((sum, u) => sum + u.saldo, 0),
+    };
+
+    // =========================================
+    // SECTION 3: Avisos e Créditos
+    // =========================================
+
+    // Credit notes are transactions with type 'transfer' or negative income adjustments
+    const creditNotes = yearAllocations
+      .filter((a) => a.transaction.type === 'transfer' && a.transaction.amount < 0 && a.transaction.unitId)
+      .map((a) => {
+        const unit = units.find((u) => u.id === a.transaction.unitId);
+        const currentOwner = unit?.owners?.find((o) => o.endMonth === null);
+        return {
+          date: a.transaction.date.toISOString().split('T')[0],
+          unitCode: unit?.code || '',
+          entity: currentOwner?.name || '',
+          description: a.transaction.description,
+          amount: a.amount,
+          settled: 0,
+          balance: a.amount,
+        };
+      });
+
+    // =========================================
+    // SECTION 4 & 5: Supplier Invoices (Paid / Unpaid)
+    // =========================================
+
+    const paidInvoicesByCategory: Record<string, {
+      category: string;
+      categoryLabel: string;
+      invoices: typeof supplierInvoices;
+      categoryTotal: number;
+      categoryTotalPaid: number;
+    }> = {};
+
+    const unpaidInvoicesByCategory: Record<string, {
+      category: string;
+      categoryLabel: string;
+      invoices: typeof supplierInvoices;
+      categoryTotal: number;
+      categoryTotalPaid: number;
+    }> = {};
+
+    for (const invoice of supplierInvoices) {
+      const cat = invoice.category;
+      const label = invoice.creditor?.name || cat;
+      const target = invoice.isPaid ? paidInvoicesByCategory : unpaidInvoicesByCategory;
+
+      if (!target[cat]) {
+        target[cat] = { category: cat, categoryLabel: label, invoices: [], categoryTotal: 0, categoryTotalPaid: 0 };
+      }
+      target[cat].invoices.push(invoice);
+      target[cat].categoryTotal += invoice.amountDue;
+      target[cat].categoryTotalPaid += invoice.amountPaid;
+    }
+
+    const paidInvoices = Object.values(paidInvoicesByCategory).sort((a, b) =>
+      a.categoryLabel.localeCompare(b.categoryLabel)
+    );
+    const unpaidInvoices = Object.values(unpaidInvoicesByCategory).sort((a, b) =>
+      a.categoryLabel.localeCompare(b.categoryLabel)
+    );
+
+    const totalPaidInvoicesAmount = paidInvoices.reduce((sum, c) => sum + c.categoryTotalPaid, 0);
+    const totalUnpaidInvoicesAmount = unpaidInvoices.reduce((sum, c) => sum + c.categoryTotal - c.categoryTotalPaid, 0);
+
+    // =========================================
+    // SECTION 6: Valores por Liquidar por Fração (Detailed)
+    // =========================================
+
+    const detailedDebtUnits = units
+      .map((unit) => {
+        const unitExtraCharges = allExtraCharges.filter(
+          (e) => e.unitId === null || e.unitId === unit.id
+        ) as ExtraChargeRecord[];
+
+        const items: { description: string; amount: number }[] = [];
+
+        // Check each month for unpaid base fees
+        for (let m = 1; m <= 12; m++) {
+          const monthStr = `${year}-${m.toString().padStart(2, '0')}`;
+          const feeData = getTotalFeeForMonth(
+            unit.feeHistory as FeeHistoryRecord[],
+            unitExtraCharges,
+            monthStr,
+            unit.monthlyFee,
+            unit.id
+          );
+
+          // Get total paid for this month (base fee allocations)
+          const monthPaid = incomeAllocations
+            .filter((a) => a.transaction.unitId === unit.id && a.month === monthStr && !a.extraChargeId)
+            .reduce((sum, a) => sum + a.amount, 0);
+
+          const baseDebt = feeData.baseFee - monthPaid;
+          if (baseDebt > 0.01) {
+            const monthNames = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+              'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+            items.push({
+              description: `Quota de ${monthNames[m - 1]} de ${year}`,
+              amount: baseDebt,
+            });
+          }
+
+          // Check each extra charge for this month
+          for (const extra of feeData.extras) {
+            const extraPaid = incomeAllocations
+              .filter((a) => a.transaction.unitId === unit.id && a.month === monthStr && a.extraChargeId === extra.id)
+              .reduce((sum, a) => sum + a.amount, 0);
+
+            const extraDebt = extra.amount - extraPaid;
+            if (extraDebt > 0.01) {
+              items.push({
+                description: `Quota Extra ${year} - ${extra.description}`,
+                amount: extraDebt,
+              });
+            }
+          }
+        }
+
+        const currentOwner = unit.owners?.find((o) => o.endMonth === null);
+
+        return {
+          code: unit.code,
+          description: unit.description || '',
+          ownerName: currentOwner?.name || unit.owners?.[0]?.name || '',
+          items,
+          unitTotal: items.reduce((sum, i) => sum + i.amount, 0),
+        };
+      })
+      .filter((u) => u.unitTotal > 0.01);
+
+    const detailedDebtGrandTotal = detailedDebtUnits.reduce((sum, u) => sum + u.unitTotal, 0);
+
+    // =========================================
+    // SECTION 7: Orçamento de Despesas + Quotas
+    // =========================================
+
+    let budgetData = null;
+    if (budget) {
+      const totalAnnual = budget.lines.reduce((sum, l) => sum + l.annualAmount, 0);
+      budgetData = {
+        nextYear: budget.year,
+        notes: budget.notes,
+        lines: budget.lines.map((l) => ({
+          category: l.category,
+          description: l.description,
+          monthlyAmount: l.monthlyAmount,
+          annualAmount: l.annualAmount,
+          percentage: l.percentage ?? (totalAnnual > 0 ? (l.annualAmount / totalAnnual) * 100 : 0),
+        })),
+        totalMonthly: budget.lines.reduce((sum, l) => sum + l.monthlyAmount, 0),
+        totalAnnual,
+      };
+    }
+
+    // Fee schedule for next year
+    const feeSchedule = units.map((unit) => {
+      const currentMonthStr = `${year}-12`;
+      const nextYearMonthStr = `${year + 1}-01`;
+      const currentFee = getTotalFeeForMonth(
+        unit.feeHistory as FeeHistoryRecord[],
+        allExtraCharges.filter((e) => e.unitId === null || e.unitId === unit.id) as ExtraChargeRecord[],
+        currentMonthStr,
+        unit.monthlyFee,
+        unit.id
+      ).total;
+      const nextFee = getTotalFeeForMonth(
+        unit.feeHistory as FeeHistoryRecord[],
+        allExtraCharges.filter((e) => e.unitId === null || e.unitId === unit.id) as ExtraChargeRecord[],
+        nextYearMonthStr,
+        unit.monthlyFee,
+        unit.id
+      ).total;
+
+      return {
+        unitCode: unit.code,
+        description: unit.description || '',
+        currentFee,
+        newFee: nextFee,
+        variation: currentFee > 0 ? ((nextFee - currentFee) / currentFee) * 100 : 0,
+      };
+    });
+
+    // =========================================
+    // Build response
+    // =========================================
+
+    return NextResponse.json({
+      year,
+      buildingName: 'Rua Vieira da Silva, n.6 - Monte Abraão, Queluz',
+
+      // Section 1
+      balancete: {
+        receitas: {
+          orcamentoExercicio: totalBaseFeeExpected,
+          quotasExtra: Object.values(extraChargeBreakdown),
+          subTotalExercicio: totalBaseFeeExpected + totalExtraChargesExpected,
+          receitasAnosAnteriores,
+          totalRecibos: totalReceitasReceived,
+          totalReceitas: totalReceitasReceived,
+        },
+        despesas: {
+          categories: despesasCategories,
+          totalDespesas,
+        },
+        saldoExercicio,
+        saldoTransitar: totalBankBalance,
+        contasBancarias,
+        totalBankBalance,
+        despesasPorLiquidar: totalUnpaidInvoicesAmount,
+        quotasPorLiquidar: {
+          total: debtTotals.saldo,
+        },
+      },
+
+      // Section 2
+      debtByUnit: {
+        units: unitDebtData,
+        totals: debtTotals,
+      },
+
+      // Section 3
+      creditNotes,
+
+      // Section 4
+      paidInvoices: paidInvoices.map((c) => ({
+        category: c.category,
+        categoryLabel: c.categoryLabel,
+        invoices: c.invoices.map((inv) => ({
+          entryNumber: inv.entryNumber || '',
+          invoiceNumber: inv.invoiceNumber || '',
+          date: inv.date.toISOString().split('T')[0],
+          supplier: inv.creditor?.name || '',
+          description: inv.description,
+          amountDue: inv.amountDue,
+          amountPaid: inv.amountPaid,
+        })),
+        categoryTotal: c.categoryTotal,
+        categoryTotalPaid: c.categoryTotalPaid,
+        documentCount: c.invoices.length,
+      })),
+      totalPaidInvoices: totalPaidInvoicesAmount,
+
+      // Section 5
+      unpaidInvoices: unpaidInvoices.map((c) => ({
+        category: c.category,
+        categoryLabel: c.categoryLabel,
+        invoices: c.invoices.map((inv) => ({
+          entryNumber: inv.entryNumber || '',
+          invoiceNumber: inv.invoiceNumber || '',
+          date: inv.date.toISOString().split('T')[0],
+          supplier: inv.creditor?.name || '',
+          description: inv.description,
+          amountDue: inv.amountDue,
+          amountPaid: inv.amountPaid,
+        })),
+        categoryTotal: c.categoryTotal,
+        categoryTotalPaid: c.categoryTotalPaid,
+        documentCount: c.invoices.length,
+      })),
+      totalUnpaidInvoices: totalUnpaidInvoicesAmount,
+
+      // Section 6
+      detailedDebtByUnit: {
+        units: detailedDebtUnits,
+        grandTotal: detailedDebtGrandTotal,
+      },
+
+      // Section 7
+      budget: budgetData,
+      feeSchedule,
+    });
+  } catch (error) {
+    console.error('Error generating annual report:', error);
+    return NextResponse.json({ error: 'Failed to generate annual report' }, { status: 500 });
+  }
+}

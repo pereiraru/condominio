@@ -20,9 +20,14 @@ prisma/*.db
 # IDE
 .idea
 .vscode
-.claude
 *.swp
 *.swo
+
+# Claude Code (keep commands/ shared, ignore personal settings)
+.claude/settings.local.json
+
+# Data files (Excel sources)
+data/
 
 # OS
 .DS_Store

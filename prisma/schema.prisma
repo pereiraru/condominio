@@ -75,6 +75,7 @@ model Creditor {
   transactions        Transaction[]
   feeHistory          FeeHistory[]
   descriptionMappings DescriptionMapping[]
+  supplierInvoices    SupplierInvoice[]
   createdAt           DateTime             @default(now())
   updatedAt           DateTime             @updatedAt
 }
@@ -109,6 +110,7 @@ model Transaction {
   documentId       String?
   document         Document?          @relation(fields: [documentId], references: [id])
   monthAllocations TransactionMonth[]
+  supplierInvoices SupplierInvoice[]
   createdAt        DateTime           @default(now())
   updatedAt        DateTime           @updatedAt
 }
@@ -176,4 +178,67 @@ model ExtraCharge {
 
   unit              Unit?              @relation(fields: [unitId], references: [id], onDelete: Cascade)
   transactionMonths TransactionMonth[]
+}
+
+// Bank accounts (Caixa, Depósitos à Ordem, Depósito a Prazo)
+model BankAccount {
+  id          String                @id @default(cuid())
+  name        String                // "Caixa", "Depósitos à Ordem", "Depósito a Prazo"
+  accountType String                // "cash", "current", "savings"
+  description String?
+  snapshots   BankAccountSnapshot[]
+  createdAt   DateTime              @default(now())
+}
+
+// Bank account balance snapshots (period-end balances)
+model BankAccountSnapshot {
+  id            String      @id @default(cuid())
+  bankAccountId String
+  bankAccount   BankAccount @relation(fields: [bankAccountId], references: [id], onDelete: Cascade)
+  date          DateTime    // Snapshot date (e.g., 2025-12-31)
+  balance       Float
+  description   String?     // Optional note
+  createdAt     DateTime    @default(now())
+}
+
+// Supplier invoices (tracks paid/unpaid status for annual report)
+model SupplierInvoice {
+  id            String       @id @default(cuid())
+  invoiceNumber String?      // Document number
+  entryNumber   String?      // Entry/ledger number
+  date          DateTime
+  creditorId    String
+  creditor      Creditor     @relation(fields: [creditorId], references: [id], onDelete: Cascade)
+  description   String
+  category      String       // Expense category
+  amountDue     Float        // Total invoice amount
+  amountPaid    Float        @default(0)
+  isPaid        Boolean      @default(false)
+  transactionId String?
+  transaction   Transaction? @relation(fields: [transactionId], references: [id], onDelete: SetNull)
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+}
+
+// Annual budget
+model Budget {
+  id        String       @id @default(cuid())
+  year      Int          @unique
+  notes     String?
+  lines     BudgetLine[]
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+}
+
+// Budget line items
+model BudgetLine {
+  id            String @id @default(cuid())
+  budgetId      String
+  budget        Budget @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+  category      String
+  description   String
+  monthlyAmount Float
+  annualAmount  Float
+  percentage    Float?
+  sortOrder     Int    @default(0)
 }

@@ -87,3 +87,48 @@ table {
 th {
   font-weight: 500;
 }
+
+/* Print styles for Relatório de Contas */
+@media print {
+  .sidebar {
+    display: none !important;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+
+  body {
+    background: white !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  main {
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  .report-container {
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    padding: 0 !important;
+  }
+
+  .report-section-break {
+    page-break-before: always;
+  }
+
+  tr {
+    page-break-inside: avoid;
+  }
+
+  table {
+    page-break-inside: auto;
+  }
+
+  @page {
+    margin: 1.5cm;
+    size: A4;
+  }
+}
