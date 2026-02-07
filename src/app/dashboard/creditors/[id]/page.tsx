@@ -4,7 +4,6 @@ import { useEffect, useState, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import Sidebar from '@/components/Sidebar';
-import MonthCalendar from '@/components/MonthCalendar';
 import TransactionEditPanel from '@/components/TransactionEditPanel';
 import FeeHistoryManager from '@/components/FeeHistoryManager';
 import { Creditor, Transaction, MonthPaymentStatus, FeeHistory, DescriptionMapping } from '@/lib/types';
@@ -57,12 +56,10 @@ export default function CreditorDetailPage() {
   });
 
   const [selectedTx, setSelectedTx] = useState<Transaction | null>(null);
-  const [allUnits, setAllUnits] = useState([]);
   const [allCreditors, setAllCreditors] = useState<Creditor[]>([]);
 
   // Calendar and summary state
   const [calendarYear, setCalendarYear] = useState(new Date().getFullYear());
-  const [monthStatus, setMonthStatus] = useState<MonthPaymentStatus[]>([]);
   const [feeHistory, setFeeHistory] = useState<FeeHistory[]>([]);
   const [paymentHistory, setPaymentHistory] = useState<Record<string, number>>({});
   const [expectedHistory, setExpectedHistory] = useState<Record<string, number>>({});
@@ -82,23 +79,10 @@ export default function CreditorDetailPage() {
     fetchFeeHistory();
     fetchPaymentHistory();
     if (isAdmin) {
-      fetchAllUnits();
       fetchAllCreditors();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, isAdmin]);
-
-  useEffect(() => {
-    if (id) {
-      fetchMonthlyStatus();
-    }
-  }, [id, calendarYear]);
-
-  async function fetchAllUnits() {
-    try {
-      const res = await fetch('/api/units');
-      if (res.ok) setAllUnits(await res.json());
-    } catch (error) { console.error(error); }
-  }
 
   async function fetchAllCreditors() {
     try {
@@ -113,16 +97,6 @@ export default function CreditorDetailPage() {
       if (res.ok) setSelectedTx(await res.json());
       else setSelectedTx(tx);
     } catch { setSelectedTx(tx); }
-  }
-
-  async function fetchMonthlyStatus() {
-    try {
-      const res = await fetch(`/api/monthly-status?creditorId=${id}&year=${calendarYear}`);
-      if (res.ok) {
-        const data = await res.json();
-        setMonthStatus(data.months);
-      }
-    } catch (error) { console.error(error); }
   }
 
   async function fetchPaymentHistory() {
@@ -505,8 +479,8 @@ export default function CreditorDetailPage() {
                   transaction={selectedTx}
                   units={[]}
                   creditors={allCreditors}
-                  onSave={() => { setSelectedTx(null); fetchCreditor(); fetchMonthlyStatus(); fetchPaymentHistory(); }}
-                  onDelete={() => { setSelectedTx(null); fetchCreditor(); fetchMonthlyStatus(); fetchPaymentHistory(); }}
+                  onSave={() => { setSelectedTx(null); fetchCreditor(); fetchPaymentHistory(); }}
+                  onDelete={() => { setSelectedTx(null); fetchCreditor(); fetchPaymentHistory(); }}
                   onClose={() => setSelectedTx(null)}
                 />
               </div>
