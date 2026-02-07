@@ -12,6 +12,7 @@ interface Section1Props {
     despesas: {
       categories: { label: string; category: string; amount: number }[];
       totalDespesas: number;
+      totalFixedExpected?: number;
     };
     saldoExercicio: number;
     saldoTransitar: number;
@@ -73,6 +74,12 @@ export default function Section1Balancete({ data, year }: Section1Props) {
         <div>
           <h4 className="font-bold text-base bg-gray-100 p-2 mb-4 border-l-4 border-gray-800">DESPESAS PAGAS</h4>
           <table className="w-full text-sm">
+            <thead>
+              <tr className="text-[10px] uppercase text-gray-500 font-bold border-b border-gray-200">
+                <th className="text-left py-1">Descrição</th>
+                <th className="text-right py-1">Pago</th>
+              </tr>
+            </thead>
             <tbody>
               <tr className="font-bold">
                 <td className="py-1">1. NESTE EXERCÍCIO</td>
@@ -91,6 +98,16 @@ export default function Section1Balancete({ data, year }: Section1Props) {
               </tr>
             </tbody>
           </table>
+          
+          {data.despesas.totalFixedExpected && data.despesas.totalFixedExpected > 0 && (
+            <div className="mt-4 p-2 bg-blue-50/50 rounded border border-blue-100 text-[10px]">
+              <div className="flex justify-between items-center text-blue-800">
+                <span className="font-bold uppercase">Projeção de Custos Fixos {year}</span>
+                <span className="font-black">{fmt(data.despesas.totalFixedExpected)}</span>
+              </div>
+              <p className="text-blue-600/70 mt-1 italic">Este valor representa o total contratual esperado para fornecedores com avenças fixas.</p>
+            </div>
+          )}
         </div>
       </div>
 

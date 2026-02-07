@@ -302,18 +302,29 @@ export default function CreditorDetailPage() {
                   </div>
 
                   {formData.isFixed && (
-                    <div className="mt-6 animate-in fade-in slide-in-from-top-2">
-                      <label className="label">Valor Mensal Esperado</label>
-                      <div className="relative max-w-[200px]">
-                        <input 
-                          type="number" step="0.01" className="input pr-12 font-bold text-lg" 
-                          value={formData.amountDue} 
-                          onChange={e => setFormData({...formData, amountDue: e.target.value})}
-                          disabled={!isAdmin}
-                        />
-                        <span className="absolute inset-y-0 right-0 pr-4 flex items-center text-gray-400 font-bold">€</span>
+                    <div className="mt-6 animate-in fade-in slide-in-from-top-2 space-y-6">
+                      <div>
+                        <label className="label">Valor Base (Padrao)</label>
+                        <div className="relative max-w-[200px]">
+                          <input 
+                            type="number" step="0.01" className="input pr-12 font-bold text-lg" 
+                            value={formData.amountDue} 
+                            onChange={e => setFormData({...formData, amountDue: e.target.value})}
+                            disabled={!isAdmin}
+                          />
+                          <span className="absolute inset-y-0 right-0 pr-4 flex items-center text-gray-400 font-bold">€</span>
+                        </div>
                       </div>
-                      <p className="text-xs text-blue-600 mt-2 font-medium">Este valor será usado para calcular dívidas e orçamentos.</p>
+
+                      <div className="pt-6 border-t border-blue-100">
+                        <FeeHistoryManager
+                          creditorId={id}
+                          feeHistory={feeHistory}
+                          defaultFee={parseFloat(formData.amountDue) || 0}
+                          readOnly={!isAdmin}
+                          onUpdate={fetchFeeHistory}
+                        />
+                      </div>
                     </div>
                   )}
                 </div>
@@ -323,22 +334,34 @@ export default function CreditorDetailPage() {
                 {/* Metrics Card */}
                 <div className="card overflow-hidden !p-0">
                   <div className="p-6">
-                    <h2 className="text-xl font-bold mb-6">Resumo Financeiro</h2>
+                    <h2 className="text-xl font-bold mb-6">Resumo {calendarYear}</h2>
                     <div className="space-y-4">
-                      <div className="flex justify-between items-center">
-                        <span className="text-gray-500 text-sm">Total Pago (Sempre):</span>
-                        <span className="font-bold text-gray-900">{(creditor.totalPaid ?? 0).toFixed(2)}€</span>
+                      <div className="flex justify-between items-center text-sm">
+                        <span className="text-gray-500">Pago este ano:</span>
+                        <span className="font-bold text-gray-900">{(yearlyData.find(y => y.year === calendarYear)?.paid ?? 0).toFixed(2)}€</span>
                       </div>
-                      <div className="flex justify-between items-center">
-                        <span className="text-gray-500 text-sm">Média Mensal:</span>
-                        <span className="font-bold text-gray-900">{(creditor.avgMonthly ?? 0).toFixed(2)}€</span>
-                      </div>
+                      
                       {creditor.isFixed && (
-                        <div className="flex justify-between items-center pt-4 border-t border-gray-100">
-                          <span className="text-gray-500 text-sm">Valor Fixo Atual:</span>
-                          <span className="font-black text-blue-600">{creditor.amountDue?.toFixed(2)}€</span>
-                        </div>
+                        <>
+                          <div className="flex justify-between items-center text-sm">
+                            <span className="text-gray-500">Total Previsto {calendarYear}:</span>
+                            <span className="font-bold text-blue-600">{(yearlyData.find(y => y.year === calendarYear)?.expected ?? 0).toFixed(2)}€</span>
+                          </div>
+                          <div className="flex justify-between items-center text-sm">
+                            <span className="text-gray-500">Dívida Acumulada:</span>
+                            <span className={`font-bold ${(yearlyData.find(y => y.year === calendarYear)?.accumulatedDebt ?? 0) > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                              {(yearlyData.find(y => y.year === calendarYear)?.accumulatedDebt ?? 0).toFixed(2)}€
+                            </span>
+                          </div>
+                        </>
                       )}
+
+                      <div className="pt-4 border-t border-gray-100">
+                        <div className="flex justify-between items-center text-xs text-gray-400 uppercase font-bold tracking-widest">
+                          <span>Histórico Total</span>
+                          <span>{(creditor.totalPaid ?? 0).toFixed(2)}€</span>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>

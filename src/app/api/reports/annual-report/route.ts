@@ -305,6 +305,22 @@ export async function GET(request: NextRequest) {
     );
     const totalDespesas = despesasCategories.reduce((sum, c) => sum + c.amount, 0);
 
+    // Calculate total expected for fixed creditors this year
+    let totalFixedExpected = 0;
+    const fixedCreditors = creditors.filter(c => c.isFixed);
+    for (const creditor of fixedCreditors) {
+      for (let m = 1; m <= 12; m++) {
+        const monthStr = `${year}-${m.toString().padStart(2, '0')}`;
+        const feeData = getTotalFeeForMonth(
+          creditor.feeHistory as FeeHistoryRecord[],
+          [],
+          monthStr,
+          creditor.amountDue || 0
+        );
+        totalFixedExpected += feeData.total;
+      }
+    }
+
     // Saldo final
     const saldoExercicio = (receitasAnosAnteriores + receitasDesteExercicio) - totalDespesas;
     const saldoFinalDisponivel = saldoInicialTransitar + saldoExercicio;
@@ -668,6 +684,7 @@ export async function GET(request: NextRequest) {
         despesas: {
           categories: despesasCategories,
           totalDespesas,
+          totalFixedExpected,
         },
         saldoExercicio,
         saldoTransitar: saldoInicialTransitar,
