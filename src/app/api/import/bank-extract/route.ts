@@ -27,8 +27,6 @@ export async function POST(request: NextRequest) {
     
     // 1. Get mappings for auto-assignment
     const mappings = await prisma.descriptionMapping.findMany();
-    const units = await prisma.unit.findMany();
-    const creditors = await prisma.creditor.findMany();
 
     let importedCount = 0;
     let duplicateCount = 0;
