@@ -50,7 +50,9 @@ export default function UnitDetailV2Page() {
     telefone: '',
     email: '',
   });
-  const [owners, setOwners] = useState<Owner[]>([{ id: '', name: '', unitId: '' }]);
+  
+  // Track previousDebt as string in local state to allow empty field
+  const [owners, setOwners] = useState<(Owner & { previousDebtStr?: string })[]>([]);
   const [selectedOwnerId, setSelectedOwnerId] = useState<string>('');
   const [selectedTx, setSelectedTx] = useState<Transaction | null>(null);
   const [allUnits, setAllUnits] = useState<Unit[]>([]);
@@ -216,7 +218,11 @@ export default function UnitDetailV2Page() {
           telefone: data.telefone || '',
           email: data.email || '',
         });
-        setOwners(data.owners && data.owners.length > 0 ? data.owners : [{ id: '', name: '', unitId: id }]);
+        const unitOwners = data.owners && data.owners.length > 0 
+          ? data.owners.map((o: Owner) => ({ ...o, previousDebtStr: o.previousDebt?.toString() || '0' }))
+          : [{ id: '', name: '', unitId: id, previousDebtStr: '0' }];
+        setOwners(unitOwners);
+        
         if (data.owners && data.owners.length > 0 && !selectedOwnerId) {
           const currentOwner = data.owners.find((o: Owner) => !o.endMonth);
           if (currentOwner) setSelectedOwnerId(currentOwner.id);
@@ -229,9 +235,15 @@ export default function UnitDetailV2Page() {
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  function updateOwnerField(index: number, field: keyof Owner, value: any) {
+  function updateOwnerField(index: number, field: keyof Owner | 'previousDebtStr', value: any) {
     const updated = [...owners];
     updated[index] = { ...updated[index], [field]: value };
+    
+    // If updating string debt, also update numeric debt
+    if (field === 'previousDebtStr') {
+      updated[index].previousDebt = parseFloat(value) || 0;
+    }
+    
     setOwners(updated);
   }
 
@@ -272,7 +284,7 @@ export default function UnitDetailV2Page() {
           nib: o.nib || null,
           startMonth: o.startMonth || null,
           endMonth: o.endMonth || null,
-          previousDebt: o.previousDebt ?? 0,
+          previousDebt: parseFloat(o.previousDebtStr || '0') || 0,
         }));
 
       const res = await fetch(`/api/units/${id}`, {
@@ -306,7 +318,7 @@ export default function UnitDetailV2Page() {
   if (loading) return <div className="flex min-h-screen"><Sidebar /><main className="flex-1 p-8 text-gray-500">A carregar...</main></div>;
   if (!unit) return null;
 
-  const currentOwner = owners.find(o => !o.endMonth) || owners[0];
+  const currentOwnerLocal = owners.find(o => !o.endMonth) || owners[0];
   const totalDebt = (pastYearsDebt + previousDebtRemaining + (unit.totalOwed ?? 0) + (unit.pre2024?.remaining ?? 0));
 
   return (
@@ -442,8 +454,8 @@ export default function UnitDetailV2Page() {
                       <label className="label">Nome Completo</label>
                       <input 
                         type="text" className="input font-bold text-gray-900" 
-                        value={currentOwner.name} 
-                        onChange={e => updateOwnerField(owners.indexOf(currentOwner), 'name', e.target.value)}
+                        value={currentOwnerLocal.name} 
+                        onChange={e => updateOwnerField(owners.indexOf(currentOwnerLocal), 'name', e.target.value)}
                         disabled={!isAdmin}
                       />
                     </div>
@@ -451,8 +463,8 @@ export default function UnitDetailV2Page() {
                       <label className="label">Email de Contacto</label>
                       <input 
                         type="email" className="input" 
-                        value={currentOwner.email || ''} 
-                        onChange={e => updateOwnerField(owners.indexOf(currentOwner), 'email', e.target.value)}
+                        value={currentOwnerLocal.email || ''} 
+                        onChange={e => updateOwnerField(owners.indexOf(currentOwnerLocal), 'email', e.target.value)}
                         disabled={!isAdmin}
                       />
                     </div>
@@ -460,8 +472,8 @@ export default function UnitDetailV2Page() {
                       <label className="label">Telefone</label>
                       <input 
                         type="text" className="input" 
-                        value={currentOwner.telefone || ''} 
-                        onChange={e => updateOwnerField(owners.indexOf(currentOwner), 'telefone', e.target.value)}
+                        value={currentOwnerLocal.telefone || ''} 
+                        onChange={e => updateOwnerField(owners.indexOf(currentOwnerLocal), 'telefone', e.target.value)}
                         disabled={!isAdmin}
                       />
                     </div>
@@ -469,8 +481,8 @@ export default function UnitDetailV2Page() {
                       <label className="label">NIB para Reembolsos</label>
                       <input 
                         type="text" className="input font-mono" 
-                        value={currentOwner.nib || ''} 
-                        onChange={e => updateOwnerField(owners.indexOf(currentOwner), 'nib', e.target.value)}
+                        value={currentOwnerLocal.nib || ''} 
+                        onChange={e => updateOwnerField(owners.indexOf(currentOwnerLocal), 'nib', e.target.value)}
                         disabled={!isAdmin}
                       />
                     </div>
@@ -788,7 +800,7 @@ export default function UnitDetailV2Page() {
                 </div>
 
                 {/* Pre-2024 Debt Control Card */}
-                <div className="card border-l-4 border-l-orange-500 bg-orange-50/10 overflow-hidden !p-0">
+                <div className="card border-l-4 border-l-orange-500 bg-orange-50/10 overflow-hidden !p-0 shadow-lg shadow-orange-100/50">
                   <div className="p-6">
                     <div className="flex items-center justify-between mb-6">
                       <div className="flex items-center gap-2">
@@ -807,7 +819,7 @@ export default function UnitDetailV2Page() {
                           <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
                           </svg>
-                          Editar Dívida Inicial
+                          Editar Valor
                         </button>
                       )}
                     </div>
@@ -865,6 +877,18 @@ export default function UnitDetailV2Page() {
                       </div>
                     </div>
                   )}
+                  
+                  {/* Mapping Suggestion Area */}
+                  <div className="p-4 border-t border-orange-100 bg-white/50">
+                    <p className="text-[10px] font-bold text-gray-400 uppercase mb-2">Mapear Outras Transações</p>
+                    <p className="text-[10px] text-gray-500 mb-3">Se recebeu um pagamento de valor elevado, use o botão abaixo para o procurar e atribuir à dívida histórica.</p>
+                    <button 
+                      onClick={() => router.push(`/dashboard/transactions?unitId=${id}`)}
+                      className="w-full text-[10px] font-bold text-gray-600 uppercase border border-gray-200 py-2 rounded-lg hover:bg-gray-50 transition-all"
+                    >
+                      Procurar Transações da Fração
+                    </button>
+                  </div>
                 </div>
 
                 {/* Fee History Section */}
@@ -900,7 +924,7 @@ export default function UnitDetailV2Page() {
                     {isAdmin && (
                       <button 
                         type="button"
-                        onClick={() => setOwners([...owners, { id: '', name: '', unitId: id, previousDebt: 0 }])}
+                        onClick={() => setOwners([{ id: '', name: '', unitId: id, previousDebtStr: '' }, ...owners])}
                         className="text-primary-600 text-xs font-bold uppercase tracking-widest hover:underline"
                       >
                         + Adicionar
@@ -909,36 +933,38 @@ export default function UnitDetailV2Page() {
                   </div>
 
                   <div className="space-y-4">
-                    {owners.sort((a, b) => (b.startMonth || '').localeCompare(a.startMonth || '')).map((owner, idx) => (
+                    {owners.map((owner, idx) => (
                       <div key={owner.id || idx} className={`p-4 rounded-2xl border ${!owner.endMonth ? 'border-primary-200 bg-primary-50/30 shadow-sm' : 'border-gray-100 bg-gray-50/30'}`}>
                         <div className="flex justify-between items-start mb-3">
                           <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${!owner.endMonth ? 'bg-primary-600 text-white' : 'bg-gray-200 text-gray-500'}`}>
                             {!owner.endMonth ? 'Atual' : 'Anterior'}
                           </span>
-                          <span className="text-[10px] font-mono text-gray-400 font-bold">
-                            {owner.startMonth || '???'} → {owner.endMonth || 'Presente'}
-                          </span>
+                          {owner.endMonth && (
+                            <span className="text-[10px] font-mono text-gray-400 font-bold italic">
+                              Terminou em: {owner.endMonth}
+                            </span>
+                          )}
                         </div>
-                        <input 
-                          type="text" className="bg-transparent border-none p-0 font-bold text-gray-900 w-full focus:ring-0" 
-                          value={owner.name} 
-                          onChange={e => updateOwnerField(owners.indexOf(owner), 'name', e.target.value)}
-                          placeholder="Nome do Proprietário"
-                          disabled={!isAdmin}
-                        />
+                        <div className="flex gap-2">
+                          <input 
+                            type="text" className="bg-transparent border-none p-0 font-bold text-gray-900 w-full focus:ring-0" 
+                            value={owner.name} 
+                            onChange={e => updateOwnerField(owners.indexOf(owner), 'name', e.target.value)}
+                            placeholder="Nome do Proprietário"
+                            disabled={!isAdmin}
+                          />
+                          {isAdmin && owners.length > 1 && (
+                            <button 
+                              onClick={() => setOwners(owners.filter(o => o !== owner))}
+                              className="text-red-400 hover:text-red-600 p-1"
+                            >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"/></svg>
+                            </button>
+                          )}
+                        </div>
                         <div className="grid grid-cols-2 gap-4 mt-3">
                           <div>
-                            <label className="text-[10px] font-bold text-gray-400 uppercase">Início</label>
-                            <input 
-                              type="text" className="input text-xs h-8" 
-                              value={owner.startMonth || ''} 
-                              onChange={e => updateOwnerField(owners.indexOf(owner), 'startMonth', e.target.value)}
-                              placeholder="AAAA-MM"
-                              disabled={!isAdmin}
-                            />
-                          </div>
-                          <div>
-                            <label className="text-[10px] font-bold text-gray-400 uppercase">Fim</label>
+                            <label className="text-[10px] font-bold text-gray-400 uppercase tracking-tight">Período de Fim (se aplicável)</label>
                             <input 
                               type="text" className="input text-xs h-8" 
                               value={owner.endMonth || ''} 
@@ -947,16 +973,17 @@ export default function UnitDetailV2Page() {
                               disabled={!isAdmin}
                             />
                           </div>
-                          <div className="col-span-2">
-                            <label className="text-[10px] font-bold text-gray-400 uppercase text-orange-600 font-black">Dívida Inicial Transitada (Pre-2024)</label>
-                            <div className="relative mt-1">
+                          <div>
+                            <label className="text-[10px] font-bold text-gray-400 uppercase tracking-tight text-orange-600">Dívida Inicial Transitada (Pre-2024)</label>
+                            <div className="relative">
                               <input 
-                                type="number" step="0.01" className="input text-xs h-9 border-orange-200 focus:ring-orange-500 focus:border-orange-500 pl-8 font-bold text-gray-900 bg-orange-50/20" 
-                                value={owner.previousDebt ?? 0} 
-                                onChange={e => updateOwnerField(owners.indexOf(owner), 'previousDebt', parseFloat(e.target.value) || 0)}
+                                type="text" className="input text-xs h-8 border-orange-200 focus:ring-orange-500 focus:border-orange-500 pl-6 font-bold text-gray-900 bg-orange-50/20" 
+                                value={owner.previousDebtStr ?? ''} 
+                                onChange={e => updateOwnerField(owners.indexOf(owner), 'previousDebtStr', e.target.value)}
+                                placeholder="0.00"
                                 disabled={!isAdmin}
                               />
-                              <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-orange-400 font-bold text-xs">€</span>
+                              <span className="absolute inset-y-0 left-0 pl-2 flex items-center text-orange-400 font-bold text-[10px]">€</span>
                             </div>
                           </div>
                         </div>
