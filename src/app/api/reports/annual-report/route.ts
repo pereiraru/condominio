@@ -317,7 +317,8 @@ export async function GET(request: NextRequest) {
     const despesasCategories = Object.values(expensesByCreditor).sort((a, b) =>
       a.label.localeCompare(b.label)
     );
-    const totalDespesas = despesasCategories.reduce((sum, c) => sum + c.amount, 0);
+    const totalDespesasOperacionais = despesasCategories.reduce((sum, c) => sum + c.amount, 0);
+    const totalDespesasGeral = totalDespesasOperacionais + totalReforcoPoupanca;
 
     // Calculate total expected for fixed creditors this year
     let totalFixedExpected = 0;
@@ -336,7 +337,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Saldo final
-    const saldoExercicio = (receitasAnosAnteriores + receitasDesteExercicio) - totalDespesas;
+    const saldoExercicio = (receitasAnosAnteriores + receitasDesteExercicio) - totalDespesasGeral;
     const saldoFinalDisponivel = saldoInicialTransitar + saldoExercicio;
 
     // Bank account balances (Calculating current balance from snapshot + reinforcements)
@@ -713,7 +714,8 @@ export async function GET(request: NextRequest) {
         },
         despesas: {
           categories: despesasCategories,
-          totalDespesas,
+          totalDespesasOperacionais,
+          totalDespesas: totalDespesasGeral,
           totalFixedExpected,
           totalReforcoPoupanca,
         },

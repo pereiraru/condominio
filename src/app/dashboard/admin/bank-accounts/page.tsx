@@ -2,7 +2,19 @@
 
 import { useEffect, useState } from 'react';
 import Sidebar from '@/components/Sidebar';
-import { BankAccount } from '@/lib/types';
+
+interface BankAccount {
+  id: string;
+  name: string;
+  accountType: string;
+  currentBalance: number;
+  snapshots: {
+    id: string;
+    date: string;
+    balance: number;
+    description: string | null;
+  }[];
+}
 
 export default function BankAccountsPage() {
   const [accounts, setAccounts] = useState<BankAccount[]>([]);
@@ -96,12 +108,16 @@ export default function BankAccountsPage() {
                     <h2 className="text-xl font-bold text-gray-900">{account.name}</h2>
                     <p className="text-sm text-gray-500 uppercase font-bold tracking-wider">{account.accountType}</p>
                   </div>
-                  <button 
-                    className="btn-secondary text-xs py-1.5"
-                    onClick={() => { setSelectedAccountId(account.id); setShowSnapshotModal(true); }}
-                  >
-                    + Registar Saldo
-                  </button>
+                  <div className="text-right">
+                    <p className="text-[10px] text-gray-400 font-bold uppercase mb-1">Saldo Atual (Calculado)</p>
+                    <p className="text-2xl font-black text-primary-600">{account.currentBalance.toFixed(2)}€</p>
+                    <button 
+                      className="btn-secondary text-[10px] py-1 px-3 mt-2 uppercase tracking-widest font-bold"
+                      onClick={() => { setSelectedAccountId(account.id); setShowSnapshotModal(true); }}
+                    >
+                      + Registar Saldo Fecho
+                    </button>
+                  </div>
                 </div>
 
                 <div className="overflow-x-auto">

@@ -10,11 +10,39 @@ export async function GET() {
   }
 
   const accounts = await prisma.bankAccount.findMany({
-    include: { snapshots: { orderBy: { date: 'desc' }, take: 5 } },
+    include: { snapshots: { orderBy: { date: 'desc' }, take: 1 } },
     orderBy: { name: 'asc' },
   });
 
-  return NextResponse.json(accounts);
+  const now = new Date();
+  const currentYear = now.getFullYear();
+
+  const transactions = await prisma.transaction.findMany({
+    where: {
+      category: 'savings',
+      date: { gte: new Date(`${currentYear}-01-01`) }
+    }
+  });
+
+  const result = accounts.map(account => {
+    const latestSnapshot = account.snapshots[0];
+    let balance = latestSnapshot?.balance ?? 0;
+
+    if (account.accountType === 'savings' && latestSnapshot) {
+      // Add reinforcements since the last snapshot
+      const reinforcements = transactions
+        .filter(tx => new Date(tx.date) > new Date(latestSnapshot.date))
+        .reduce((sum, tx) => sum + Math.abs(tx.amount), 0);
+      balance += reinforcements;
+    }
+
+    return {
+      ...account,
+      currentBalance: balance,
+    };
+  });
+
+  return NextResponse.json(result);
 }
 
 export async function POST(request: NextRequest) {

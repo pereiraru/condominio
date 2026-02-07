@@ -11,6 +11,7 @@ interface Section1Props {
     };
     despesas: {
       categories: { label: string; category: string; amount: number }[];
+      totalDespesasOperacionais: number;
       totalDespesas: number;
       totalFixedExpected?: number;
       totalReforcoPoupanca?: number;
@@ -93,15 +94,20 @@ export default function Section1Balancete({ data, year }: Section1Props) {
                 </tr>
               ))}
 
-              {data.despesas.totalReforcoPoupanca && data.despesas.totalReforcoPoupanca > 0 && (
+              <tr className="border-t border-gray-300 italic font-semibold">
+                <td className="pl-4 py-1 text-gray-600">Subtotal de Custos Operacionais</td>
+                <td className="text-right text-gray-600">{fmt(data.despesas.totalDespesasOperacionais)}</td>
+              </tr>
+
+              {data.despesas.totalReforcoPoupanca != null && data.despesas.totalReforcoPoupanca > 0 && (
                 <tr className="border-b border-blue-50 bg-blue-50/20">
-                  <td className="pl-4 py-1 font-semibold text-blue-800 italic">1.{data.despesas.categories.length + 1} Reforço de Poupança (Transferência)</td>
-                  <td className="text-right font-semibold text-blue-800">{fmt(data.despesas.totalReforcoPoupanca)}</td>
+                  <td className="pl-4 py-1 font-bold text-blue-800">2. Transferência p/ Fundo de Reserva</td>
+                  <td className="text-right font-bold text-blue-800">{fmt(data.despesas.totalReforcoPoupanca)}</td>
                 </tr>
               )}
               
               <tr className="border-t-2 border-gray-400 font-bold">
-                <td className="py-2">TOTAL DAS DESPESAS</td>
+                <td className="py-2 uppercase">Total de Saídas de Caixa</td>
                 <td className="text-right text-base">{fmt(data.despesas.totalDespesas)}</td>
               </tr>
             </tbody>
