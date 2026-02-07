@@ -9,7 +9,7 @@ import TransactionEditPanel from '@/components/TransactionEditPanel';
 import HistoryEditPanel from '@/components/HistoryEditPanel';
 import FeeHistoryManager from '@/components/FeeHistoryManager';
 import ExtraChargesManager from '@/components/ExtraChargesManager';
-import { Unit, Transaction, Creditor, MonthPaymentStatus, FeeHistory, ExtraCharge, Owner, MonthExpectedBreakdown, MonthPaymentBreakdown } from '@/lib/types';
+import { Unit, Transaction, Creditor, MonthPaymentStatus, FeeHistory, ExtraCharge, Owner, MonthExpectedBreakdown } from '@/lib/types';
 
 type TabType = 'geral' | 'historico' | 'config';
 
@@ -712,7 +712,7 @@ export default function UnitDetailV2Page() {
                   feeHistory={feeHistory}
                   defaultFee={unit.monthlyFee}
                   readOnly={!isAdmin}
-                  onUpdate={() => { fetchFeeHistory(); fetchMonthlyStatus(); }}
+                  onUpdate={handleFeeHistoryUpdate}
                 />
 
                 {/* Extra Charges Section */}
@@ -720,7 +720,7 @@ export default function UnitDetailV2Page() {
                   unitId={id}
                   extraCharges={extraCharges}
                   readOnly={!isAdmin}
-                  onUpdate={() => { fetchExtraCharges(); fetchMonthlyStatus(); }}
+                  onUpdate={handleExtraChargesUpdate}
                 />
               </div>
 
