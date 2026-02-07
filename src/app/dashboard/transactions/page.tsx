@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
 import Sidebar from '@/components/Sidebar';
 import TransactionList from '@/components/TransactionList';
 import TransactionEditPanel from '@/components/TransactionEditPanel';
@@ -18,7 +19,8 @@ interface DescriptionMapping {
 
 const PAGE_SIZE = 50;
 
-export default function TransactionsPage() {
+function TransactionsContent() {
+  const searchParams = useSearchParams();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [totalTransactions, setTotalTransactions] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
@@ -32,7 +34,7 @@ export default function TransactionsPage() {
     type: '',
     startDate: '',
     endDate: '',
-    entityFilter: '', // 'unit:id', 'creditor:id', 'unassigned', or ''
+    entityFilter: searchParams.get('unitId') ? `unit:${searchParams.get('unitId')}` : '', 
   });
 
   // Mappings panel state
@@ -49,13 +51,16 @@ export default function TransactionsPage() {
     description: '',
     amount: '',
     type: 'payment',
-    unitId: '',
+    unitId: searchParams.get('unitId') || '',
     creditorId: '',
+    prevDebtEnabled: false,
+    prevDebtAmount: '',
   });
   const [calendarYear, setCalendarYear] = useState(new Date().getFullYear());
   const [selectedMonths, setSelectedMonths] = useState<string[]>([]);
   const [monthStatus, setMonthStatus] = useState<MonthPaymentStatus[]>([]);
   const [expectedAmount, setExpectedAmount] = useState(0);
+  const [ownerRemainingPrevDebt, setOwnerRemainingPrevDebt] = useState(0);
 
   useEffect(() => {
     fetchUnits();
@@ -65,22 +70,32 @@ export default function TransactionsPage() {
 
   useEffect(() => {
     fetchTransactions();
-  }, [currentPage]);
+  }, [currentPage, filter.entityFilter, filter.type, filter.startDate, filter.endDate]);
 
-  // Fetch monthly status when unit/creditor or year changes
+  // Fetch monthly status and debt info when unit changes
   useEffect(() => {
     const targetId = formData.type === 'payment' ? formData.unitId : formData.creditorId;
     if (targetId) {
       fetchMonthlyStatus(targetId, formData.type === 'payment' ? 'unitId' : 'creditorId');
+      
+      if (formData.type === 'payment') {
+        fetch(`/api/units/${targetId}/debt`)
+          .then(res => res.ok ? res.json() : null)
+          .then(data => {
+            if (data) setOwnerRemainingPrevDebt(data.previousDebtRemaining || 0);
+          })
+          .catch(() => setOwnerRemainingPrevDebt(0));
+      }
     } else {
       setMonthStatus([]);
       setExpectedAmount(0);
+      setOwnerRemainingPrevDebt(0);
     }
   }, [formData.unitId, formData.creditorId, formData.type, calendarYear]);
 
   // Auto-suggest months when amount changes
   useEffect(() => {
-    if (!formData.amount || !expectedAmount || selectedMonths.length > 0) return;
+    if (!formData.amount || !expectedAmount || selectedMonths.length > 0 || formData.prevDebtEnabled) return;
 
     const amount = parseFloat(formData.amount);
     if (amount <= 0 || expectedAmount <= 0) return;
@@ -97,7 +112,7 @@ export default function TransactionsPage() {
     if (unpaidMonths.length > 0) {
       setSelectedMonths(unpaidMonths);
     }
-  }, [formData.amount, monthStatus, expectedAmount]);
+  }, [formData.amount, monthStatus, expectedAmount, formData.prevDebtEnabled]);
 
   const fetchTransactions = async () => {
     setLoading(true);
@@ -178,7 +193,6 @@ export default function TransactionsPage() {
 
   const totalPages = Math.ceil(totalTransactions / PAGE_SIZE);
 
-  // Mapping functions
   const handleEditMapping = (mapping: DescriptionMapping) => {
     setEditingMapping(mapping);
     setMappingForm({
@@ -192,12 +206,8 @@ export default function TransactionsPage() {
     if (!confirm('Tem certeza que deseja eliminar este mapeamento?')) return;
     try {
       const res = await fetch(`/api/mappings/${id}`, { method: 'DELETE' });
-      if (res.ok) {
-        fetchMappings();
-      }
-    } catch (error) {
-      console.error('Error deleting mapping:', error);
-    }
+      if (res.ok) fetchMappings();
+    } catch (error) { console.error(error); }
   };
 
   const handleSaveMapping = async () => {
@@ -232,30 +242,18 @@ export default function TransactionsPage() {
           fetchTransactions();
         }
       }
-    } catch (error) {
-      console.error('Error saving mapping:', error);
-    }
+    } catch (error) { console.error(error); }
   };
 
-  // Side panel logic
   async function openPanel(tx: Transaction) {
-    // Fetch full transaction with allocations
     try {
       const res = await fetch(`/api/transactions/${tx.id}`);
-      if (res.ok) {
-        const fullTx = await res.json();
-        setSelectedTx(fullTx);
-      } else {
-        setSelectedTx(tx);
-      }
-    } catch {
-      setSelectedTx(tx);
-    }
+      if (res.ok) setSelectedTx(await res.json());
+      else setSelectedTx(tx);
+    } catch { setSelectedTx(tx); }
   }
 
-  function closePanel() {
-    setSelectedTx(null);
-  }
+  function closePanel() { setSelectedTx(null); }
 
   function resetForm() {
     setFormData({
@@ -265,6 +263,8 @@ export default function TransactionsPage() {
       type: 'payment',
       unitId: '',
       creditorId: '',
+      prevDebtEnabled: false,
+      prevDebtAmount: '',
     });
     setSelectedMonths([]);
     setMonthStatus([]);
@@ -274,19 +274,29 @@ export default function TransactionsPage() {
 
   function handleToggleMonth(month: string) {
     setSelectedMonths((prev) =>
-      prev.includes(month)
-        ? prev.filter((m) => m !== month)
-        : [...prev, month].sort()
+      prev.includes(month) ? prev.filter((m) => m !== month) : [...prev, month].sort()
     );
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true);
-
     try {
       const amount = parseFloat(formData.amount);
       const finalAmount = formData.type === 'expense' ? -Math.abs(amount) : Math.abs(amount);
+      const allocs: { month: string; amount: number }[] = [];
+      let remaining = Math.abs(amount);
+
+      if (formData.prevDebtEnabled && parseFloat(formData.prevDebtAmount) > 0) {
+        const pdAmt = parseFloat(formData.prevDebtAmount);
+        allocs.push({ month: 'PREV-DEBT', amount: pdAmt });
+        remaining -= pdAmt;
+      }
+
+      if (selectedMonths.length > 0) {
+        const perMonth = remaining / selectedMonths.length;
+        selectedMonths.forEach(m => allocs.push({ month: m, amount: perMonth }));
+      }
 
       const res = await fetch('/api/transactions', {
         method: 'POST',
@@ -299,7 +309,8 @@ export default function TransactionsPage() {
           category: formData.type === 'payment' ? 'monthly_fee' : null,
           unitId: formData.type === 'payment' ? formData.unitId || null : null,
           creditorId: formData.type === 'expense' ? formData.creditorId || null : null,
-          months: selectedMonths.length > 0 ? selectedMonths : undefined,
+          monthAllocations: allocs.length > 0 ? allocs : undefined,
+          months: (selectedMonths.length > 0 && allocs.length === 0) ? selectedMonths : undefined,
         }),
       });
 
@@ -311,11 +322,8 @@ export default function TransactionsPage() {
         const data = await res.json();
         alert(`Erro: ${data.error}`);
       }
-    } catch {
-      alert('Erro ao criar transação');
-    } finally {
-      setSaving(false);
-    }
+    } catch { alert('Erro ao criar transação'); }
+    finally { setSaving(false); }
   }
 
   return (
@@ -337,7 +345,6 @@ export default function TransactionsPage() {
             </button>
           </div>
 
-          {/* Add/Edit Mapping Form */}
           <div className="mb-4 p-3 bg-gray-50 rounded-lg">
             <h3 className="text-sm font-medium text-gray-700 mb-2">
               {editingMapping ? 'Editar Mapeamento' : 'Novo Mapeamento'}
@@ -395,35 +402,18 @@ export default function TransactionsPage() {
             </div>
           </div>
 
-          {/* Mappings List */}
           <div className="space-y-2">
             {mappings.map((m) => (
               <div key={m.id} className="p-2 bg-white border border-gray-200 rounded-lg text-sm">
-                <div className="font-medium text-gray-900 truncate" title={m.pattern}>
-                  {m.pattern}
-                </div>
-                <div className="text-gray-500 text-xs">
-                  → {m.unit?.code || m.creditor?.name || 'N/A'}
-                </div>
+                <div className="font-medium text-gray-900 truncate" title={m.pattern}>{m.pattern}</div>
+                <div className="text-gray-500 text-xs">→ {m.unit?.code || m.creditor?.name || 'N/A'}</div>
                 <div className="flex gap-2 mt-1">
-                  <button
-                    className="text-xs text-primary-600 hover:underline"
-                    onClick={() => handleEditMapping(m)}
-                  >
-                    Editar
-                  </button>
-                  <button
-                    className="text-xs text-red-600 hover:underline"
-                    onClick={() => handleDeleteMapping(m.id)}
-                  >
-                    Eliminar
-                  </button>
+                  <button className="text-xs text-primary-600 hover:underline" onClick={() => handleEditMapping(m)}>Editar</button>
+                  <button className="text-xs text-red-600 hover:underline" onClick={() => handleDeleteMapping(m.id)}>Eliminar</button>
                 </div>
               </div>
             ))}
-            {mappings.length === 0 && (
-              <p className="text-sm text-gray-500 text-center py-4">Sem mapeamentos</p>
-            )}
+            {mappings.length === 0 && <p className="text-sm text-gray-500 text-center py-4">Sem mapeamentos</p>}
           </div>
         </div>
       )}
@@ -439,20 +429,14 @@ export default function TransactionsPage() {
               Mapeamentos
             </button>
           </div>
-          <button className="btn-primary" onClick={() => setShowModal(true)}>
-            + Nova Transação
-          </button>
+          <button className="btn-primary" onClick={() => setShowModal(true)}>+ Nova Transação</button>
         </div>
 
         <form onSubmit={handleFilter} className="card mb-6">
           <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
             <div>
               <label className="label">Tipo</label>
-              <select
-                value={filter.type}
-                onChange={(e) => setFilter({ ...filter, type: e.target.value })}
-                className="input"
-              >
+              <select value={filter.type} onChange={(e) => setFilter({ ...filter, type: e.target.value })} className="input">
                 <option value="">Todos</option>
                 <option value="payment">Pagamento</option>
                 <option value="expense">Despesa</option>
@@ -462,109 +446,55 @@ export default function TransactionsPage() {
             </div>
             <div>
               <label className="label">Fração/Credor</label>
-              <select
-                value={filter.entityFilter}
-                onChange={(e) => setFilter({ ...filter, entityFilter: e.target.value })}
-                className="input"
-              >
+              <select value={filter.entityFilter} onChange={(e) => setFilter({ ...filter, entityFilter: e.target.value })} className="input">
                 <option value="">Todos</option>
                 <option value="unassigned">Sem atribuição</option>
                 <optgroup label="Frações">
-                  {units.map((u) => (
-                    <option key={u.id} value={`unit:${u.id}`}>{u.code}</option>
-                  ))}
+                  {units.map((u) => <option key={u.id} value={`unit:${u.id}`}>{u.code}</option>)}
                 </optgroup>
                 <optgroup label="Credores">
-                  {creditors.map((c) => (
-                    <option key={c.id} value={`creditor:${c.id}`}>{c.name}</option>
-                  ))}
+                  {creditors.map((c) => <option key={c.id} value={`creditor:${c.id}`}>{c.name}</option>)}
                 </optgroup>
               </select>
             </div>
             <div>
               <label className="label">Data Início</label>
-              <input
-                type="date"
-                value={filter.startDate}
-                onChange={(e) => setFilter({ ...filter, startDate: e.target.value })}
-                className="input"
-              />
+              <input type="date" value={filter.startDate} onChange={(e) => setFilter({ ...filter, startDate: e.target.value })} className="input" />
             </div>
             <div>
               <label className="label">Data Fim</label>
-              <input
-                type="date"
-                value={filter.endDate}
-                onChange={(e) => setFilter({ ...filter, endDate: e.target.value })}
-                className="input"
-              />
+              <input type="date" value={filter.endDate} onChange={(e) => setFilter({ ...filter, endDate: e.target.value })} className="input" />
             </div>
             <div>
               <label className="label">&nbsp;</label>
-              <button type="submit" className="btn-secondary w-full">
-                Filtrar
-              </button>
+              <button type="submit" className="btn-secondary w-full">Filtrar</button>
             </div>
           </div>
         </form>
 
         <div className={`${selectedTx ? 'flex gap-6' : ''}`}>
           <div className={`card ${selectedTx ? 'flex-1' : ''}`}>
-            {loading ? (
-              <p className="text-gray-500">A carregar...</p>
-            ) : (
+            {loading ? <p className="text-gray-500">A carregar...</p> : (
               <>
-                <TransactionList
-                  transactions={transactions}
-                  onRowClick={openPanel}
-                  selectedId={selectedTx?.id}
-                />
-
-                {/* Pagination */}
+                <TransactionList transactions={transactions} onRowClick={openPanel} selectedId={selectedTx?.id} />
                 {totalPages > 1 && (
                   <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-200">
-                    <p className="text-sm text-gray-500">
-                      A mostrar {(currentPage - 1) * PAGE_SIZE + 1} a {Math.min(currentPage * PAGE_SIZE, totalTransactions)} de {totalTransactions}
-                    </p>
+                    <p className="text-sm text-gray-500">A mostrar {(currentPage - 1) * PAGE_SIZE + 1} a {Math.min(currentPage * PAGE_SIZE, totalTransactions)} de {totalTransactions}</p>
                     <div className="flex gap-2">
-                      <button
-                        className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                        onClick={() => setCurrentPage(currentPage - 1)}
-                        disabled={currentPage === 1}
-                      >
-                        Anterior
-                      </button>
-                      <span className="px-3 py-1 text-sm">
-                        {currentPage} / {totalPages}
-                      </span>
-                      <button
-                        className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                        onClick={() => setCurrentPage(currentPage + 1)}
-                        disabled={currentPage === totalPages}
-                      >
-                        Seguinte
-                      </button>
+                      <button className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed" onClick={() => setCurrentPage(currentPage - 1)} disabled={currentPage === 1}>Anterior</button>
+                      <span className="px-3 py-1 text-sm">{currentPage} / {totalPages}</span>
+                      <button className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed" onClick={() => setCurrentPage(currentPage + 1)} disabled={currentPage === totalPages}>Seguinte</button>
                     </div>
                   </div>
                 )}
               </>
             )}
           </div>
-
-          {/* Side Panel */}
           {selectedTx && (
-            <TransactionEditPanel
-              transaction={selectedTx}
-              units={units}
-              creditors={creditors}
-              onSave={() => { closePanel(); fetchTransactions(); }}
-              onDelete={() => { closePanel(); fetchTransactions(); }}
-              onClose={closePanel}
-            />
+            <TransactionEditPanel transaction={selectedTx} units={units} creditors={creditors} onSave={() => { closePanel(); fetchTransactions(); }} onDelete={() => { closePanel(); fetchTransactions(); }} onClose={closePanel} />
           )}
         </div>
 
-        {/* Modal Nova Transação */}
         {showModal && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
             <div className="bg-white rounded-xl p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto">
@@ -573,50 +503,23 @@ export default function TransactionsPage() {
                 <div className="grid grid-cols-2 gap-4 mb-4">
                   <div>
                     <label className="label">Tipo *</label>
-                    <select
-                      className="input"
-                      value={formData.type}
-                      onChange={(e) => {
-                        setFormData({ ...formData, type: e.target.value, unitId: '', creditorId: '' });
-                        setSelectedMonths([]);
-                        setMonthStatus([]);
-                      }}
-                      required
-                    >
+                    <select className="input" value={formData.type} onChange={(e) => { setFormData({ ...formData, type: e.target.value, unitId: '', creditorId: '' }); setSelectedMonths([]); setMonthStatus([]); }} required>
                       <option value="payment">Pagamento (entrada)</option>
                       <option value="expense">Despesa (saida)</option>
                     </select>
                   </div>
                   <div>
                     <label className="label">Data *</label>
-                    <input
-                      type="date"
-                      className="input"
-                      value={formData.date}
-                      onChange={(e) => setFormData({ ...formData, date: e.target.value })}
-                      required
-                    />
+                    <input type="date" className="input" value={formData.date} onChange={(e) => setFormData({ ...formData, date: e.target.value })} required />
                   </div>
                 </div>
 
                 {formData.type === 'payment' && (
                   <div className="mb-4">
                     <label className="label">Fração *</label>
-                    <select
-                      className="input"
-                      value={formData.unitId}
-                      onChange={(e) => {
-                        setFormData({ ...formData, unitId: e.target.value });
-                        setSelectedMonths([]);
-                      }}
-                      required
-                    >
+                    <select className="input" value={formData.unitId} onChange={(e) => { setFormData({ ...formData, unitId: e.target.value }); setSelectedMonths([]); }} required>
                       <option value="">-- Selecionar fração --</option>
-                      {units.map((unit) => (
-                        <option key={unit.id} value={unit.id}>
-                          {unit.code} {unit.owners && unit.owners.length > 0 ? `(${unit.owners[0].name})` : ''} - {unit.monthlyFee} EUR/mes
-                        </option>
-                      ))}
+                      {units.map((unit) => <option key={unit.id} value={unit.id}>{unit.code} {unit.owners && unit.owners.length > 0 ? `(${unit.owners[0].name})` : ''} - {unit.monthlyFee} EUR/mes</option>)}
                     </select>
                   </div>
                 )}
@@ -624,21 +527,9 @@ export default function TransactionsPage() {
                 {formData.type === 'expense' && (
                   <div className="mb-4">
                     <label className="label">Credor *</label>
-                    <select
-                      className="input"
-                      value={formData.creditorId}
-                      onChange={(e) => {
-                        setFormData({ ...formData, creditorId: e.target.value });
-                        setSelectedMonths([]);
-                      }}
-                      required
-                    >
+                    <select className="input" value={formData.creditorId} onChange={(e) => { setFormData({ ...formData, creditorId: e.target.value }); setSelectedMonths([]); }} required>
                       <option value="">-- Selecionar credor --</option>
-                      {creditors.map((creditor) => (
-                        <option key={creditor.id} value={creditor.id}>
-                          {creditor.name} {creditor.amountDue ? `- ${creditor.amountDue} EUR` : ''}
-                        </option>
-                      ))}
+                      {creditors.map((creditor) => <option key={creditor.id} value={creditor.id}>{creditor.name} {creditor.amountDue ? `- ${creditor.amountDue} EUR` : ''}</option>)}
                     </select>
                   </div>
                 )}
@@ -646,69 +537,38 @@ export default function TransactionsPage() {
                 <div className="grid grid-cols-2 gap-4 mb-4">
                   <div>
                     <label className="label">Valor (EUR) *</label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      min="0.01"
-                      className="input"
-                      value={formData.amount}
-                      onChange={(e) => {
-                        setFormData({ ...formData, amount: e.target.value });
-                        setSelectedMonths([]);
-                      }}
-                      placeholder="0.00"
-                      required
-                    />
+                    <input type="number" step="0.01" min="0.01" className="input" value={formData.amount} onChange={(e) => { setFormData({ ...formData, amount: e.target.value }); setSelectedMonths([]); }} placeholder="0.00" required />
                   </div>
                   <div>
                     <label className="label">Descrição *</label>
-                    <input
-                      type="text"
-                      className="input"
-                      value={formData.description}
-                      onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                      placeholder="Descrição"
-                      required
-                    />
+                    <input type="text" className="input" value={formData.description} onChange={(e) => setFormData({ ...formData, description: e.target.value })} placeholder="Descrição" required />
                   </div>
                 </div>
 
-                {/* Month Calendar */}
-                {((formData.type === 'payment' && formData.unitId) ||
-                  (formData.type === 'expense' && formData.creditorId)) && (
+                {((formData.type === 'payment' && formData.unitId) || (formData.type === 'expense' && formData.creditorId)) && (
                   <div className="mb-4 p-4 bg-gray-50 rounded-lg">
                     <label className="label mb-2">Meses de referencia</label>
-                    <MonthCalendar
-                      year={calendarYear}
-                      onYearChange={setCalendarYear}
-                      monthStatus={monthStatus}
-                      selectedMonths={selectedMonths}
-                      onToggleMonth={handleToggleMonth}
-                    />
-                    {selectedMonths.length > 0 && formData.amount && (
-                      <div className="mt-3 p-2 bg-blue-50 rounded text-sm text-blue-700">
-                        {selectedMonths.length} mes(es) selecionado(s) &mdash;{' '}
-                        {(parseFloat(formData.amount) / selectedMonths.length).toFixed(2)} EUR/mes
+                    <MonthCalendar year={calendarYear} onYearChange={setCalendarYear} monthStatus={monthStatus} selectedMonths={selectedMonths} onToggleMonth={handleToggleMonth} />
+                    {formData.type === 'payment' && ownerRemainingPrevDebt > 0 && (
+                      <div className="mt-3">
+                        <button type="button" className={`w-full text-sm px-3 py-2 rounded-lg font-medium transition-all ${formData.prevDebtEnabled ? 'bg-orange-100 text-orange-700 border border-orange-300' : 'bg-white text-gray-600 hover:bg-gray-50 border border-gray-200'}`} onClick={() => { const next = !formData.prevDebtEnabled; setFormData({ ...formData, prevDebtEnabled: next, prevDebtAmount: next ? (Math.min(parseFloat(formData.amount) || 0, ownerRemainingPrevDebt)).toFixed(2) : '' }); }}>Dívida Anterior ({ownerRemainingPrevDebt.toFixed(2)}€ restante)</button>
+                        {formData.prevDebtEnabled && (
+                          <div className="mt-2 flex items-center gap-2">
+                            <input type="number" step="0.01" className="input text-sm py-1 flex-1" value={formData.prevDebtAmount} onChange={(e) => setFormData({ ...formData, prevDebtAmount: e.target.value })} />
+                            <span className="text-xs text-gray-400">EUR</span>
+                          </div>
+                        )}
                       </div>
+                    )}
+                    {selectedMonths.length > 0 && formData.amount && (
+                      <div className="mt-3 p-2 bg-blue-50 rounded text-sm text-blue-700">{selectedMonths.length} mes(es) selecionado(s) &mdash; {((parseFloat(formData.amount) - (parseFloat(formData.prevDebtAmount) || 0)) / selectedMonths.length).toFixed(2)} EUR/mes</div>
                     )}
                   </div>
                 )}
 
                 <div className="flex gap-2 justify-end">
-                  <button
-                    type="button"
-                    className="btn-secondary"
-                    onClick={() => { setShowModal(false); resetForm(); }}
-                  >
-                    Cancelar
-                  </button>
-                  <button
-                    type="submit"
-                    className="btn-primary"
-                    disabled={saving}
-                  >
-                    {saving ? 'A guardar...' : 'Guardar'}
-                  </button>
+                  <button type="button" className="btn-secondary" onClick={() => { setShowModal(false); resetForm(); }}>Cancelar</button>
+                  <button type="submit" className="btn-primary" disabled={saving}>{saving ? 'A guardar...' : 'Guardar'}</button>
                 </div>
               </form>
             </div>
@@ -716,5 +576,13 @@ export default function TransactionsPage() {
         )}
       </main>
     </div>
+  );
+}
+
+export default function TransactionsPage() {
+  return (
+    <Suspense fallback={<div className="p-8 text-gray-500 text-center">A carregar transações...</div>}>
+      <TransactionsContent />
+    </Suspense>
   );
 }

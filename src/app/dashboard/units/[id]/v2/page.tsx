@@ -507,10 +507,18 @@ export default function UnitDetailV2Page() {
                           {(unit.totalOwed ?? 0).toFixed(2)}€
                         </span>
                       </div>
+
+                      {/* 2024-2025 past debt */}
+                      <div className="flex justify-between items-center">
+                        <span className="text-gray-500 text-sm">Dívida 24-25:</span>
+                        <span className={`font-bold ${pastYearsDebt > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                          {pastYearsDebt.toFixed(2)}€
+                        </span>
+                      </div>
                       
                       {/* Pre-2024 Debt Row */}
                       <div className="flex justify-between items-center">
-                        <span className="text-gray-500 text-sm">Dívida Anterior (Pre-2024):</span>
+                        <span className="text-gray-500 text-sm">Dívida Pré-2024:</span>
                         <span className={`font-bold ${(unit.pre2024?.remaining ?? 0) > 0 ? 'text-orange-600' : 'text-green-600'}`}>
                           {(unit.pre2024?.remaining ?? 0).toFixed(2)}€
                         </span>
@@ -573,33 +581,37 @@ export default function UnitDetailV2Page() {
           {activeTab === 'historico' && (
             <div className="space-y-8">
               {/* Summary Metrics */}
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
                 <div className="card bg-white border-l-4 border-l-primary-600">
-                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Quota Base Atual</p>
-                  <p className="text-2xl font-black text-gray-900">{unit.monthlyFee.toFixed(2)}€</p>
+                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Quota Base</p>
+                  <p className="text-xl font-black text-gray-900">{unit.monthlyFee.toFixed(2)}€</p>
                 </div>
                 <div className="card bg-white border-l-4 border-l-green-500">
-                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Pago em {new Date().getFullYear()}</p>
-                  <p className="text-2xl font-black text-green-600">{(unit.totalPaid ?? 0).toFixed(2)}€</p>
-                </div>
-                <div className="card bg-white border-l-4 border-l-red-500">
                   <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Dívida {new Date().getFullYear()}</p>
-                  <p className="text-2xl font-black text-red-600">{(unit.totalOwed ?? 0).toFixed(2)}€</p>
+                  <p className="text-xl font-black text-red-600">{(unit.totalOwed ?? 0).toFixed(2)}€</p>
                 </div>
-                <div className="card bg-white border-l-4 border-l-orange-500 flex flex-col justify-between">
+                <div className="card bg-white border-l-4 border-l-orange-400">
+                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Dívida 2024-2025</p>
+                  <p className="text-xl font-black text-orange-600">{pastYearsDebt.toFixed(2)}€</p>
+                </div>
+                <div className="card bg-white border-l-4 border-l-orange-600">
+                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Dívida Pré-2024</p>
+                  <p className="text-xl font-black text-orange-700">{(unit.pre2024?.remaining ?? 0).toFixed(2)}€</p>
+                </div>
+                <div className="card bg-white border-l-4 border-l-red-600 flex flex-col justify-between">
                   <div>
-                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Dívida Total Acumulada</p>
-                    <p className="text-2xl font-black text-orange-600">{totalDebt.toFixed(2)}€</p>
+                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Dívida Total</p>
+                    <p className="text-xl font-black text-red-700">{totalDebt.toFixed(2)}€</p>
                   </div>
                   <button 
                     onClick={handleRecalculate}
                     disabled={recalculating}
-                    className="mt-3 text-[10px] font-bold text-primary-600 hover:text-primary-800 flex items-center gap-1 uppercase tracking-widest"
+                    className="mt-2 text-[9px] font-bold text-primary-600 hover:text-primary-800 flex items-center gap-1 uppercase tracking-widest"
                   >
                     <svg className={`w-3 h-3 ${recalculating ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                     </svg>
-                    Recalcular Saldo
+                    Atualizar
                   </button>
                 </div>
               </div>
@@ -652,16 +664,16 @@ export default function UnitDetailV2Page() {
                 </div>
 
                 <div className="overflow-x-auto">
-                  <table className="w-full text-[13px] border-collapse">
+                  <table className="w-full text-[12px] border-collapse">
                     <thead>
-                      <tr className="text-left text-gray-500 bg-gray-50/50 uppercase text-[10px] font-bold tracking-wider border-b border-gray-200">
-                        <th className="py-3 px-4 sticky left-0 bg-gray-50 z-10 border-r border-gray-200">Ano</th>
+                      <tr className="text-left text-gray-500 bg-gray-50/50 uppercase text-[9px] font-bold tracking-wider border-b border-gray-200">
+                        <th className="py-2 px-3 sticky left-0 bg-gray-50 z-10 border-r border-gray-200">Ano</th>
                         {['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'].map(m => (
-                          <th key={m} className="py-3 px-1 text-center min-w-[85px] border-r border-gray-100 last:border-r-0">{m}</th>
+                          <th key={m} className="py-2 px-0.5 text-center min-w-[70px] border-r border-gray-100 last:border-r-0">{m}</th>
                         ))}
-                        <th className="py-3 px-3 text-right bg-green-50/50 border-l border-gray-200">Pago</th>
-                        <th className="py-3 px-3 text-right bg-red-50/50 border-l border-gray-200">Dívida</th>
-                        <th className="py-3 px-3 text-right bg-gray-100 border-l border-gray-200">Acum..</th>
+                        <th className="py-2 px-2 text-right bg-green-50/50 border-l border-gray-200 min-w-[75px]">Pago</th>
+                        <th className="py-2 px-2 text-right bg-red-50/50 border-l border-gray-200 min-w-[75px]">Dívida</th>
+                        <th className="py-2 px-2 text-right bg-gray-100 border-l border-gray-200 min-w-[75px]">Acum.</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-200">
@@ -883,7 +895,7 @@ export default function UnitDetailV2Page() {
                     <p className="text-[10px] font-bold text-gray-400 uppercase mb-2">Mapear Outras Transações</p>
                     <p className="text-[10px] text-gray-500 mb-3">Se recebeu um pagamento de valor elevado, use o botão abaixo para o procurar e atribuir à dívida histórica.</p>
                     <button 
-                      onClick={() => router.push(`/dashboard/transactions?unitId=${id}`)}
+                      onClick={() => router.push(`/dashboard/transactions?unitId=${unit.id}`)}
                       className="w-full text-[10px] font-bold text-gray-600 uppercase border border-gray-200 py-2 rounded-lg hover:bg-gray-50 transition-all"
                     >
                       Procurar Transações da Fração
