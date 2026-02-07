@@ -6,7 +6,7 @@ import { useSession } from 'next-auth/react';
 import Sidebar from '@/components/Sidebar';
 import TransactionEditPanel from '@/components/TransactionEditPanel';
 import FeeHistoryManager from '@/components/FeeHistoryManager';
-import { Creditor, Transaction, MonthPaymentStatus, FeeHistory, DescriptionMapping } from '@/lib/types';
+import { Creditor, Transaction, FeeHistory, DescriptionMapping } from '@/lib/types';
 
 const CATEGORIES = [
   { value: 'electricity', label: 'Eletricidade' },
