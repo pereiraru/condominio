@@ -13,16 +13,14 @@ export async function GET(request: NextRequest) {
 
   try {
     const currentYear = new Date().getFullYear();
-    const startYear = parseInt(
-      request.nextUrl.searchParams.get('startYear') ?? '2021'
-    );
+    const startYear = 2024;
     const endYear = parseInt(
       request.nextUrl.searchParams.get('endYear') ?? currentYear.toString()
     );
 
     const units = await prisma.unit.findMany({
       include: {
-        owners: true,
+        owners: { orderBy: { startMonth: 'asc' } },
         feeHistory: { orderBy: { effectiveFrom: 'asc' } },
       },
       orderBy: { code: 'asc' },
@@ -30,11 +28,11 @@ export async function GET(request: NextRequest) {
 
     const allExtraCharges = await prisma.extraCharge.findMany();
 
-    // Get all TransactionMonth allocations from startYear onwards
+    // Get all TransactionMonth allocations from 2024 onwards
     const allocations = await prisma.transactionMonth.findMany({
       where: {
         month: {
-          gte: `${startYear}-01`,
+          gte: `2024-01`,
           lte: `${endYear}-12`,
         },
       },
@@ -50,12 +48,7 @@ export async function GET(request: NextRequest) {
       (_, i) => startYear + i
     );
 
-    // Compute per-year expected breakdown (base quota + each extra charge)
-    // We use the first unit as reference for base fee, but since units can have
-    // different fees, we compute a "typical" breakdown from the charges themselves.
-    // The header shows expected totals summed across all units.
-
-    // Collect unique extra charges with their yearly totals
+    // Collect unique extra charges with their yearly totals (2024+)
     const extraChargeMap = new Map<string, { id: string; description: string; yearlyTotals: Record<number, number> }>();
 
     for (const ec of allExtraCharges) {
@@ -69,7 +62,7 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Per-year base fee totals (across all units)
+    // Per-year base fee totals (across all units, 2024+)
     const yearBaseFees: Record<number, number> = {};
     for (const year of years) {
       yearBaseFees[year] = 0;
@@ -84,8 +77,18 @@ export async function GET(request: NextRequest) {
         (a) => a.transaction.unitId === unit.id && a.transaction.amount > 0
       );
 
-      const yearlyData: Record<number, { expected: number; paid: number; debt: number }> = {};
+      const yearlyData: Record<string | number, { expected: number; paid: number; debt: number }> = {};
 
+      // 1. Handle "Anterior 2024" column
+      // This is based on Unit.previousBalance and Owner.previousDebt
+      const manualPrevDebt = unit.owners.reduce((sum, o) => sum + o.previousDebt, 0) - unit.previousBalance;
+      yearlyData['Anterior 2024'] = {
+        expected: manualPrevDebt > 0 ? manualPrevDebt : 0,
+        paid: manualPrevDebt < 0 ? Math.abs(manualPrevDebt) : 0,
+        debt: manualPrevDebt > 0 ? manualPrevDebt : 0
+      };
+
+      // 2. Handle 2024+ years
       for (const year of years) {
         let expectedForYear = 0;
         let paidForYear = 0;
@@ -103,7 +106,6 @@ export async function GET(request: NextRequest) {
           expectedForYear += feeData.total;
           baseFeeForYear += feeData.baseFee;
 
-          // Accumulate extra charge amounts for header
           for (const extra of feeData.extras) {
             if (extra.id && extraChargeMap.has(extra.id)) {
               extraChargeMap.get(extra.id)!.yearlyTotals[year] += extra.amount;
@@ -116,14 +118,13 @@ export async function GET(request: NextRequest) {
         }
 
         yearBaseFees[year] += baseFeeForYear;
-
         const debt = Math.max(0, expectedForYear - paidForYear);
         yearlyData[year] = { expected: expectedForYear, paid: paidForYear, debt };
       }
 
-      const totalDebt = Object.values(yearlyData).reduce((sum, y) => sum + y.debt, 0);
-      const totalPaid = Object.values(yearlyData).reduce((sum, y) => sum + y.paid, 0);
-      const totalExpected = Object.values(yearlyData).reduce((sum, y) => sum + y.expected, 0);
+      const totalDebt = Object.keys(yearlyData).reduce((sum, key) => sum + yearlyData[key].debt, 0);
+      const totalPaid = Object.keys(yearlyData).reduce((sum, key) => sum + yearlyData[key].paid, 0);
+      const totalExpected = Object.keys(yearlyData).reduce((sum, key) => sum + yearlyData[key].expected, 0);
 
       const currentOwner = unit.owners?.find((o) => o.endMonth === null);
       const ownerName = currentOwner?.name || unit.owners?.[0]?.name || unit.code;
@@ -140,7 +141,15 @@ export async function GET(request: NextRequest) {
     });
 
     // Compute totals per year
-    const yearTotals: Record<number, { expected: number; paid: number; debt: number }> = {};
+    const yearTotals: Record<string | number, { expected: number; paid: number; debt: number }> = {};
+    
+    // Total for "Anterior 2024"
+    yearTotals['Anterior 2024'] = {
+        expected: unitData.reduce((sum, u) => sum + u.years['Anterior 2024'].expected, 0),
+        paid: unitData.reduce((sum, u) => sum + u.years['Anterior 2024'].paid, 0),
+        debt: unitData.reduce((sum, u) => sum + u.years['Anterior 2024'].debt, 0),
+    };
+
     for (const year of years) {
       yearTotals[year] = {
         expected: unitData.reduce((sum, u) => sum + u.years[year].expected, 0),
@@ -156,14 +165,13 @@ export async function GET(request: NextRequest) {
     // Build expected breakdown for header
     const extraCharges = Array.from(extraChargeMap.values())
       .filter((ec) => {
-        // Only include extras that have non-zero totals in at least one year
         return Object.values(ec.yearlyTotals).some((v) => v > 0);
       });
 
     return NextResponse.json({
       startYear,
       endYear,
-      years,
+      years: ['Anterior 2024', ...years],
       units: unitData,
       yearTotals,
       yearBaseFees,

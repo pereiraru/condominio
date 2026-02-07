@@ -139,13 +139,29 @@ export async function GET(request: NextRequest) {
       return accumulatedDebt;
     };
 
-    // =========================================
-    // SECTION 1: Balancete de Receitas e Despesas
-    // =========================================
-
     // Revenue: income allocations for the year
     const incomeAllocations = yearAllocations.filter((a) => a.transaction.amount > 0);
     const expenseAllocations = yearAllocations.filter((a) => a.transaction.amount < 0);
+
+    // Calculate opening balance (approximated from earliest bank snapshot of the year or Dec of previous year)
+    const openingSnapshots = await prisma.bankAccountSnapshot.findMany({
+      where: {
+        date: {
+          gte: new Date(`${year - 1}-12-01`),
+          lte: new Date(`${year}-01-05`),
+        },
+      },
+      orderBy: { date: 'desc' },
+    });
+    
+    // Group snapshots by bank account to get the latest one for each before/at start of year
+    const latestOpeningByAccount: Record<string, number> = {};
+    openingSnapshots.forEach(s => {
+      if (!latestOpeningByAccount[s.bankAccountId]) {
+        latestOpeningByAccount[s.bankAccountId] = s.balance;
+      }
+    });
+    const saldoInicialTransitar = Object.values(latestOpeningByAccount).reduce((sum, b) => sum + b, 0);
 
     // Calculate total expected revenue and breakdown
     let totalBaseFeeExpected = 0;
@@ -181,25 +197,44 @@ export async function GET(request: NextRequest) {
     // Actual revenue received (income allocations for current year)
     const totalReceitasReceived = incomeAllocations.reduce((sum, a) => sum + a.amount, 0);
 
-    // Revenue from previous years (income allocations for past months but in current year transactions)
-    const previousYearPayments = pastAllocations.filter(
-      (a) => a.transaction.amount > 0
-    );
-    // We compute this from debt calculation instead - payments covering past year debts
-    // In this report, we sum income that was allocated to months in the current year
-    const receitasAnosAnteriores = incomeAllocations
-      .filter((a) => a.month < `${year}-01`)
-      .reduce((sum, a) => sum + a.amount, 0);
+    // Revenue from previous years (allocations to months before current year in current year transactions)
+    const currentYearIncomeTransactions = await prisma.transaction.findMany({
+      where: {
+        date: { gte: new Date(`${year}-01-01`), lte: new Date(`${year}-12-31T23:59:59`) },
+        amount: { gt: 0 }
+      },
+      include: { monthAllocations: true }
+    });
 
-    // Expenses by creditor (grouped by creditor name for the report)
+    let receitasAnosAnteriores = 0;
+    for (const tx of currentYearIncomeTransactions) {
+      for (const alloc of tx.monthAllocations) {
+        if (alloc.month < `${year}-01`) {
+          receitasAnosAnteriores += alloc.amount;
+        }
+      }
+    }
+
+    // Revenue for THIS year (current year allocations in current year transactions)
+    let receitasDesteExercicio = 0;
+    for (const tx of currentYearIncomeTransactions) {
+      for (const alloc of tx.monthAllocations) {
+        if (alloc.month >= `${year}-01` && alloc.month <= `${year}-12`) {
+          receitasDesteExercicio += alloc.amount;
+        }
+      }
+    }
+
+    // Expenses by creditor
     const expensesByCreditor: Record<string, { label: string; category: string; amount: number }> = {};
-    const seenExpenseTransactions = new Set<string>();
+    const currentYearExpenseTransactions = await prisma.transaction.findMany({
+      where: {
+        date: { gte: new Date(`${year}-01-01`), lte: new Date(`${year}-12-31T23:59:59`) },
+        amount: { lt: 0 }
+      }
+    });
 
-    for (const alloc of expenseAllocations) {
-      const tx = alloc.transaction;
-      if (seenExpenseTransactions.has(tx.id)) continue;
-      seenExpenseTransactions.add(tx.id);
-
+    for (const tx of currentYearExpenseTransactions) {
       const creditor = creditors.find((c) => c.id === tx.creditorId);
       const label = creditor?.name || tx.category || 'Outros';
       const category = creditor?.category || tx.category || 'other';
@@ -215,19 +250,9 @@ export async function GET(request: NextRequest) {
     );
     const totalDespesas = despesasCategories.reduce((sum, c) => sum + c.amount, 0);
 
-    // Saldo do exercício
-    const saldoExercicio = totalReceitasReceived - totalDespesas;
-
-    // Previous year saldo (carry-forward) — compute from previous year's report data
-    // We approximate this by looking at the overall balance from past years
-    const prevYearIncome = pastAllocations
-      .filter((a) => a.transaction.amount > 0 && a.month >= `${year - 1}-01` && a.month <= `${year - 1}-12`)
-      .reduce((sum, a) => sum + a.amount, 0);
-    const prevYearExpenseAllocs = pastAllocations
-      .filter((a) => a.transaction.amount < 0 && a.month >= `${year - 1}-01` && a.month <= `${year - 1}-12`);
-    const prevYearExpenseIds = new Set<string>();
-    // We can't easily get the actual past saldo without a recursive computation,
-    // so we'll allow it to be manually set or computed from bank balances
+    // Saldo final
+    const saldoExercicio = (receitasAnosAnteriores + receitasDesteExercicio) - totalDespesas;
+    const saldoFinalDisponivel = saldoInicialTransitar + saldoExercicio;
 
     // Bank account balances
     const contasBancarias = bankAccounts.map((account) => ({
@@ -496,17 +521,19 @@ export async function GET(request: NextRequest) {
           quotasExtra: Object.values(extraChargeBreakdown),
           subTotalExercicio: totalBaseFeeExpected + totalExtraChargesExpected,
           receitasAnosAnteriores,
-          totalRecibos: totalReceitasReceived,
-          totalReceitas: totalReceitasReceived,
+          receitasDesteExercicio,
+          totalRecibos: receitasAnosAnteriores + receitasDesteExercicio,
+          totalReceitas: receitasAnosAnteriores + receitasDesteExercicio,
         },
         despesas: {
           categories: despesasCategories,
           totalDespesas,
         },
         saldoExercicio,
-        saldoTransitar: totalBankBalance,
+        saldoTransitar: saldoInicialTransitar,
         contasBancarias,
         totalBankBalance,
+        saldoFinalDisponivel,
         despesasPorLiquidar: totalUnpaidInvoicesAmount,
         quotasPorLiquidar: {
           total: debtTotals.saldo,

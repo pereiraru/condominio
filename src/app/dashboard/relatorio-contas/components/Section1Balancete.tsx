@@ -5,6 +5,7 @@ interface Section1Props {
       quotasExtra: { description: string; amount: number }[];
       subTotalExercicio: number;
       receitasAnosAnteriores: number;
+      receitasDesteExercicio: number;
       totalRecibos: number;
       totalReceitas: number;
     };
@@ -14,6 +15,7 @@ interface Section1Props {
     };
     saldoExercicio: number;
     saldoTransitar: number;
+    saldoFinalDisponivel: number;
     contasBancarias: { name: string; accountType: string; balance: number; description: string | null }[];
     totalBankBalance: number;
     despesasPorLiquidar: number;
@@ -28,54 +30,40 @@ function fmt(value: number): string {
 
 export default function Section1Balancete({ data, year }: Section1Props) {
   return (
-    <div className="report-section mb-8">
-      <h2 className="text-lg font-bold text-center mb-1">BALANCETE DE RECEITAS E DESPESAS</h2>
-      <h3 className="text-base font-semibold text-center mb-4 italic">RELATÓRIO DE CONTAS</h3>
-      <p className="text-sm text-center text-gray-600 mb-6">
-        PERÍODO: 01 DE JANEIRO A 31 DE DEZEMBRO DE {year}
-      </p>
-
-      <div className="grid grid-cols-2 gap-8">
+    <div className="report-section mb-12">
+      <div className="grid grid-cols-2 gap-12 border-b-2 border-gray-800 pb-8">
         {/* Left: Receitas */}
         <div>
-          <h4 className="font-bold text-sm border-b-2 border-gray-800 pb-1 mb-2">Receitas Apuradas</h4>
+          <h4 className="font-bold text-base bg-gray-100 p-2 mb-4 border-l-4 border-gray-800">RECEITAS APURADAS</h4>
           <table className="w-full text-sm">
             <tbody>
-              <tr className="font-semibold">
-                <td colSpan={2}>1. Do Exercício</td>
+              <tr className="font-bold">
+                <td className="py-1">1. DO EXERCÍCIO DE {year}</td>
+                <td className="text-right"></td>
               </tr>
               <tr>
-                <td className="pl-4">1.1 Orçamento Exercício</td>
-                <td className="text-right">{fmt(data.receitas.orcamentoExercicio)}</td>
+                <td className="pl-4 py-1">1.1 Quotas de Condomínio</td>
+                <td className="text-right">{fmt(data.receitas.receitasDesteExercicio)}</td>
               </tr>
               {data.receitas.quotasExtra.map((extra, i) => (
                 <tr key={i}>
-                  <td className="pl-4">1.{i + 2} {extra.description}</td>
+                  <td className="pl-4 py-1">1.{i + 2} {extra.description}</td>
                   <td className="text-right">{fmt(extra.amount)}</td>
                 </tr>
               ))}
-              <tr className="font-semibold border-t">
-                <td>Sub Total</td>
-                <td className="text-right">{fmt(data.receitas.subTotalExercicio)}</td>
+              
+              <tr className="font-bold mt-4 block">
+                <td className="py-1">2. DE EXERCÍCIOS ANTERIORES</td>
+                <td className="text-right"></td>
               </tr>
-              {data.receitas.receitasAnosAnteriores > 0 && (
-                <>
-                  <tr className="font-semibold mt-2">
-                    <td colSpan={2}>2. Exercícios Anteriores</td>
-                  </tr>
-                  <tr>
-                    <td className="pl-4">2.1 Orçamento</td>
-                    <td className="text-right">{fmt(data.receitas.receitasAnosAnteriores)}</td>
-                  </tr>
-                </>
-              )}
-              <tr className="font-bold border-t-2 border-gray-800 mt-2">
-                <td>Total dos Recibos Emitidos</td>
-                <td className="text-right">{fmt(data.receitas.totalRecibos)}</td>
+              <tr>
+                <td className="pl-4 py-1">2.1 Recebimentos de Dívidas</td>
+                <td className="text-right">{fmt(data.receitas.receitasAnosAnteriores)}</td>
               </tr>
-              <tr className="font-bold border-t-2 border-gray-800 mt-2">
-                <td>Total das Receitas Apuradas</td>
-                <td className="text-right">{fmt(data.receitas.totalReceitas)}</td>
+
+              <tr className="border-t-2 border-gray-400 font-bold">
+                <td className="py-2">TOTAL DAS RECEITAS</td>
+                <td className="text-right text-base">{fmt(data.receitas.totalReceitas)}</td>
               </tr>
             </tbody>
           </table>
@@ -83,86 +71,88 @@ export default function Section1Balancete({ data, year }: Section1Props) {
 
         {/* Right: Despesas */}
         <div>
-          <h4 className="font-bold text-sm border-b-2 border-gray-800 pb-1 mb-2">Despesas Pagas</h4>
+          <h4 className="font-bold text-base bg-gray-100 p-2 mb-4 border-l-4 border-gray-800">DESPESAS PAGAS</h4>
           <table className="w-full text-sm">
             <tbody>
-              <tr className="font-semibold">
-                <td colSpan={2}>1. Neste Exercício</td>
+              <tr className="font-bold">
+                <td className="py-1">1. NESTE EXERCÍCIO</td>
+                <td className="text-right"></td>
               </tr>
               {data.despesas.categories.map((cat, i) => (
-                <tr key={i}>
-                  <td className="pl-4">1.{i + 1} {cat.label}</td>
+                <tr key={i} className="border-b border-gray-50">
+                  <td className="pl-4 py-1">1.{i + 1} {cat.label}</td>
                   <td className="text-right">{fmt(cat.amount)}</td>
                 </tr>
               ))}
-              <tr className="font-bold border-t-2 border-gray-800 mt-2">
-                <td>Total das Despesas</td>
-                <td className="text-right">{fmt(data.despesas.totalDespesas)}</td>
+              
+              <tr className="border-t-2 border-gray-400 font-bold">
+                <td className="py-2">TOTAL DAS DESPESAS</td>
+                <td className="text-right text-base">{fmt(data.despesas.totalDespesas)}</td>
               </tr>
             </tbody>
           </table>
         </div>
       </div>
 
-      {/* Saldo */}
-      <div className="mt-6 border-t-2 border-gray-800 pt-4">
-        <table className="w-full text-sm">
-          <tbody>
-            <tr>
-              <td className="w-1/2">1. Saldo do Exercício (Receitas - Despesas)</td>
-              <td className="text-right font-semibold">{fmt(data.saldoExercicio)}</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+      {/* Summary Table */}
+      <div className="mt-8 grid grid-cols-2 gap-12">
+        <div>
+          <h4 className="font-bold text-sm mb-2 text-gray-700 underline uppercase tracking-wider">Resumo de Saldos</h4>
+          <table className="w-full text-sm">
+            <tbody>
+              <tr>
+                <td className="py-1 italic">Saldo do Exercício (Rec. - Desp.)</td>
+                <td className="text-right font-semibold">{fmt(data.saldoExercicio)}</td>
+              </tr>
+              <tr>
+                <td className="py-1 italic text-gray-600">Saldo que transitou de {year - 1}</td>
+                <td className="text-right">{fmt(data.saldoTransitar)}</td>
+              </tr>
+              <tr className="border-t-2 border-gray-800 font-bold bg-gray-50">
+                <td className="py-2">SALDO FINAL DISPONÍVEL</td>
+                <td className="text-right text-base">{fmt(data.saldoFinalDisponivel)}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
 
-      {/* Bank Accounts */}
-      {data.contasBancarias.length > 0 && (
-        <div className="mt-6 border-t pt-4">
+        <div>
+          <h4 className="font-bold text-sm mb-2 text-gray-700 underline uppercase tracking-wider">Disponibilidades Bancárias</h4>
           <table className="w-full text-sm">
             <tbody>
               {data.contasBancarias.map((conta, i) => (
                 <tr key={i}>
-                  <td>{i + 1}. {conta.name}{conta.description ? ` (${conta.description})` : ''}</td>
+                  <td className="py-1">{conta.name}</td>
                   <td className="text-right">{fmt(conta.balance)}</td>
                 </tr>
               ))}
-              <tr className="font-bold border-t">
-                <td>Total</td>
+              <tr className="border-t font-bold">
+                <td className="py-1">Total em Banco / Caixa</td>
                 <td className="text-right">{fmt(data.totalBankBalance)}</td>
               </tr>
             </tbody>
           </table>
         </div>
-      )}
+      </div>
 
-      {/* Despesas por Liquidar */}
-      {data.despesasPorLiquidar > 0 && (
-        <div className="mt-6 border-t pt-4">
-          <table className="w-full text-sm">
-            <tbody>
-              <tr className="font-semibold">
-                <td>Despesas por Liquidar a 31-12-{year}</td>
-                <td className="text-right">{fmt(data.despesasPorLiquidar)}</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {/* Quotas por Liquidar */}
-      {data.quotasPorLiquidar.total > 0 && (
-        <div className="mt-6 border-t pt-4">
-          <table className="w-full text-sm">
-            <tbody>
-              <tr className="font-semibold">
-                <td>Quotas por Liquidar a 31-12-{year}</td>
-                <td className="text-right">{fmt(data.quotasPorLiquidar.total)}</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      )}
+      <div className="grid grid-cols-2 gap-12 mt-8">
+        {data.despesasPorLiquidar > 0 && (
+          <div className="bg-red-50 p-3 rounded border border-red-100">
+            <div className="flex justify-between items-center text-sm font-bold text-red-800">
+              <span>DESPESAS POR LIQUIDAR A 31-12-{year}</span>
+              <span>{fmt(data.despesasPorLiquidar)}</span>
+            </div>
+          </div>
+        )}
+        {data.quotasPorLiquidar.total > 0 && (
+          <div className="bg-orange-50 p-3 rounded border border-orange-100">
+            <div className="flex justify-between items-center text-sm font-bold text-orange-800">
+              <span>QUOTAS POR LIQUIDAR A 31-12-{year}</span>
+              <span>{fmt(data.quotasPorLiquidar.total)}</span>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

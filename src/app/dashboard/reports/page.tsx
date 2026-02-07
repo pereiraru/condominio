@@ -17,7 +17,7 @@ interface DebtSummaryUnit {
   id: string;
   code: string;
   name: string;
-  years: Record<number, { expected: number; paid: number; debt: number }>;
+  years: Record<string | number, { expected: number; paid: number; debt: number }>;
   totalDebt: number;
   totalPaid: number;
   totalExpected: number;
@@ -26,15 +26,15 @@ interface DebtSummaryUnit {
 interface DebtExtraCharge {
   id: string;
   description: string;
-  yearlyTotals: Record<number, number>;
+  yearlyTotals: Record<string | number, number>;
 }
 
 interface DebtSummaryData {
   startYear: number;
   endYear: number;
-  years: number[];
+  years: (string | number)[];
   units: DebtSummaryUnit[];
-  yearTotals: Record<number, { expected: number; paid: number; debt: number }>;
+  yearTotals: Record<string | number, { expected: number; paid: number; debt: number }>;
   yearBaseFees: Record<number, number>;
   extraCharges: DebtExtraCharge[];
   grandTotalDebt: number;
@@ -183,7 +183,7 @@ export default function ReportsPage() {
   const fetchDebtSummary = async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/reports/debt-summary?startYear=2021');
+      const res = await fetch('/api/reports/debt-summary?startYear=2024');
       if (res.ok) {
         setDebtData(await res.json());
       }
@@ -499,7 +499,9 @@ export default function ReportsPage() {
         </div>
 
         {loading ? (
-          <p className="text-gray-500">A carregar...</p>
+          <div className="flex items-center justify-center py-20">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
+          </div>
         ) : activeTab === 'dividas' ? (
           <>
             {debtData && (
@@ -523,138 +525,109 @@ export default function ReportsPage() {
                 </div>
 
                 {/* Debt table */}
-                <div className="card">
-                  <h2 className="text-lg font-semibold text-gray-900 mb-4">Divida por Ano</h2>
+                <div className="card border border-gray-200 overflow-hidden !p-0">
+                  <div className="bg-gray-50 border-b border-gray-200 px-6 py-4">
+                    <h2 className="text-lg font-bold text-gray-900">Divida por Ano</h2>
+                  </div>
                   <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
+                    <table className="w-full text-[13px] border-collapse">
                       <thead>
                         {/* Expected breakdown header rows */}
-                        <tr className="text-gray-400 text-xs">
-                          <th className="pb-1 pr-4 font-normal text-left">Esperado</th>
-                          {debtData.years.map((year) => (
-                            <th key={year} className="pb-1 px-3 font-semibold text-center text-gray-600">
-                              {debtData.yearTotals[year].expected.toFixed(0)}€
-                            </th>
-                          ))}
-                          <th className="pb-1 pl-3 font-semibold text-right text-gray-600">
+                        <tr className="text-gray-400 text-[10px] bg-gray-50/30 uppercase tracking-widest">
+                          <th className="py-2 px-4 font-normal text-left">Esperado</th>
+                          {debtData.years.map((year) => {
+                            const yearTotal = debtData.yearTotals[year];
+                            return (
+                              <th key={year} className="py-2 px-3 font-semibold text-center text-gray-600 border-l border-gray-100">
+                                {yearTotal?.expected.toFixed(0)}€
+                              </th>
+                            );
+                          })}
+                          <th className="py-2 px-4 font-semibold text-right text-gray-600 border-l border-gray-100">
                             {debtData.grandTotalExpected.toFixed(0)}€
                           </th>
                         </tr>
-                        <tr className="text-gray-400 text-xs">
-                          <th className="pb-1 pr-4 font-normal text-left pl-4">Quotas</th>
-                          {debtData.years.map((year) => (
-                            <th key={year} className="pb-1 px-3 font-normal text-center">
-                              {debtData.yearBaseFees[year] > 0 ? `${debtData.yearBaseFees[year].toFixed(0)}€` : '-'}
-                            </th>
-                          ))}
-                          <th className="pb-1 pl-3 font-normal text-right">
-                            {debtData.years.reduce((sum, y) => sum + debtData.yearBaseFees[y], 0).toFixed(0)}€
-                          </th>
-                        </tr>
-                        {debtData.extraCharges.map((ec) => (
-                          <tr key={ec.id} className="text-gray-400 text-xs">
-                            <th className="pb-1 pr-4 font-normal text-left pl-4 truncate max-w-[200px]">{ec.description}</th>
-                            {debtData.years.map((year) => (
-                              <th key={year} className="pb-1 px-3 font-normal text-center">
-                                {ec.yearlyTotals[year] > 0 ? `${ec.yearlyTotals[year].toFixed(0)}€` : '-'}
-                              </th>
-                            ))}
-                            <th className="pb-1 pl-3 font-normal text-right">
-                              {debtData.years.reduce((sum, y) => sum + ec.yearlyTotals[y], 0).toFixed(0)}€
-                            </th>
-                          </tr>
-                        ))}
                         {/* Main header */}
-                        <tr className="text-left text-gray-500 border-b border-t border-gray-200">
-                          <th className="py-2 pr-4 font-medium">Fração</th>
+                        <tr className="text-left text-gray-700 bg-gray-100/50 uppercase text-[11px] tracking-wider border-b border-gray-200">
+                          <th className="py-3 px-4 font-bold sticky left-0 bg-gray-100 z-10 border-r shadow-[2px_0_5px_rgba(0,0,0,0.05)]">Fração</th>
                           {debtData.years.map((year) => (
-                            <th key={year} className="py-2 px-3 font-medium text-center min-w-[120px]">{year}</th>
+                            <th key={year} className={`py-3 px-3 font-bold text-center border-r last:border-r-0 min-w-[100px] ${year === 'Anterior 2024' ? 'bg-orange-50 text-orange-800' : ''}`}>
+                              {year}
+                            </th>
                           ))}
-                          <th className="py-2 pl-3 font-medium text-right min-w-[120px]">Total</th>
+                          <th className="py-3 px-4 font-bold text-right border-l bg-gray-100">Total</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-gray-100">
+                      <tbody className="divide-y divide-gray-200">
                         {debtData.units.map((unit) => (
-                          <tr key={unit.id} className="hover:bg-gray-50">
-                            <td className="py-2 pr-4">
+                          <tr key={unit.id} className="hover:bg-blue-50/30 transition-colors">
+                            <td className="py-3 px-4 font-bold text-gray-900 sticky left-0 bg-white z-10 border-r shadow-[2px_0_5px_rgba(0,0,0,0.05)]">
                               <button
-                                className="font-medium text-gray-900 hover:text-primary-600 hover:underline text-left"
+                                className="hover:text-primary-600 transition-colors text-left"
                                 onClick={() => router.push(`/dashboard/units/${unit.id}`)}
                               >
                                 {unit.code}
                               </button>
-                              <span className="text-xs text-gray-400 ml-2">{unit.name}</span>
+                              <div className="text-[10px] text-gray-400 font-normal uppercase truncate max-w-[120px]">{unit.name}</div>
                             </td>
                             {debtData.years.map((year) => {
-                              const { paid, debt } = unit.years[year];
-                              if (paid === 0 && debt === 0) {
+                              const yearInfo = unit.years[year];
+                              if (!yearInfo || (yearInfo.paid === 0 && yearInfo.debt === 0)) {
                                 return (
-                                  <td key={year} className="py-2 px-3 text-center text-gray-300">-</td>
+                                  <td key={year} className="py-3 px-3 text-center text-gray-300 border-r last:border-r-0">-</td>
                                 );
                               }
                               return (
-                                <td key={year} className="py-2 px-3 text-center">
-                                  {paid > 0 && (
-                                    <span className="text-green-600">{paid.toFixed(0)}€</span>
-                                  )}
-                                  {paid > 0 && debt > 0 && (
-                                    <span className="text-gray-300"> / </span>
-                                  )}
-                                  {debt > 0 && (
-                                    <span className="text-red-600 font-medium">{debt.toFixed(0)}€</span>
-                                  )}
+                                <td key={year} className={`py-3 px-3 text-center border-r last:border-r-0 ${year === 'Anterior 2024' ? 'bg-orange-50/20' : ''}`}>
+                                  <div className="flex flex-col gap-0.5">
+                                    {yearInfo.paid > 0 && (
+                                      <span className="text-green-600 font-medium">{yearInfo.paid.toFixed(0)}€</span>
+                                    )}
+                                    {yearInfo.debt > 0 && (
+                                      <span className="text-red-600 font-bold bg-red-50 rounded py-0.5 px-1">{yearInfo.debt.toFixed(0)}€</span>
+                                    )}
+                                  </div>
                                 </td>
                               );
                             })}
-                            <td className="py-2 pl-3 text-right">
-                              {unit.totalPaid > 0 && (
-                                <span className="text-green-600">{unit.totalPaid.toFixed(0)}€</span>
-                              )}
-                              {unit.totalPaid > 0 && unit.totalDebt > 0 && (
-                                <span className="text-gray-300"> / </span>
-                              )}
-                              {unit.totalDebt > 0 && (
-                                <span className="text-red-600 font-semibold">{unit.totalDebt.toFixed(0)}€</span>
-                              )}
-                              {unit.totalPaid === 0 && unit.totalDebt === 0 && (
-                                <span className="text-gray-300">-</span>
-                              )}
+                            <td className="py-3 px-4 text-right border-l font-bold">
+                              <div className="flex flex-col gap-0.5">
+                                {unit.totalPaid > 0 && (
+                                  <span className="text-green-600">{unit.totalPaid.toFixed(0)}€</span>
+                                )}
+                                {unit.totalDebt > 0 && (
+                                  <span className="text-red-700 text-sm font-black">{unit.totalDebt.toFixed(0)}€</span>
+                                )}
+                                {unit.totalPaid === 0 && unit.totalDebt === 0 && (
+                                  <span className="text-gray-300">-</span>
+                                )}
+                              </div>
                             </td>
                           </tr>
                         ))}
-                        {/* Totals row */}
-                        <tr className="bg-gray-50 font-bold border-t-2 border-gray-300">
-                          <td className="py-3 pr-4 text-gray-900">Total</td>
+                      </tbody>
+                      <tfoot>
+                        <tr className="bg-gray-900 text-white font-bold">
+                          <td className="py-4 px-4 sticky left-0 bg-gray-900 z-10 border-r">TOTAL GERAL</td>
                           {debtData.years.map((year) => {
-                            const { paid, debt } = debtData.yearTotals[year];
+                            const yearTotal = debtData.yearTotals[year];
                             return (
-                              <td key={year} className="py-3 px-3 text-center">
-                                {paid > 0 && (
-                                  <span className="text-green-600">{paid.toFixed(0)}€</span>
-                                )}
-                                {paid > 0 && debt > 0 && (
-                                  <span className="text-gray-300"> / </span>
-                                )}
-                                {debt > 0 && (
-                                  <span className="text-red-600">{debt.toFixed(0)}€</span>
-                                )}
-                                {paid === 0 && debt === 0 && (
-                                  <span className="text-gray-300">-</span>
-                                )}
+                              <td key={year} className="py-4 px-3 text-center border-r border-gray-800">
+                                <div className="flex flex-col gap-0.5">
+                                  <span className="text-green-400 text-xs">{yearTotal.paid.toFixed(0)}€</span>
+                                  <span className="text-red-400">{yearTotal.debt.toFixed(0)}€</span>
+                                </div>
                               </td>
                             );
                           })}
-                          <td className="py-3 pl-3 text-right">
-                            <span className="text-green-600">{debtData.grandTotalPaid.toFixed(0)}€</span>
-                            {debtData.grandTotalDebt > 0 && (
-                              <>
-                                <span className="text-gray-300"> / </span>
-                                <span className="text-red-600">{debtData.grandTotalDebt.toFixed(0)}€</span>
-                              </>
-                            )}
+                          <td className="py-4 px-4 text-right border-l border-gray-800">
+                            <div className="flex flex-col gap-0.5">
+                              <span className="text-green-400 text-xs">{debtData.grandTotalPaid.toFixed(0)}€</span>
+                              <span className="text-red-400 text-lg">{debtData.grandTotalDebt.toFixed(0)}€</span>
+                            </div>
                           </td>
                         </tr>
-                      </tbody>
+                      </tfoot>
                     </table>
                   </div>
                 </div>
@@ -673,8 +646,6 @@ export default function ReportsPage() {
                     resumoYear === 'all' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
                   }`}
                   onClick={() => setResumoYear('all')}
-                >
-                  Todos
                 </button>
                 {availableYears.slice(0, 5).map(year => (
                   <button
@@ -707,16 +678,16 @@ export default function ReportsPage() {
               </div>
             </div>
 
-            <div className="card">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-lg font-semibold text-gray-900">Resumo Mensal</h2>
+            <div className="card border border-gray-200 overflow-hidden !p-0">
+              <div className="bg-gray-50 border-b border-gray-200 px-6 py-4">
+                <h2 className="text-lg font-bold text-gray-900">Resumo Mensal</h2>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full">
                   <thead>
-                    <tr className="text-left text-sm text-gray-500">
+                    <tr className="text-left text-gray-500 bg-gray-50/50 uppercase text-[11px] tracking-wider border-b">
                       <th
-                        className="pb-4 font-medium cursor-pointer hover:text-gray-900 select-none"
+                        className="py-3 px-6 font-bold cursor-pointer hover:text-gray-900 select-none"
                         onClick={() => setResumoSortAsc(!resumoSortAsc)}
                       >
                         <span className="flex items-center gap-1">
@@ -726,18 +697,18 @@ export default function ReportsPage() {
                           </svg>
                         </span>
                       </th>
-                      <th className="pb-4 font-medium text-right">Receitas</th>
-                      <th className="pb-4 font-medium text-right">Despesas</th>
-                      <th className="pb-4 font-medium text-right">Saldo</th>
+                      <th className="py-3 px-6 font-bold text-right">Receitas</th>
+                      <th className="py-3 px-6 font-bold text-right">Despesas</th>
+                      <th className="py-3 px-6 font-bold text-right">Saldo</th>
                     </tr>
                   </thead>
-                  <tbody>
+                  <tbody className="divide-y divide-gray-200">
                     {filteredMonthlyData.map((d, i) => (
-                      <tr key={d.month} className={`hover:bg-gray-50 transition-colors ${i !== filteredMonthlyData.length - 1 ? 'border-b border-gray-100' : ''}`}>
-                        <td className="py-4 text-sm font-medium text-gray-900">{formatMonth(d.month)}</td>
-                        <td className="py-4 text-sm text-right text-green-600 font-medium">+{d.income.toFixed(2)} EUR</td>
-                        <td className="py-4 text-sm text-right text-red-500 font-medium">-{d.expenses.toFixed(2)} EUR</td>
-                        <td className={`py-4 text-sm text-right font-semibold ${d.balance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                      <tr key={d.month} className="hover:bg-blue-50/30 transition-colors">
+                        <td className="py-4 px-6 text-sm font-bold text-gray-900">{formatMonth(d.month)}</td>
+                        <td className="py-4 px-6 text-sm text-right text-green-600 font-bold">+{d.income.toFixed(2)} EUR</td>
+                        <td className="py-4 px-6 text-sm text-right text-red-500 font-bold">-{d.expenses.toFixed(2)} EUR</td>
+                        <td className={`py-4 px-6 text-sm text-right font-black ${d.balance >= 0 ? 'text-gray-900' : 'text-red-600'}`}>
                           {d.balance >= 0 ? '+' : ''}{d.balance.toFixed(2)} EUR
                         </td>
                       </tr>
@@ -798,36 +769,38 @@ export default function ReportsPage() {
                   </div>
 
                   {/* Receitas Table */}
-                  <div className="card">
-                    <h2 className="text-lg font-semibold text-gray-900 mb-4">Receitas (Frações)</h2>
+                  <div className="card !p-0 overflow-hidden border border-gray-200">
+                    <div className="bg-gray-50 border-b border-gray-200 px-6 py-4">
+                      <h2 className="text-lg font-bold text-gray-900">Receitas (Quotas de Condomínio)</h2>
+                    </div>
                     <div className="overflow-x-auto">
-                      <table className="w-full text-sm">
+                      <table className="w-full text-[13px] border-collapse">
                         <thead>
-                          <tr className="text-left text-gray-500 border-b">
-                            <th className="pb-2 pr-2 font-medium sticky left-0 bg-white">Fração</th>
-                            <th className="pb-2 px-1 font-medium text-center min-w-[70px] text-orange-600">Div.Ant.</th>
+                          <tr className="text-left text-gray-500 bg-gray-50/50 uppercase text-[11px] tracking-wider border-b">
+                            <th className="py-3 px-4 font-bold sticky left-0 bg-gray-50 z-10 border-r shadow-[2px_0_5px_rgba(0,0,0,0.05)]">Fração</th>
+                            <th className="py-3 px-2 font-bold text-center bg-orange-50 text-orange-700 border-r">Div.Ant.</th>
                             {MONTH_NAMES.map((m) => (
-                              <th key={m} className="pb-2 px-1 font-medium text-center min-w-[55px]">{m}</th>
+                              <th key={m} className="py-3 px-1 font-bold text-center border-r last:border-r-0 min-w-[50px]">{m}</th>
                             ))}
-                            <th className="pb-2 px-2 font-medium text-right">Pago</th>
-                            <th className="pb-2 px-2 font-medium text-right">Esperado</th>
-                            <th className="pb-2 px-2 font-medium text-right text-red-600">Dív.Ano</th>
-                            <th className="pb-2 px-2 font-medium text-right text-red-600">Dív.Total</th>
+                            <th className="py-3 px-3 font-bold text-right border-l bg-green-50 text-green-700">Pago</th>
+                            <th className="py-3 px-3 font-bold text-right border-l text-gray-600">Prev.</th>
+                            <th className="py-3 px-3 font-bold text-right border-l bg-red-50 text-red-700">Dív.Ano</th>
+                            <th className="py-3 px-3 font-bold text-right border-l bg-red-100 text-red-800">TOTAL</th>
                           </tr>
                         </thead>
-                        <tbody className="divide-y divide-gray-100">
+                        <tbody className="divide-y divide-gray-200">
                           {overviewData.units.map((unit) => (
-                            <tr key={unit.id}>
-                              <td className="py-2 pr-2 font-medium text-gray-900 sticky left-0 bg-white">
+                            <tr key={unit.id} className="hover:bg-blue-50/30 transition-colors">
+                              <td className="py-2 px-4 font-bold text-gray-900 sticky left-0 bg-white z-10 border-r shadow-[2px_0_5px_rgba(0,0,0,0.05)]">
                                 <button
-                                  className="hover:text-primary-600 hover:underline text-left"
+                                  className="hover:text-primary-600 transition-colors text-left"
                                   onClick={() => router.push(`/dashboard/units/${unit.id}`)}
                                 >
                                   {unit.code}
                                 </button>
                               </td>
-                              <td className={`py-1 px-1 text-center text-xs ${unit.pastYearsDebt > 0 ? 'text-orange-600 font-medium' : 'text-gray-300'}`}>
-                                {unit.pastYearsDebt > 0 ? `${unit.pastYearsDebt.toFixed(2)}€` : '-'}
+                              <td className={`py-2 px-2 text-center bg-orange-50/30 border-r ${unit.pastYearsDebt > 0 ? 'text-orange-600 font-bold' : 'text-gray-300'}`}>
+                                {unit.pastYearsDebt > 0 ? `${unit.pastYearsDebt.toFixed(0)}€` : '-'}
                               </td>
                               {Array.from({ length: 12 }, (_, i) => {
                                 const monthStr = `${selectedYear}-${(i + 1).toString().padStart(2, '0')}`;
@@ -835,40 +808,41 @@ export default function ReportsPage() {
                                 return (
                                   <td
                                     key={monthStr}
-                                    className={`py-1 px-1 text-center cursor-pointer transition-colors ${getCellColor(data.paid, data.expected)}`}
+                                    className={`py-2 px-1 text-center cursor-pointer transition-colors border-r last:border-r-0 ${getCellColor(data.paid, data.expected)}`}
                                     onClick={() => handleCellClick('payment', unit.id, unit.code, monthStr, data.transactions || [])}
                                   >
-                                    {data.paid > 0 ? (
-                                      <span className="text-xs">
-                                        {Number.isInteger(data.paid) ? data.paid : data.paid.toFixed(2)}€
-                                      </span>
-                                    ) : (
-                                      <span className="text-xs text-gray-300">-</span>
-                                    )}
+                                    <div className="flex flex-col items-center">
+                                      {data.paid > 0 ? (
+                                        <span className="font-semibold">
+                                          {Number.isInteger(data.paid) ? data.paid : data.paid.toFixed(1)}
+                                        </span>
+                                      ) : (
+                                        <span className="text-gray-300">-</span>
+                                      )}
+                                    </div>
                                   </td>
                                 );
                               })}
-                              <td className="py-2 px-2 text-right text-green-600 font-medium">
-                                {unit.totalPaid.toFixed(2)}€
+                              <td className="py-2 px-3 text-right bg-green-50/30 border-l text-green-700 font-bold">
+                                {unit.totalPaid.toFixed(0)}€
                               </td>
-                              <td className="py-2 px-2 text-right text-gray-500">
-                                {unit.totalExpected.toFixed(2)}€
+                              <td className="py-2 px-3 text-right border-l text-gray-500">
+                                {unit.totalExpected.toFixed(0)}€
                               </td>
-                              <td className={`py-2 px-2 text-right font-medium ${(unit.yearDebt || 0) > 0 ? 'text-red-600' : 'text-gray-300'}`}>
-                                {(unit.yearDebt || 0) > 0 ? `${(unit.yearDebt || 0).toFixed(2)}€` : '-'}
+                              <td className={`py-2 px-3 text-right border-l bg-red-50/30 font-bold ${(unit.yearDebt || 0) > 0 ? 'text-red-600' : 'text-gray-300'}`}>
+                                {(unit.yearDebt || 0) > 0 ? `${(unit.yearDebt || 0).toFixed(0)}€` : '-'}
                               </td>
-                              <td className={`py-2 px-2 text-right font-medium ${(unit.totalDebt || 0) > 0 ? 'text-red-600' : 'text-gray-300'}`}>
-                                {(unit.totalDebt || 0) > 0 ? `${(unit.totalDebt || 0).toFixed(2)}€` : '-'}
+                              <td className={`py-2 px-3 text-right border-l bg-red-100/20 font-black text-sm ${(unit.totalDebt || 0) > 0 ? 'text-red-700' : 'text-gray-300'}`}>
+                                {(unit.totalDebt || 0) > 0 ? `${(unit.totalDebt || 0).toFixed(0)}€` : '-'}
                               </td>
                             </tr>
                           ))}
-                          {/* Totals row */}
-                          <tr className="bg-gray-50 font-bold">
-                            <td className="py-2 pr-2 sticky left-0 bg-gray-50">Total Receitas</td>
-                            <td className="py-2 px-1 text-center text-xs text-orange-600">
-                              {overviewData.units.reduce((sum, u) => sum + u.pastYearsDebt, 0) > 0
-                                ? `${overviewData.units.reduce((sum, u) => sum + u.pastYearsDebt, 0).toFixed(2)}€`
-                                : '-'}
+                        </tbody>
+                        <tfoot>
+                          <tr className="bg-gray-900 text-white font-bold">
+                            <td className="py-3 px-4 sticky left-0 bg-gray-900 z-10 border-r">TOTAL</td>
+                            <td className="py-3 px-2 text-center bg-orange-900/50 border-r">
+                              {overviewData.units.reduce((sum, u) => sum + u.pastYearsDebt, 0).toFixed(0)}€
                             </td>
                             {Array.from({ length: 12 }, (_, i) => {
                               const monthStr = `${selectedYear}-${(i + 1).toString().padStart(2, '0')}`;
@@ -877,60 +851,60 @@ export default function ReportsPage() {
                                 0
                               );
                               return (
-                                <td key={monthStr} className="py-2 px-1 text-center text-xs text-green-600">
-                                  {total > 0 ? `${total.toFixed(2)}€` : '-'}
+                                <td key={monthStr} className="py-3 px-1 text-center text-[11px] border-r last:border-r-0">
+                                  {total > 0 ? `${total.toFixed(0)}€` : '-'}
                                 </td>
                               );
                             })}
-                            <td className="py-2 px-2 text-right text-green-600">
-                              {overviewData.totals.receitas.toFixed(2)}€
+                            <td className="py-3 px-3 text-right bg-green-900/50 border-l">
+                              {overviewData.totals.receitas.toFixed(0)}€
                             </td>
-                            <td className="py-2 px-2 text-right text-gray-500">
-                              {overviewData.units.reduce((sum, u) => sum + u.totalExpected, 0).toFixed(2)}€
+                            <td className="py-3 px-3 text-right border-l opacity-70">
+                              {overviewData.units.reduce((sum, u) => sum + u.totalExpected, 0).toFixed(0)}€
                             </td>
-                            <td className="py-2 px-2 text-right text-red-600">
-                              {overviewData.units.reduce((sum, u) => sum + (u.yearDebt || 0), 0) > 0
-                                ? `${overviewData.units.reduce((sum, u) => sum + (u.yearDebt || 0), 0).toFixed(2)}€`
-                                : '-'}
+                            <td className="py-3 px-3 text-right border-l bg-red-900/50">
+                              {overviewData.units.reduce((sum, u) => sum + (u.yearDebt || 0), 0).toFixed(0)}€
                             </td>
-                            <td className="py-2 px-2 text-right text-red-600">
-                              {overviewData.totals.totalDebt > 0 ? `${overviewData.totals.totalDebt.toFixed(2)}€` : '-'}
+                            <td className="py-3 px-3 text-right border-l bg-red-900/80 text-lg">
+                              {overviewData.totals.totalDebt.toFixed(0)}€
                             </td>
                           </tr>
-                        </tbody>
+                        </tfoot>
                       </table>
                     </div>
                   </div>
 
                   {/* Despesas Table */}
-                  <div className="card">
-                    <h2 className="text-lg font-semibold text-gray-900 mb-4">Despesas (Credores)</h2>
+                  <div className="card !p-0 overflow-hidden border border-gray-200">
+                    <div className="bg-gray-50 border-b border-gray-200 px-6 py-4">
+                      <h2 className="text-lg font-bold text-gray-900">Despesas (Credores / Serviços)</h2>
+                    </div>
                     <div className="overflow-x-auto">
-                      <table className="w-full text-sm">
+                      <table className="w-full text-[13px] border-collapse">
                         <thead>
-                          <tr className="text-left text-gray-500 border-b">
-                            <th className="pb-2 pr-2 font-medium sticky left-0 bg-white">Credor</th>
-                            <th className="pb-2 px-1 font-medium text-center min-w-[70px] text-orange-600">Div.Ant.</th>
+                          <tr className="text-left text-gray-500 bg-gray-50/50 uppercase text-[11px] tracking-wider border-b">
+                            <th className="py-3 px-4 font-bold sticky left-0 bg-gray-50 z-10 border-r shadow-[2px_0_5px_rgba(0,0,0,0.05)]">Credor</th>
+                            <th className="py-3 px-2 font-bold text-center bg-orange-50 text-orange-700 border-r">Ant.</th>
                             {MONTH_NAMES.map((m) => (
-                              <th key={m} className="pb-2 px-1 font-medium text-center min-w-[55px]">{m}</th>
+                              <th key={m} className="py-3 px-1 font-bold text-center border-r last:border-r-0 min-w-[50px]">{m}</th>
                             ))}
-                            <th className="pb-2 px-2 font-medium text-right">Pago</th>
-                            <th className="pb-2 px-2 font-medium text-right">Esperado</th>
+                            <th className="py-3 px-3 font-bold text-right border-l bg-red-50 text-red-700">Pago</th>
+                            <th className="py-3 px-3 font-bold text-right border-l text-gray-600">Prev.</th>
                           </tr>
                         </thead>
-                        <tbody className="divide-y divide-gray-100">
+                        <tbody className="divide-y divide-gray-200">
                           {overviewData.creditors.map((creditor) => (
-                            <tr key={creditor.id}>
-                              <td className="py-2 pr-2 font-medium text-gray-900 sticky left-0 bg-white">
+                            <tr key={creditor.id} className="hover:bg-red-50/20 transition-colors">
+                              <td className="py-2 px-4 font-bold text-gray-900 sticky left-0 bg-white z-10 border-r shadow-[2px_0_5px_rgba(0,0,0,0.05)]">
                                 <button
-                                  className="hover:text-primary-600 hover:underline text-left"
+                                  className="hover:text-primary-600 transition-colors text-left"
                                   onClick={() => router.push(`/dashboard/creditors/${creditor.id}`)}
                                 >
                                   {creditor.name}
                                 </button>
                               </td>
-                              <td className={`py-1 px-1 text-center text-xs ${creditor.pastYearsDebt > 0 ? 'text-orange-600 font-medium' : 'text-gray-300'}`}>
-                                {creditor.pastYearsDebt > 0 ? `${creditor.pastYearsDebt.toFixed(2)}€` : '-'}
+                              <td className={`py-2 px-2 text-center border-r ${creditor.pastYearsDebt > 0 ? 'text-orange-600 font-bold' : 'text-gray-300'}`}>
+                                {creditor.pastYearsDebt > 0 ? `${creditor.pastYearsDebt.toFixed(0)}€` : '-'}
                               </td>
                               {Array.from({ length: 12 }, (_, i) => {
                                 const monthStr = `${selectedYear}-${(i + 1).toString().padStart(2, '0')}`;
@@ -938,35 +912,28 @@ export default function ReportsPage() {
                                 return (
                                   <td
                                     key={monthStr}
-                                    className={`py-1 px-1 text-center cursor-pointer transition-colors ${getCellColor(data.paid, data.expected)}`}
+                                    className={`py-2 px-1 text-center cursor-pointer transition-colors border-r last:border-r-0 ${getCellColor(data.paid, data.expected)}`}
                                     onClick={() => handleCellClick('expense', creditor.id, creditor.name, monthStr, data.transactions || [])}
                                   >
-                                    {data.paid > 0 ? (
-                                      <span className="text-xs">
-                                        {Number.isInteger(data.paid) ? data.paid : data.paid.toFixed(2)}€
-                                      </span>
-                                    ) : (
-                                      <span className="text-xs text-gray-300">-</span>
-                                    )}
+                                    <span className="font-medium">
+                                      {data.paid > 0 ? (Number.isInteger(data.paid) ? data.paid : data.paid.toFixed(0)) : '-'}
+                                    </span>
                                   </td>
                                 );
                               })}
-                              <td className="py-2 px-2 text-right text-red-600 font-medium">
-                                {creditor.totalPaid.toFixed(2)}€
+                              <td className="py-2 px-3 text-right bg-red-50/30 border-l text-red-700 font-bold">
+                                {creditor.totalPaid.toFixed(0)}€
                               </td>
-                              <td className="py-2 px-2 text-right text-gray-500">
-                                {creditor.totalExpected.toFixed(2)}€
+                              <td className="py-2 px-3 text-right border-l text-gray-500">
+                                {creditor.totalExpected.toFixed(0)}€
                               </td>
                             </tr>
                           ))}
-                          {/* Totals row */}
-                          <tr className="bg-gray-50 font-bold">
-                            <td className="py-2 pr-2 sticky left-0 bg-gray-50">Total Despesas</td>
-                            <td className="py-2 px-1 text-center text-xs text-orange-600">
-                              {overviewData.creditors.reduce((sum, c) => sum + c.pastYearsDebt, 0) > 0
-                                ? `${overviewData.creditors.reduce((sum, c) => sum + c.pastYearsDebt, 0).toFixed(2)}€`
-                                : '-'}
-                            </td>
+                        </tbody>
+                        <tfoot>
+                          <tr className="bg-gray-800 text-white font-bold">
+                            <td className="py-3 px-4 sticky left-0 bg-gray-800 z-10 border-r">TOTAL DESPESAS</td>
+                            <td className="py-3 px-2 text-center border-r">-</td>
                             {Array.from({ length: 12 }, (_, i) => {
                               const monthStr = `${selectedYear}-${(i + 1).toString().padStart(2, '0')}`;
                               const total = overviewData.creditors.reduce(
@@ -974,19 +941,19 @@ export default function ReportsPage() {
                                 0
                               );
                               return (
-                                <td key={monthStr} className="py-2 px-1 text-center text-xs text-red-600">
-                                  {total > 0 ? `${total.toFixed(2)}€` : '-'}
+                                <td key={monthStr} className="py-3 px-1 text-center text-[11px] border-r last:border-r-0">
+                                  {total > 0 ? `${total.toFixed(0)}€` : '-'}
                                 </td>
                               );
                             })}
-                            <td className="py-2 px-2 text-right text-red-600">
-                              {overviewData.totals.despesas.toFixed(2)}€
+                            <td className="py-3 px-3 text-right bg-red-900/50 border-l">
+                              {overviewData.totals.despesas.toFixed(0)}€
                             </td>
-                            <td className="py-2 px-2 text-right text-gray-500">
-                              {overviewData.creditors.reduce((sum, c) => sum + c.totalExpected, 0).toFixed(2)}€
+                            <td className="py-3 px-3 text-right border-l opacity-70">
+                              {overviewData.creditors.reduce((sum, c) => sum + c.totalExpected, 0).toFixed(0)}€
                             </td>
                           </tr>
-                        </tbody>
+                        </tfoot>
                       </table>
                     </div>
                   </div>

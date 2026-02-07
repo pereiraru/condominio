@@ -127,6 +127,22 @@ export default function RelatorioContasPage() {
               year={data.year}
             />
 
+            {/* Signature Section */}
+            <div className="mt-20 grid grid-cols-2 gap-20 report-section">
+              <div className="text-center">
+                <div className="border-t border-gray-800 pt-2 mx-auto w-64">
+                  <p className="text-sm font-bold uppercase">A Administração</p>
+                  <p className="text-xs text-gray-500 mt-1">(Assinatura e Carimbo)</p>
+                </div>
+              </div>
+              <div className="text-center">
+                <div className="border-t border-gray-800 pt-2 mx-auto w-64">
+                  <p className="text-sm font-bold uppercase">Conselho Consultivo</p>
+                  <p className="text-xs text-gray-500 mt-1">(Visto)</p>
+                </div>
+              </div>
+            </div>
+
             {/* Footer */}
             <div className="mt-12 pt-4 border-t border-gray-300 text-xs text-gray-500 text-center">
               <p>Relatório gerado automaticamente — Condomínio {data.buildingName}</p>
