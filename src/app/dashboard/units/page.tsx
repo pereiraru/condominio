@@ -286,12 +286,10 @@ export default function UnitsPage() {
                                 </p>
                               </div>
                             </div>
-                            {!isGaragem && (
-                              <div className="text-right">
-                                <p className="text-sm font-bold text-gray-900">{unit.monthlyFee.toFixed(2)}€</p>
-                                <p className="text-[10px] text-gray-400 uppercase font-bold">/ mês</p>
-                              </div>
-                            )}
+                            <div className="text-right">
+                              <p className={`${isGaragem ? 'text-xs' : 'text-sm'} font-bold text-gray-900`}>{unit.monthlyFee.toFixed(2)}€</p>
+                              <p className="text-[10px] text-gray-400 uppercase font-bold">/ mês</p>
+                            </div>
                           </div>
 
                           <div className={isGaragem ? 'space-y-1' : 'space-y-3'}>
