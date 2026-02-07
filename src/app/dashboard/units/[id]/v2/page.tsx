@@ -562,7 +562,7 @@ export default function UnitDetailV2Page() {
                     </button>
                     {isAdmin && (unit.pre2024?.remaining ?? 0) > 0 && (
                       <button 
-                        onClick={() => router.push(`/dashboard/payments?unitId=${id}&month=PREV-DEBT`)}
+                        onClick={() => router.push(`/dashboard/transactions?unitId=${id}`)}
                         className="w-full flex items-center justify-between p-3 rounded-xl border border-orange-100 bg-orange-50 hover:bg-orange-100 transition-colors group"
                       >
                         <span className="text-sm font-bold text-orange-700">Pagar Dívida Anterior</span>
@@ -652,7 +652,7 @@ export default function UnitDetailV2Page() {
                       </select>
                     )}
                     <div className="flex items-center bg-white border border-gray-200 rounded-lg p-1">
-                      <button onClick={() => setCalendarYear(calendarYear-1)} className="p-1 hover:bg-gray-100 rounded">
+                      <button onClick={() => setCalendarYear(Math.max(2024, calendarYear-1))} className="p-1 hover:bg-gray-100 rounded">
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M15 19l-7-7 7-7" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"/></svg>
                       </button>
                       <span className="px-3 text-sm font-bold text-gray-700">{calendarYear}</span>
@@ -673,12 +673,12 @@ export default function UnitDetailV2Page() {
                         ))}
                         <th className="py-2 px-2 text-right bg-green-50/50 border-l border-gray-200 min-w-[75px]">Pago</th>
                         <th className="py-2 px-2 text-right bg-red-50/50 border-l border-gray-200 min-w-[75px]">Dívida</th>
-                        <th className="py-2 px-2 text-right bg-gray-100 border-l border-gray-200 min-w-[75px]">Acum.</th>
+                        <th className="py-2 px-2 text-right bg-gray-100 border-l border-gray-200 min-w-[75px]">Acum..</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-200">
                       {(() => {
-                        const startYear = yearlyData.length > 0 ? Math.min(...yearlyData.map(y => y.year)) : new Date().getFullYear();
+                        const startYear = Math.max(2024, yearlyData.length > 0 ? Math.min(...yearlyData.map(y => y.year)) : 2024);
                         return Array.from({ length: new Date().getFullYear() - startYear + 1 }, (_, i) => new Date().getFullYear() - i);
                       })().map(year => {
                         const yearData = yearlyData.find(y => y.year === year);
@@ -854,7 +854,7 @@ export default function UnitDetailV2Page() {
                           <p className="text-3xl font-black">{(unit.pre2024?.remaining ?? 0).toFixed(2)}€</p>
                           {isAdmin && (unit.pre2024?.remaining ?? 0) > 0 && (
                             <button 
-                              onClick={() => router.push(`/dashboard/payments?unitId=${id}&month=PREV-DEBT`)}
+                              onClick={() => router.push(`/dashboard/transactions?unitId=${id}`)}
                               className="bg-white text-orange-600 text-[10px] font-bold uppercase px-3 py-1.5 rounded-lg hover:bg-orange-50 transition-all active:scale-95 shadow-sm"
                             >
                               Registar Amortização
