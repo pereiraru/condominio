@@ -107,7 +107,7 @@ export default function CreditorDetailPage() {
         const data = await res.json();
         alert(`Erro: ${data.error}`);
       }
-    } catch (error) {
+    } catch {
       alert('Erro ao guardar');
     } finally {
       setSaving(false);
@@ -130,7 +130,7 @@ export default function CreditorDetailPage() {
       } else {
         alert('Erro ao carregar ficheiro');
       }
-    } catch (error) {
+    } catch {
       alert('Erro ao carregar ficheiro');
     } finally {
       setUploadingFile(false);

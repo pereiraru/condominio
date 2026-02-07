@@ -339,7 +339,7 @@ export default function UnitDetailPage() {
         const data = await res.json();
         alert(`Erro: ${data.error}`);
       }
-    } catch (error) {
+    } catch {
       alert('Erro ao guardar');
     } finally {
       setSaving(false);

@@ -1,6 +1,5 @@
 interface ReportHeaderProps {
   buildingName: string;
-  year: number;
   title: string;
   subtitle?: string;
 }

@@ -96,7 +96,6 @@ export default function RelatorioContasPage() {
           <div className="report-container bg-white print:shadow-none rounded-lg shadow-sm p-8 print:p-0">
             <ReportHeader
               buildingName={data.buildingName}
-              year={data.year}
               title="BALANCETE DE RECEITAS E DESPESAS"
               subtitle={`RELATÓRIO DE CONTAS — PERÍODO: 01 DE JANEIRO A 31 DE DEZEMBRO DE ${data.year}`}
             />

@@ -34,14 +34,6 @@ export async function POST(request: NextRequest) {
       include: { unit: true, creditor: true },
     });
 
-    // Apply mapping to all matching transactions (case-insensitive contains)
-    const matchingTxs = await prisma.transaction.findMany({
-      where: {
-        description: { contains: pattern },
-      },
-      select: { id: true },
-    });
-
     const updateData: Record<string, string | null> = {};
     if (unitId) updateData.unitId = unitId;
     if (creditorId) updateData.creditorId = creditorId;

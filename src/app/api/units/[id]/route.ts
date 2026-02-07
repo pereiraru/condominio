@@ -84,7 +84,7 @@ export async function PUT(
     }
 
     // Update unit fields
-    const unit = await prisma.unit.update({
+    await prisma.unit.update({
       where: { id: params.id },
       data: {
         code: body.code,

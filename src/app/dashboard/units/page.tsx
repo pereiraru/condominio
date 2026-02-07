@@ -66,7 +66,7 @@ export default function UnitsPage() {
       } else {
         setImportResult(`Erro: ${data.error}`);
       }
-    } catch (error) {
+    } catch {
       setImportResult('Erro ao importar ficheiro');
     } finally {
       setImporting(false);
@@ -138,7 +138,7 @@ export default function UnitsPage() {
         const data = await res.json();
         alert(`Erro: ${data.error}`);
       }
-    } catch (error) {
+    } catch {
       alert('Erro ao criar fração');
     } finally {
       setSaving(false);

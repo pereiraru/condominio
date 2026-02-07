@@ -176,7 +176,7 @@ export async function POST(request: NextRequest) {
           });
 
           results.transactions.imported++;
-        } catch (err) {
+        } catch {
           results.transactions.skipped++;
         }
       }

@@ -87,7 +87,7 @@ export default function CreditorsPage() {
         const data = await res.json();
         alert(`Erro: ${data.error}`);
       }
-    } catch (error) {
+    } catch {
       alert('Erro ao criar credor');
     } finally {
       setSaving(false);
@@ -111,7 +111,7 @@ export default function CreditorsPage() {
         const data = await res.json();
         alert(`Erro: ${data.error}`);
       }
-    } catch (error) {
+    } catch {
       alert('Erro ao carregar ficheiro');
     } finally {
       setUploadingFor(null);

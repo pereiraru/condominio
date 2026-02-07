@@ -99,7 +99,7 @@ export default function HistoryEditPanel({
         const amounts: Record<string, string> = { ...customAmounts };
         selectedMonths.forEach((m) => {
           if (!catAmounts[m]) {
-            catAmounts[m] = buildDefaultCategoryAmountsFromExpected(m);
+            catAmounts[m] = buildDefaultCategoryAmountsFromExpected();
             const total = parseFloat(catAmounts[m].baseFee || '0') +
               Object.values(catAmounts[m].extras).reduce((s, v) => s + parseFloat(v || '0'), 0);
             amounts[m] = total.toFixed(2);
@@ -231,7 +231,7 @@ export default function HistoryEditPanel({
     }
   }
 
-  function buildDefaultCategoryAmountsFromExpected(monthStr: string): MonthCategoryAmounts {
+  function buildDefaultCategoryAmountsFromExpected(): MonthCategoryAmounts {
     const expected = effectiveExpected;
     if (allAllocatableExtras.length === 0) {
       return { baseFee: '0', extras: {} };
@@ -257,7 +257,7 @@ export default function HistoryEditPanel({
       if (!prev.includes(monthStr)) {
         // Adding month
         if (hasExtras && showCustom) {
-          const defaults = buildDefaultCategoryAmountsFromExpected(monthStr);
+          const defaults = buildDefaultCategoryAmountsFromExpected();
           setCategoryAmounts((ca) => ({
             ...ca,
             [monthStr]: defaults,
@@ -395,7 +395,7 @@ export default function HistoryEditPanel({
         if (categoryAmounts[m]) {
           catAmounts[m] = categoryAmounts[m];
         } else {
-          catAmounts[m] = buildDefaultCategoryAmountsFromExpected(m);
+          catAmounts[m] = buildDefaultCategoryAmountsFromExpected();
         }
         const total = parseFloat(catAmounts[m].baseFee || '0') +
           Object.values(catAmounts[m].extras).reduce((s, v) => s + parseFloat(v || '0'), 0);
