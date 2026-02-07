@@ -536,7 +536,7 @@ export default function ReportsPage() {
                         <tr className="text-gray-400 text-[10px] bg-gray-50/30 uppercase tracking-widest">
                           <th className="py-2 px-4 font-normal text-left">Esperado</th>
                           {debtData.years.map((year) => {
-                            const yearTotal = debtData.yearTotals[year];
+                            const yearTotal = (debtData.yearTotals as any)[year];
                             return (
                               <th key={year} className="py-2 px-3 font-semibold text-center text-gray-600 border-l border-gray-100">
                                 {yearTotal?.expected.toFixed(0)}€
@@ -571,7 +571,7 @@ export default function ReportsPage() {
                               <div className="text-[10px] text-gray-400 font-normal uppercase truncate max-w-[120px]">{unit.name}</div>
                             </td>
                             {debtData.years.map((year) => {
-                              const yearInfo = unit.years[year];
+                              const yearInfo = (unit.years as any)[year];
                               if (!yearInfo || (yearInfo.paid === 0 && yearInfo.debt === 0)) {
                                 return (
                                   <td key={year} className="py-3 px-3 text-center text-gray-300 border-r last:border-r-0">-</td>

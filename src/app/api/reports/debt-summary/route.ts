@@ -122,9 +122,10 @@ export async function GET(request: NextRequest) {
         yearlyData[year] = { expected: expectedForYear, paid: paidForYear, debt };
       }
 
-      const totalDebt = Object.keys(yearlyData).reduce((sum, key) => sum + yearlyData[key].debt, 0);
-      const totalPaid = Object.keys(yearlyData).reduce((sum, key) => sum + yearlyData[key].paid, 0);
-      const totalExpected = Object.keys(yearlyData).reduce((sum, key) => sum + yearlyData[key].expected, 0);
+      const yearlyValues = Object.values(yearlyData);
+      const totalDebt = yearlyValues.reduce((sum, y) => sum + y.debt, 0);
+      const totalPaid = yearlyValues.reduce((sum, y) => sum + y.paid, 0);
+      const totalExpected = yearlyValues.reduce((sum, y) => sum + y.expected, 0);
 
       const currentOwner = unit.owners?.find((o) => o.endMonth === null);
       const ownerName = currentOwner?.name || unit.owners?.[0]?.name || unit.code;
