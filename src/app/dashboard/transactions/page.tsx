@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, Suspense } from 'react';
+import { useEffect, useState, Suspense, useRef } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Sidebar from '@/components/Sidebar';
 import TransactionList from '@/components/TransactionList';
@@ -20,417 +20,954 @@ interface DescriptionMapping {
 const PAGE_SIZE = 50;
 
 function TransactionsContent() {
+
   const searchParams = useSearchParams();
+
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+
   const [totalTransactions, setTotalTransactions] = useState(0);
+
   const [currentPage, setCurrentPage] = useState(1);
+
   const [units, setUnits] = useState<Unit[]>([]);
+
   const [creditors, setCreditors] = useState<Creditor[]>([]);
+
   const [mappings, setMappings] = useState<DescriptionMapping[]>([]);
+
   const [loading, setLoading] = useState(true);
+
   const [showModal, setShowModal] = useState(false);
+
   const [saving, setSaving] = useState(false);
+
+  const [importing, setImporting] = useState(false);
+
+  const [importResult, setImportResult] = useState<{ success: boolean; message: string } | null>(null);
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   const [filter, setFilter] = useState({
+
     type: '',
+
     startDate: '',
+
     endDate: '',
+
     entityFilter: searchParams.get('unitId') ? `unit:${searchParams.get('unitId')}` : '', 
+
   });
+
+
 
   // Mappings panel state
+
   const [showMappingsPanel, setShowMappingsPanel] = useState(false);
+
   const [editingMapping, setEditingMapping] = useState<DescriptionMapping | null>(null);
+
   const [mappingForm, setMappingForm] = useState({ pattern: '', type: 'unit' as 'unit' | 'creditor', targetId: '' });
 
+
+
   // Side panel state
+
   const [selectedTx, setSelectedTx] = useState<Transaction | null>(null);
 
+
+
   // Form state
+
   const [formData, setFormData] = useState({
+
     date: new Date().toISOString().split('T')[0],
+
     description: '',
+
     amount: '',
+
     type: 'payment',
+
     unitId: searchParams.get('unitId') || '',
+
     creditorId: '',
+
     prevDebtEnabled: false,
+
     prevDebtAmount: '',
+
   });
+
   const [calendarYear, setCalendarYear] = useState(new Date().getFullYear());
+
   const [selectedMonths, setSelectedMonths] = useState<string[]>([]);
+
   const [monthStatus, setMonthStatus] = useState<MonthPaymentStatus[]>([]);
+
   const [expectedAmount, setExpectedAmount] = useState(0);
+
   const [ownerRemainingPrevDebt, setOwnerRemainingPrevDebt] = useState(0);
 
+
+
   useEffect(() => {
+
     fetchUnits();
+
     fetchCreditors();
+
     fetchMappings();
+
   }, []);
 
+
+
   useEffect(() => {
+
     fetchTransactions();
+
   }, [currentPage, filter.entityFilter, filter.type, filter.startDate, filter.endDate]);
 
+
+
   // Fetch monthly status and debt info when unit changes
+
   useEffect(() => {
+
     const targetId = formData.type === 'payment' ? formData.unitId : formData.creditorId;
+
     if (targetId) {
+
       fetchMonthlyStatus(targetId, formData.type === 'payment' ? 'unitId' : 'creditorId');
+
       
+
       if (formData.type === 'payment') {
+
         fetch(`/api/units/${targetId}/debt`)
+
           .then(res => res.ok ? res.json() : null)
+
           .then(data => {
+
             if (data) setOwnerRemainingPrevDebt(data.previousDebtRemaining || 0);
+
           })
+
           .catch(() => setOwnerRemainingPrevDebt(0));
+
       }
+
     } else {
+
       setMonthStatus([]);
+
       setExpectedAmount(0);
+
       setOwnerRemainingPrevDebt(0);
+
     }
+
   }, [formData.unitId, formData.creditorId, formData.type, calendarYear]);
 
+
+
   // Auto-suggest months when amount changes
+
   useEffect(() => {
+
     if (!formData.amount || !expectedAmount || selectedMonths.length > 0 || formData.prevDebtEnabled) return;
 
+
+
     const amount = parseFloat(formData.amount);
+
     if (amount <= 0 || expectedAmount <= 0) return;
 
+
+
     const numMonths = Math.round(amount / expectedAmount);
+
     if (numMonths <= 0) return;
 
+
+
     const unpaidMonths = monthStatus
+
       .filter((s) => !s.isPaid)
+
       .sort((a, b) => a.month.localeCompare(b.month))
+
       .slice(0, numMonths)
+
       .map((s) => s.month);
 
+
+
     if (unpaidMonths.length > 0) {
+
       setSelectedMonths(unpaidMonths);
+
     }
+
   }, [formData.amount, monthStatus, expectedAmount, formData.prevDebtEnabled]);
 
+
+
   const fetchTransactions = async () => {
+
     setLoading(true);
+
     try {
+
       const params = new URLSearchParams();
+
       params.set('limit', PAGE_SIZE.toString());
+
       params.set('offset', ((currentPage - 1) * PAGE_SIZE).toString());
+
       if (filter.type) params.set('type', filter.type);
+
       if (filter.startDate) params.set('startDate', filter.startDate);
+
       if (filter.endDate) params.set('endDate', filter.endDate);
 
+
+
       if (filter.entityFilter === 'unassigned') {
+
         params.set('unassigned', 'true');
+
       } else if (filter.entityFilter.startsWith('unit:')) {
+
         params.set('unitId', filter.entityFilter.replace('unit:', ''));
+
       } else if (filter.entityFilter.startsWith('creditor:')) {
+
         params.set('creditorId', filter.entityFilter.replace('creditor:', ''));
+
       }
+
+
 
       const res = await fetch(`/api/transactions?${params}`);
+
       if (res.ok) {
+
         const data = await res.json();
+
         setTransactions(data.transactions || []);
+
         setTotalTransactions(data.total || 0);
+
       }
+
     } catch (error) {
+
       console.error('Error fetching transactions:', error);
+
     } finally {
+
       setLoading(false);
+
     }
+
   };
+
+
 
   const fetchUnits = async () => {
+
     try {
+
       const res = await fetch('/api/units');
+
       if (res.ok) setUnits(await res.json());
+
     } catch (error) {
+
       console.error('Error fetching units:', error);
+
     }
+
   };
+
+
 
   const fetchCreditors = async () => {
+
     try {
+
       const res = await fetch('/api/creditors');
+
       if (res.ok) setCreditors(await res.json());
+
     } catch (error) {
+
       console.error('Error fetching creditors:', error);
+
     }
+
   };
+
+
 
   const fetchMappings = async () => {
+
     try {
+
       const res = await fetch('/api/mappings');
+
       if (res.ok) setMappings(await res.json());
+
     } catch (error) {
+
       console.error('Error fetching mappings:', error);
+
     }
+
   };
+
+
 
   const fetchMonthlyStatus = async (id: string, paramName: string) => {
+
     try {
+
       const res = await fetch(`/api/monthly-status?${paramName}=${id}&year=${calendarYear}`);
+
       if (res.ok) {
+
         const data = await res.json();
+
         setMonthStatus(data.months);
+
         setExpectedAmount(data.expectedAmount);
+
       }
+
     } catch (error) {
+
       console.error('Error fetching monthly status:', error);
+
     }
+
   };
 
+
+
   const handleFilter = (e: React.FormEvent) => {
+
     e.preventDefault();
+
     setCurrentPage(1);
+
     fetchTransactions();
+
   };
+
+
 
   const totalPages = Math.ceil(totalTransactions / PAGE_SIZE);
 
+
+
   const handleEditMapping = (mapping: DescriptionMapping) => {
+
     setEditingMapping(mapping);
+
     setMappingForm({
+
       pattern: mapping.pattern,
+
       type: mapping.unitId ? 'unit' : 'creditor',
+
       targetId: mapping.unitId || mapping.creditorId || '',
+
     });
+
   };
+
+
 
   const handleDeleteMapping = async (id: string) => {
+
     if (!confirm('Tem certeza que deseja eliminar este mapeamento?')) return;
+
     try {
+
       const res = await fetch(`/api/mappings/${id}`, { method: 'DELETE' });
+
       if (res.ok) fetchMappings();
+
     } catch (error) { console.error(error); }
+
   };
+
+
 
   const handleSaveMapping = async () => {
+
     if (!mappingForm.pattern || !mappingForm.targetId) return;
+
     try {
+
       const body = {
+
         pattern: mappingForm.pattern,
+
         unitId: mappingForm.type === 'unit' ? mappingForm.targetId : null,
+
         creditorId: mappingForm.type === 'creditor' ? mappingForm.targetId : null,
+
       };
 
+
+
       if (editingMapping) {
+
         const res = await fetch(`/api/mappings/${editingMapping.id}`, {
+
           method: 'PATCH',
+
           headers: { 'Content-Type': 'application/json' },
+
           body: JSON.stringify(body),
+
         });
+
         if (res.ok) {
+
           setEditingMapping(null);
+
           setMappingForm({ pattern: '', type: 'unit', targetId: '' });
+
           fetchMappings();
+
         }
+
       } else {
+
         const res = await fetch('/api/mappings', {
+
           method: 'POST',
+
           headers: { 'Content-Type': 'application/json' },
+
           body: JSON.stringify(body),
+
         });
+
         if (res.ok) {
+
           setMappingForm({ pattern: '', type: 'unit', targetId: '' });
+
           fetchMappings();
+
           fetchTransactions();
+
         }
+
       }
+
     } catch (error) { console.error(error); }
+
   };
 
+
+
   async function openPanel(tx: Transaction) {
+
     try {
+
       const res = await fetch(`/api/transactions/${tx.id}`);
+
       if (res.ok) setSelectedTx(await res.json());
+
       else setSelectedTx(tx);
+
     } catch { setSelectedTx(tx); }
+
   }
+
+
 
   function closePanel() { setSelectedTx(null); }
 
+
+
   function resetForm() {
+
     setFormData({
+
       date: new Date().toISOString().split('T')[0],
+
       description: '',
+
       amount: '',
+
       type: 'payment',
+
       unitId: '',
+
       creditorId: '',
+
       prevDebtEnabled: false,
+
       prevDebtAmount: '',
+
     });
+
     setSelectedMonths([]);
+
     setMonthStatus([]);
+
     setExpectedAmount(0);
+
     setCalendarYear(new Date().getFullYear());
+
   }
+
+
 
   function handleToggleMonth(month: string) {
+
     setSelectedMonths((prev) =>
+
       prev.includes(month) ? prev.filter((m) => m !== month) : [...prev, month].sort()
+
     );
+
   }
+
+
 
   async function handleSubmit(e: React.FormEvent) {
+
     e.preventDefault();
+
     setSaving(true);
+
     try {
+
       const amount = parseFloat(formData.amount);
+
       const finalAmount = formData.type === 'expense' ? -Math.abs(amount) : Math.abs(amount);
+
       const allocs: { month: string; amount: number }[] = [];
+
       let remaining = Math.abs(amount);
 
+
+
       if (formData.prevDebtEnabled && parseFloat(formData.prevDebtAmount) > 0) {
+
         const pdAmt = parseFloat(formData.prevDebtAmount);
+
         allocs.push({ month: 'PREV-DEBT', amount: pdAmt });
+
         remaining -= pdAmt;
+
       }
+
+
 
       if (selectedMonths.length > 0) {
+
         const perMonth = remaining / selectedMonths.length;
+
         selectedMonths.forEach(m => allocs.push({ month: m, amount: perMonth }));
+
       }
+
+
 
       const res = await fetch('/api/transactions', {
+
         method: 'POST',
+
         headers: { 'Content-Type': 'application/json' },
+
         body: JSON.stringify({
+
           date: formData.date,
+
           description: formData.description,
+
           amount: finalAmount,
+
           type: formData.type,
+
           category: formData.type === 'payment' ? 'monthly_fee' : null,
+
           unitId: formData.type === 'payment' ? formData.unitId || null : null,
+
           creditorId: formData.type === 'expense' ? formData.creditorId || null : null,
+
           monthAllocations: allocs.length > 0 ? allocs : undefined,
+
           months: (selectedMonths.length > 0 && allocs.length === 0) ? selectedMonths : undefined,
+
         }),
+
       });
 
+
+
       if (res.ok) {
+
         setShowModal(false);
+
         resetForm();
+
         fetchTransactions();
+
       } else {
+
         const data = await res.json();
+
         alert(`Erro: ${data.error}`);
+
       }
+
     } catch { alert('Erro ao criar transação'); }
+
     finally { setSaving(false); }
+
   }
 
+
+
+  async function handleImportExtrato(e: React.ChangeEvent<HTMLInputElement>) {
+
+    const file = e.target.files?.[0];
+
+    if (!file) return;
+
+
+
+    setImporting(true);
+
+    setImportResult(null);
+
+
+
+    try {
+
+      const formData = new FormData();
+
+      formData.append('file', file);
+
+
+
+      const res = await fetch('/api/import/bank-extract', {
+
+        method: 'POST',
+
+        body: formData,
+
+      });
+
+
+
+      const data = await res.json();
+
+      if (res.ok) {
+
+        setImportResult({ success: true, message: data.message });
+
+        fetchTransactions();
+
+      } else {
+
+        setImportResult({ success: false, message: data.error || 'Erro na importação' });
+
+      }
+
+    } catch {
+
+      setImportResult({ success: false, message: 'Erro de ligação ao servidor' });
+
+    } finally {
+
+      setImporting(false);
+
+      if (fileInputRef.current) fileInputRef.current.value = '';
+
+    }
+
+  }
+
+
+
   return (
+
     <div className="flex min-h-screen">
+
       <Sidebar />
 
+
+
       {/* Mappings Panel */}
+
       {showMappingsPanel && (
+
         <div className="w-80 bg-white border-r border-gray-100 p-4 overflow-y-auto">
+
           <div className="flex justify-between items-center mb-4">
+
             <h2 className="text-lg font-semibold text-gray-900">Mapeamentos</h2>
+
             <button
+
               className="p-1 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-all"
+
               onClick={() => setShowMappingsPanel(false)}
+
             >
+
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+
               </svg>
+
             </button>
+
           </div>
+
+
 
           <div className="mb-4 p-3 bg-gray-50 rounded-lg">
+
             <h3 className="text-sm font-medium text-gray-700 mb-2">
+
               {editingMapping ? 'Editar Mapeamento' : 'Novo Mapeamento'}
+
             </h3>
+
             <div className="space-y-2">
+
               <input
+
                 type="text"
+
                 className="input text-sm"
+
                 placeholder="Padrao (ex: DD-OTIS)"
+
                 value={mappingForm.pattern}
+
                 onChange={(e) => setMappingForm({ ...mappingForm, pattern: e.target.value })}
+
               />
+
               <select
+
                 className="input text-sm"
+
                 value={mappingForm.type}
+
                 onChange={(e) => setMappingForm({ ...mappingForm, type: e.target.value as 'unit' | 'creditor', targetId: '' })}
+
               >
+
                 <option value="unit">Fração</option>
+
                 <option value="creditor">Credor</option>
+
               </select>
+
               <select
+
                 className="input text-sm"
+
                 value={mappingForm.targetId}
+
                 onChange={(e) => setMappingForm({ ...mappingForm, targetId: e.target.value })}
+
               >
+
                 <option value="">-- Selecionar --</option>
+
                 {mappingForm.type === 'unit'
+
                   ? units.map((u) => (
+
                       <option key={u.id} value={u.id}>{u.code}</option>
+
                     ))
+
                   : creditors.map((c) => (
+
                       <option key={c.id} value={c.id}>{c.name}</option>
+
                     ))}
+
               </select>
+
               <div className="flex gap-2">
+
                 <button
+
                   className="btn-primary text-sm flex-1"
+
                   onClick={handleSaveMapping}
+
                   disabled={!mappingForm.pattern || !mappingForm.targetId}
+
                 >
+
                   {editingMapping ? 'Guardar' : 'Adicionar'}
+
                 </button>
+
                 {editingMapping && (
+
                   <button
+
                     className="btn-secondary text-sm"
+
                     onClick={() => {
+
                       setEditingMapping(null);
+
                       setMappingForm({ pattern: '', type: 'unit', targetId: '' });
+
                     }}
+
                   >
+
                     Cancelar
+
                   </button>
+
                 )}
+
               </div>
+
             </div>
+
           </div>
+
+
 
           <div className="space-y-2">
+
             {mappings.map((m) => (
+
               <div key={m.id} className="p-2 bg-white border border-gray-200 rounded-lg text-sm">
+
                 <div className="font-medium text-gray-900 truncate" title={m.pattern}>{m.pattern}</div>
+
                 <div className="text-gray-500 text-xs">→ {m.unit?.code || m.creditor?.name || 'N/A'}</div>
+
                 <div className="flex gap-2 mt-1">
+
                   <button className="text-xs text-primary-600 hover:underline" onClick={() => handleEditMapping(m)}>Editar</button>
+
                   <button className="text-xs text-red-600 hover:underline" onClick={() => handleDeleteMapping(m.id)}>Eliminar</button>
+
                 </div>
+
               </div>
+
             ))}
+
             {mappings.length === 0 && <p className="text-sm text-gray-500 text-center py-4">Sem mapeamentos</p>}
+
           </div>
+
         </div>
+
       )}
 
+
+
       <main className="flex-1 p-8">
+
         <div className="flex justify-between items-center mb-6">
+
           <div className="flex items-center gap-3">
+
             <h1 className="text-2xl font-semibold text-gray-900">Transações</h1>
+
             <button
+
               className={`text-sm px-3 py-1.5 rounded-lg transition-all ${showMappingsPanel ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+
               onClick={() => setShowMappingsPanel(!showMappingsPanel)}
+
             >
+
               Mapeamentos
+
             </button>
+
           </div>
-          <button className="btn-primary" onClick={() => setShowModal(true)}>+ Nova Transação</button>
+
+          <div className="flex gap-2">
+
+            <input
+
+              type="file"
+
+              ref={fileInputRef}
+
+              onChange={handleImportExtrato}
+
+              accept=".txt"
+
+              className="hidden"
+
+            />
+
+            <button 
+
+              className="btn-secondary flex items-center gap-2" 
+
+              onClick={() => fileInputRef.current?.click()}
+
+              disabled={importing}
+
+            >
+
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+
+              </svg>
+
+              {importing ? 'A importar...' : 'Importar Extrato'}
+
+            </button>
+
+            <button className="btn-primary" onClick={() => setShowModal(true)}>+ Nova Transação</button>
+
+          </div>
+
         </div>
+
+
+
+        {importResult && (
+
+          <div className={`mb-6 p-4 rounded-xl flex items-center justify-between ${importResult.success ? 'bg-green-50 text-green-800 border border-green-100' : 'bg-red-50 text-red-800 border border-red-100'}`}>
+
+            <span className="text-sm font-medium">{importResult.message}</span>
+
+            <button onClick={() => setImportResult(null)} className="text-current opacity-50 hover:opacity-100">
+
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12" /></svg>
+
+            </button>
+
+          </div>
+
+        )}
+
+
 
         <form onSubmit={handleFilter} className="card mb-6">
           <div className="grid grid-cols-1 md:grid-cols-5 gap-4">

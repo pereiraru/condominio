@@ -4,8 +4,8 @@ const prisma = new PrismaClient();
 
 async function fixGaragem() {
   console.log('Fixing Garagem allocations...');
-  const unit = await prisma.unit.findUnique({ where: { code: 'G1' } });
-  if (!unit) return console.log('G1 not found');
+  const unit = await prisma.unit.findFirst({ where: { code: { contains: 'Garagem' } } });
+  if (!unit) return console.log('Garagem not found');
 
   // Find the transactions for G1
   const txs = await prisma.transaction.findMany({

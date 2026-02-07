@@ -55,9 +55,8 @@ export default function Section1Balancete({ data, year }: Section1Props) {
                 </tr>
               ))}
               
-              <tr className="font-bold mt-4 block">
-                <td className="py-1">2. DE EXERCÍCIOS ANTERIORES</td>
-                <td className="text-right"></td>
+              <tr>
+                <td className="font-bold py-1 pt-4" colSpan={2}>2. DE EXERCÍCIOS ANTERIORES</td>
               </tr>
               <tr>
                 <td className="pl-4 py-1">2.1 Recebimentos de Dívidas</td>
