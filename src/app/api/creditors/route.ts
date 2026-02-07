@@ -16,16 +16,25 @@ export async function GET() {
       include: {
         attachments: true,
         transactions: {
-          select: { amount: true, date: true },
+          select: { amount: true, date: true, monthAllocations: { select: { amount: true, month: true } } },
         },
       },
     });
+
+    const now = new Date();
+    const currentMonthStr = `${now.getFullYear()}-${(now.getMonth() + 1).toString().padStart(2, '0')}`;
 
     const result = creditors.map((creditor) => {
       const totalPaid = creditor.transactions.reduce(
         (sum, t) => sum + Math.abs(t.amount),
         0
       );
+      
+      const allAllocations = creditor.transactions.flatMap(t => t.monthAllocations);
+      const paidThisMonth = allAllocations
+        .filter(a => a.month === currentMonthStr)
+        .reduce((sum, a) => sum + a.amount, 0);
+
       const months = new Set(
         creditor.transactions.map((t) => {
           const d = new Date(t.date);
@@ -40,12 +49,14 @@ export async function GET() {
         description: creditor.description,
         category: creditor.category,
         amountDue: creditor.amountDue,
+        isFixed: creditor.isFixed,
         email: creditor.email,
         telefone: creditor.telefone,
         nib: creditor.nib,
         attachments: creditor.attachments,
         totalPaid,
         avgMonthly,
+        paidThisMonth: Math.abs(paidThisMonth),
       };
     });
 
@@ -75,6 +86,7 @@ export async function POST(request: NextRequest) {
         description: body.description || null,
         category: body.category,
         amountDue: body.amountDue ? parseFloat(body.amountDue) : null,
+        isFixed: body.isFixed ?? false,
         email: body.email || null,
         telefone: body.telefone || null,
         nib: body.nib || null,

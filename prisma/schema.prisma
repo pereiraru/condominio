@@ -68,6 +68,7 @@ model Creditor {
   description String?
   category    String               // "electricity", "water", "gas", "maintenance", "insurance", "cleaning", "other"
   amountDue   Float?               // expected regular amount
+  isFixed     Boolean              @default(false)
   email       String?
   telefone    String?
   nib         String?

@@ -91,6 +91,7 @@ export async function PUT(
         description: body.description || null,
         category: body.category,
         amountDue: newAmountDue,
+        isFixed: body.isFixed ?? false,
         email: body.email || null,
         telefone: body.telefone || null,
         nib: body.nib || null,

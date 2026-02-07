@@ -394,9 +394,6 @@ export async function GET(request: NextRequest) {
       a.categoryLabel.localeCompare(b.categoryLabel)
     );
 
-    const totalPaidInvoicesAmount = paidInvoices.reduce((sum, c) => sum + c.categoryTotalPaid, 0);
-    const totalUnpaidInvoicesAmount = unpaidInvoices.reduce((sum, c) => sum + c.categoryTotal - c.categoryTotalPaid, 0);
-
     // =========================================
     // SECTION 6: Valores por Liquidar por Fração (Detailed)
     // =========================================
@@ -487,7 +484,54 @@ export async function GET(request: NextRequest) {
       })
       .filter((u) => u.unitTotal > 0.01);
 
-    const detailedDebtGrandTotal = detailedDebtUnits.reduce((sum, u) => sum + u.unitTotal, 0);
+    // =========================================
+    // SECTION 6.1: Dívidas a Fornecedores (Fixed Expenses unpaid)
+    // =========================================
+    const creditorDebts = creditors
+      .filter(c => c.isFixed)
+      .map(creditor => {
+        const items: { description: string; amount: number }[] = [];
+        
+        for (let m = 1; m <= 12; m++) {
+          const monthStr = `${year}-${m.toString().padStart(2, '0')}`;
+          const expected = getTotalFeeForMonth(
+            creditor.feeHistory as FeeHistoryRecord[],
+            [],
+            monthStr,
+            creditor.amountDue || 0,
+            creditor.id
+          ).total;
+
+          const paidResult = yearAllocations
+            .filter(a => a.transaction.creditorId === creditor.id && a.month === monthStr)
+            .reduce((sum, a) => sum + Math.abs(a.amount), 0);
+
+          if (expected - paidResult > 0.01) {
+            const monthNames = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+              'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+            items.push({
+              description: `${creditor.name} - ${monthNames[m - 1]} ${year}`,
+              amount: expected - paidResult
+            });
+          }
+        }
+
+        return {
+          code: 'FORN',
+          description: creditor.category,
+          ownerName: creditor.name,
+          items,
+          unitTotal: items.reduce((sum, i) => sum + i.amount, 0)
+        };
+      })
+      .filter(c => c.unitTotal > 0.01);
+
+    const totalPaidInvoicesAmount = paidInvoices.reduce((sum, c) => sum + c.categoryTotalPaid, 0);
+    const totalUnpaidInvoicesAmount = unpaidInvoices.reduce((sum, c) => sum + c.categoryTotal - c.categoryTotalPaid, 0);
+    const totalUnpaidFixedExpenses = creditorDebts.reduce((sum, c) => sum + c.unitTotal, 0);
+
+    const detailedDebtGrandTotal = detailedDebtUnits.reduce((sum, u) => sum + u.unitTotal, 0) + creditorDebts.reduce((sum, c) => sum + c.unitTotal, 0);
+    const combinedDetailedDebt = [...detailedDebtUnits, ...creditorDebts];
 
     // =========================================
     // SECTION 7: Orçamento de Despesas + Quotas
@@ -567,7 +611,7 @@ export async function GET(request: NextRequest) {
         contasBancarias,
         totalBankBalance,
         saldoFinalDisponivel,
-        despesasPorLiquidar: totalUnpaidInvoicesAmount,
+        despesasPorLiquidar: totalUnpaidInvoicesAmount + totalUnpaidFixedExpenses,
         quotasPorLiquidar: {
           total: debtTotals.saldo,
         },
@@ -622,7 +666,7 @@ export async function GET(request: NextRequest) {
 
       // Section 6
       detailedDebtByUnit: {
-        units: detailedDebtUnits,
+        units: combinedDetailedDebt,
         grandTotal: detailedDebtGrandTotal,
       },
 

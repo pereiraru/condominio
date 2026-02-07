@@ -4,7 +4,8 @@ import { useState } from 'react';
 import { FeeHistory } from '@/lib/types';
 
 interface FeeHistoryManagerProps {
-  unitId: string;
+  unitId?: string;
+  creditorId?: string;
   feeHistory: FeeHistory[];
   defaultFee: number;
   readOnly?: boolean;
@@ -13,6 +14,7 @@ interface FeeHistoryManagerProps {
 
 export default function FeeHistoryManager({
   unitId,
+  creditorId,
   feeHistory,
   defaultFee,
   readOnly = false,
@@ -52,9 +54,12 @@ export default function FeeHistoryManager({
     setSaving(true);
 
     try {
-      const url = editingId
-        ? `/api/fee-history/${editingId}`
-        : `/api/units/${unitId}/fee-history`;
+      let url = editingId ? `/api/fee-history/${editingId}` : '';
+      if (!editingId) {
+        if (unitId) url = `/api/units/${unitId}/fee-history`;
+        else if (creditorId) url = `/api/creditors/${creditorId}/fee-history`;
+      }
+      
       const method = editingId ? 'PUT' : 'POST';
 
       const res = await fetch(url, {
