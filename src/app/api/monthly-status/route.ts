@@ -109,7 +109,10 @@ export async function GET(request: NextRequest) {
         : true;
 
       const monthAllocs = allocations.filter((a) => a.month === monthStr);
-      const paid = inPeriod ? monthAllocs.reduce((sum, a) => sum + a.amount, 0) : 0;
+      const paidRaw = inPeriod ? monthAllocs.reduce((sum, a) => sum + a.amount, 0) : 0;
+      // For creditors, amount is stored as negative in transaction but usually positive in monthAllocations for payments.
+      // However, if we're looking at expense allocations, they might be negative. Let's ensure we use absolute value for 'paid' status.
+      const paid = creditorId ? Math.abs(paidRaw) : paidRaw;
 
       // Calculate expected with extra charges
       const feeData = getTotalFeeForMonth(

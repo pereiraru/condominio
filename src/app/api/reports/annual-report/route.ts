@@ -150,6 +150,54 @@ export async function GET(request: NextRequest) {
       return { pastYearsDebt: accumulatedDebt, previousDebtRemaining };
     };
 
+    // --- Helper: calculate past years debt for a fixed creditor ---
+    const calculatePastYearsCreditorDebt = (
+      creditorId: string,
+      feeHistory: FeeHistoryRecord[],
+      defaultFee: number
+    ): number => {
+      const entityAllocs = pastAllocations.filter(
+        (a) => a.transaction.creditorId === creditorId
+      );
+
+      const pastYears = new Set<number>();
+      entityAllocs.forEach((a) => {
+        const y = parseInt(a.month.split('-')[0]);
+        if (y < year) pastYears.add(y);
+      });
+
+      feeHistory.forEach((fh) => {
+        const startY = parseInt(fh.effectiveFrom.split('-')[0]);
+        const endY = fh.effectiveTo ? parseInt(fh.effectiveTo.split('-')[0]) : year - 1;
+        for (let y = Math.max(2024, startY); y <= Math.min(endY, year - 1); y++) {
+          pastYears.add(y);
+        }
+      });
+
+      if (pastYears.size === 0) return 0;
+
+      let accumulatedDebt = 0;
+      const sortedYears = Array.from(pastYears).sort((a, b) => a - b);
+
+      for (const y of sortedYears) {
+        let expectedForYear = 0;
+        let paidForYear = 0;
+
+        for (let m = 1; m <= 12; m++) {
+          const monthStr = `${y}-${m.toString().padStart(2, '0')}`;
+          const feeData = getTotalFeeForMonth(feeHistory, [], monthStr, defaultFee, creditorId);
+          expectedForYear += feeData.total;
+          paidForYear += entityAllocs
+            .filter((a) => a.month === monthStr)
+            .reduce((sum, a) => sum + Math.abs(a.amount), 0);
+        }
+
+        accumulatedDebt = Math.max(0, accumulatedDebt + expectedForYear - paidForYear);
+      }
+
+      return accumulatedDebt;
+    };
+
     // Revenue: income allocations for the year
     const incomeAllocations = yearAllocations.filter((a) => a.transaction.amount > 0);
 
@@ -492,6 +540,21 @@ export async function GET(request: NextRequest) {
       .map(creditor => {
         const items: { description: string; amount: number }[] = [];
         
+        // 1. Past Years Debt
+        const pastDebt = calculatePastYearsCreditorDebt(
+          creditor.id,
+          creditor.feeHistory as FeeHistoryRecord[],
+          creditor.amountDue || 0
+        );
+
+        if (pastDebt > 0.01) {
+          items.push({
+            description: `Dívida de Anos Anteriores (2024-${year - 1})`,
+            amount: pastDebt
+          });
+        }
+
+        // 2. Current Year unpaid
         for (let m = 1; m <= 12; m++) {
           const monthStr = `${year}-${m.toString().padStart(2, '0')}`;
           const expected = getTotalFeeForMonth(
@@ -510,7 +573,7 @@ export async function GET(request: NextRequest) {
             const monthNames = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
               'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
             items.push({
-              description: `${creditor.name} - ${monthNames[m - 1]} ${year}`,
+              description: `${monthNames[m - 1]} ${year}`,
               amount: expected - paidResult
             });
           }
