@@ -548,7 +548,7 @@ function TransactionsContent() {
                 {((formData.type === 'payment' && formData.unitId) || (formData.type === 'expense' && formData.creditorId)) && (
                   <div className="mb-4 p-4 bg-gray-50 rounded-lg">
                     <label className="label mb-2">Meses de referencia</label>
-                    <MonthCalendar year={calendarYear} onYearChange={setCalendarYear} monthStatus={monthStatus} selectedMonths={selectedMonths} onToggleMonth={handleToggleMonth} />
+                    <MonthCalendar year={calendarYear} onYearChange={setCalendarYear} monthStatus={monthStatus} selectedMonths={selectedMonths} onToggleMonth={handleToggleMonth} minYear={2024} />
                     {formData.type === 'payment' && ownerRemainingPrevDebt > 0 && (
                       <div className="mt-3">
                         <button type="button" className={`w-full text-sm px-3 py-2 rounded-lg font-medium transition-all ${formData.prevDebtEnabled ? 'bg-orange-100 text-orange-700 border border-orange-300' : 'bg-white text-gray-600 hover:bg-gray-50 border border-gray-200'}`} onClick={() => { const next = !formData.prevDebtEnabled; setFormData({ ...formData, prevDebtEnabled: next, prevDebtAmount: next ? (Math.min(parseFloat(formData.amount) || 0, ownerRemainingPrevDebt)).toFixed(2) : '' }); }}>Dívida Anterior ({ownerRemainingPrevDebt.toFixed(2)}€ restante)</button>

@@ -14,6 +14,8 @@ interface MonthCalendarProps {
   selectedMonths?: string[];
   onToggleMonth?: (month: string) => void;
   readOnly?: boolean;
+  minYear?: number;
+  maxYear?: number;
 }
 
 export default function MonthCalendar({
@@ -23,6 +25,8 @@ export default function MonthCalendar({
   selectedMonths = [],
   onToggleMonth,
   readOnly = false,
+  minYear,
+  maxYear,
 }: MonthCalendarProps) {
   const now = new Date();
   const currentMonth = `${now.getFullYear()}-${(now.getMonth() + 1).toString().padStart(2, '0')}`;
@@ -32,16 +36,18 @@ export default function MonthCalendar({
       <div className="flex items-center justify-between mb-3">
         <button
           type="button"
-          className="text-gray-500 hover:text-gray-700 px-2 py-1"
+          className="text-gray-500 hover:text-gray-700 px-2 py-1 disabled:opacity-30"
           onClick={() => onYearChange(year - 1)}
+          disabled={minYear !== undefined && year <= minYear}
         >
           &larr;
         </button>
         <span className="font-bold text-gray-700">{year}</span>
         <button
           type="button"
-          className="text-gray-500 hover:text-gray-700 px-2 py-1"
+          className="text-gray-500 hover:text-gray-700 px-2 py-1 disabled:opacity-30"
           onClick={() => onYearChange(year + 1)}
+          disabled={maxYear !== undefined && year >= maxYear}
         >
           &rarr;
         </button>
