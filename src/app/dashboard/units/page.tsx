@@ -246,73 +246,77 @@ export default function UnitsPage() {
                     return (
                       <div 
                         key={unit.id} 
-                        className={`group bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-xl hover:border-primary-100 transition-all duration-300 cursor-pointer overflow-hidden flex flex-col ${isGaragem ? 'opacity-90 scale-[0.98]' : ''}`}
+                        className={`group bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-xl hover:border-primary-100 transition-all duration-300 cursor-pointer overflow-hidden flex flex-col ${isGaragem ? 'scale-[0.95] ring-1 ring-gray-100' : ''}`}
                         onClick={() => router.push(`/dashboard/units/${unit.id}`)}
                       >
-                        <div className="p-5 flex-1">
-                          <div className="flex justify-between items-start mb-4">
+                        <div className={`${isGaragem ? 'p-3' : 'p-5'} flex-1`}>
+                          <div className={`flex justify-between items-start ${isGaragem ? 'mb-2' : 'mb-4'}`}>
                             <div className="flex items-center gap-3">
-                              <div className={`w-12 h-12 rounded-xl flex items-center justify-center font-bold text-lg ${hasPastDebt ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-600'}`}>
+                              <div className={`${isGaragem ? 'w-10 h-10 text-base' : 'w-12 h-12 text-lg'} rounded-xl flex items-center justify-center font-bold ${hasPastDebt ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-600'}`}>
                                 {unit.code}
                               </div>
                               <div>
-                                <h3 className="text-lg font-bold text-gray-900 group-hover:text-primary-600 transition-colors">
+                                <h3 className={`${isGaragem ? 'text-sm' : 'text-lg'} font-bold text-gray-900 group-hover:text-primary-600 transition-colors`}>
                                   {isGaragem ? `Garagem ${unit.code.replace('G', '')}` : formatUnitCode(unit.code)}
                                 </h3>
-                                <p className="text-xs text-gray-400 font-medium uppercase tracking-wider">
-                                  {isGaragem ? 'Lugar de Garagem' : (unit.floor != null ? `${unit.floor}º Andar` : 'Fração Autónoma')}
+                                <p className="text-[10px] text-gray-400 font-medium uppercase tracking-wider">
+                                  {isGaragem ? 'Lugar' : (unit.floor != null ? `${unit.floor}º Andar` : 'Fração')}
                                 </p>
                               </div>
                             </div>
-                            <div className="text-right">
-                              <p className="text-sm font-bold text-gray-900">{unit.monthlyFee.toFixed(2)}€</p>
-                              <p className="text-[10px] text-gray-400 uppercase font-bold">/ mês</p>
-                            </div>
+                            {!isGaragem && (
+                              <div className="text-right">
+                                <p className="text-sm font-bold text-gray-900">{unit.monthlyFee.toFixed(2)}€</p>
+                                <p className="text-[10px] text-gray-400 uppercase font-bold">/ mês</p>
+                              </div>
+                            )}
                           </div>
 
-                          <div className="space-y-3">
-                            <div className="p-3 bg-gray-50/50 rounded-xl border border-gray-100/50">
-                              <p className="text-[10px] text-gray-400 font-bold uppercase mb-1">Proprietário Atual</p>
-                              <p className="text-sm font-semibold text-gray-700 truncate">
+                          <div className={isGaragem ? 'space-y-1' : 'space-y-3'}>
+                            <div className={`${isGaragem ? 'p-2' : 'p-3'} bg-gray-50/50 rounded-xl border border-gray-100/50`}>
+                              <p className="text-[9px] text-gray-400 font-bold uppercase mb-0.5">Proprietário</p>
+                              <p className={`${isGaragem ? 'text-xs' : 'text-sm'} font-semibold text-gray-700 truncate`}>
                                 {currentOwner?.name || 'N/A'}
                               </p>
                             </div>
 
-                            <div className="flex flex-wrap gap-2">
-                              {unit.email && (
-                                <span className="inline-flex items-center px-2 py-1 rounded-md bg-blue-50 text-blue-600 text-[10px] font-bold uppercase">
-                                  <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                                  </svg>
-                                  Email
-                                </span>
-                              )}
-                              {unit.telefone && (
-                                <span className="inline-flex items-center px-2 py-1 rounded-md bg-purple-50 text-purple-600 text-[10px] font-bold uppercase">
-                                  <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 011.94.86l-.85 4.48a1 1 0 01-1.03.79H6.22a9.62 9.62 0 004.42 4.42v-2.04a1 1 0 01.79-1.03l4.48-.85a1 1 0 011.23.96V19a2 2 0 01-2 2h-1.27a9.91 9.91 0 01-9.91-9.91V5z" />
-                                  </svg>
-                                  Tel
-                                </span>
-                              )}
-                            </div>
+                            {!isGaragem && (
+                              <div className="flex flex-wrap gap-2">
+                                {unit.email && (
+                                  <span className="inline-flex items-center px-2 py-1 rounded-md bg-blue-50 text-blue-600 text-[10px] font-bold uppercase">
+                                    <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                                    </svg>
+                                    Email
+                                  </span>
+                                )}
+                                {unit.telefone && (
+                                  <span className="inline-flex items-center px-2 py-1 rounded-md bg-purple-50 text-purple-600 text-[10px] font-bold uppercase">
+                                    <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 011.94.86l-.85 4.48a1 1 0 01-1.03.79H6.22a9.62 9.62 0 004.42 4.42v-2.04a1 1 0 01.79-1.03l4.48-.85a1 1 0 011.23.96V19a2 2 0 01-2 2h-1.27a9.91 9.91 0 01-9.91-9.91V5z" />
+                                    </svg>
+                                    Tel
+                                  </span>
+                                )}
+                              </div>
+                            )}
                           </div>
                         </div>
 
-                        <div className={`mt-auto px-5 py-3 border-t flex justify-between items-center ${hasPastDebt ? 'bg-red-50/30 border-red-100' : 'bg-green-50/30 border-green-100'}`}>
+                        <div className={`mt-auto ${isGaragem ? 'px-3 py-2' : 'px-5 py-3'} border-t flex justify-between items-center ${hasPastDebt ? 'bg-red-50/30 border-red-100' : 'bg-green-50/30 border-green-100'}`}>
                           <div className="flex flex-col">
-                            <span className="text-[10px] text-gray-400 font-bold uppercase">Estado Financeiro</span>
-                            <span className={`text-xs font-bold ${hasPastDebt ? 'text-red-600' : 'text-green-600'}`}>
-                              {totalOwed > 0.01 ? `${totalOwed.toFixed(2)}€ em falta` : 'Regularizado'}
+                            <span className="text-[9px] text-gray-400 font-bold uppercase">Financeiro</span>
+                            <span className={`text-[10px] font-bold ${hasPastDebt ? 'text-red-600' : 'text-green-600'}`}>
+                              {totalOwed > 0.01 ? `${totalOwed.toFixed(2)}€` : 'Ok'}
                             </span>
                           </div>
-                          <div className={`w-8 h-8 rounded-full flex items-center justify-center ${hasPastDebt ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'}`}>
+                          <div className={`${isGaragem ? 'w-6 h-6' : 'w-8 h-8'} rounded-full flex items-center justify-center ${hasPastDebt ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'}`}>
                             {hasPastDebt ? (
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <svg className={`${isGaragem ? 'w-3 h-3' : 'w-4 h-4'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                               </svg>
                             ) : (
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <svg className={`${isGaragem ? 'w-3 h-3' : 'w-4 h-4'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                               </svg>
                             )}
