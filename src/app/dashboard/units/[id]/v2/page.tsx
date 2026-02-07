@@ -849,7 +849,12 @@ export default function UnitDetailV2Page() {
                       </div>
                       <div className="divide-y divide-orange-100 max-h-[200px] overflow-y-auto">
                         {unit.pre2024.payments.map(p => (
-                          <div key={p.id} className="px-6 py-2 flex justify-between items-center hover:bg-orange-50/50 cursor-pointer" onClick={() => openTxPanel({id: p.id} as any)}>
+                          <div 
+                            key={p.id} 
+                            className="px-6 py-2 flex justify-between items-center hover:bg-orange-50/50 cursor-pointer" 
+                            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                            onClick={() => openTxPanel({id: p.id} as any)}
+                          >
                             <div>
                               <p className="text-xs font-bold text-gray-700">{p.description}</p>
                               <p className="text-[9px] text-gray-400 font-bold uppercase">{new Date(p.date).toLocaleDateString('pt-PT')}</p>
