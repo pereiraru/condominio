@@ -8,8 +8,14 @@ import { Owner } from '@prisma/client';
 export async function GET(request: NextRequest) {
   const session = await getServerSession(authOptions);
 
-  if (!session || session.user.role !== 'admin') {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
+  if (!session) {
+    console.log('[AnnualReport] No session found');
+    return NextResponse.json({ error: 'Unauthorized - No Session' }, { status: 403 });
+  }
+
+  if (session.user.role !== 'admin') {
+    console.log('[AnnualReport] User is not admin:', session.user.email, 'Role:', session.user.role);
+    return NextResponse.json({ error: 'Unauthorized - Not Admin' }, { status: 403 });
   }
 
   try {
