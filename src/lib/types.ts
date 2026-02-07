@@ -205,3 +205,11 @@ export interface UnitPaymentStatus {
   isPaid: boolean;
   lastPaymentDate?: string;
 }
+
+export interface DescriptionMapping {
+  id: string;
+  pattern: string;
+  unitId?: string | null;
+  creditorId?: string | null;
+  createdAt: string;
+}

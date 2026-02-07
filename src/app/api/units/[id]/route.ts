@@ -18,6 +18,7 @@ export async function GET(
       where: { id: params.id },
       include: {
         owners: true,
+        descriptionMappings: true,
         transactions: {
           orderBy: { date: 'desc' },
           take: 50,
@@ -31,20 +32,40 @@ export async function GET(
     }
 
     const now = new Date();
+    const currentYear = now.getFullYear();
     const currentMonth = `${now.getFullYear()}-${(now.getMonth() + 1).toString().padStart(2, '0')}`;
 
     // Calculate paid for current month using monthAllocations
-    const totalPaid = unit.transactions
+    const totalPaidCurrentMonth = unit.transactions
       .filter((t) => t.type === 'payment')
       .flatMap((t) => t.monthAllocations)
       .filter((a) => a.month === currentMonth)
       .reduce((sum, a) => sum + a.amount, 0);
-    const totalOwed = Math.max(0, unit.monthlyFee - totalPaid);
+    const totalOwedCurrentMonth = Math.max(0, unit.monthlyFee - totalPaidCurrentMonth);
+
+    // Calculate Pre-2024 Debt details
+    const pre2024InitialDebt = unit.owners.reduce((sum, o) => sum + (o.previousDebt || 0), 0);
+    
+    // Fetch all PREV-DEBT allocations for this unit
+    const prevDebtAllocations = await prisma.transactionMonth.findMany({
+      where: {
+        month: 'PREV-DEBT',
+        transaction: { unitId: params.id }
+      },
+      select: { amount: true }
+    });
+    const pre2024Paid = prevDebtAllocations.reduce((sum, a) => sum + a.amount, 0);
+    const pre2024Remaining = Math.max(0, pre2024InitialDebt - pre2024Paid);
 
     return NextResponse.json({
       ...unit,
-      totalPaid,
-      totalOwed,
+      totalPaid: totalPaidCurrentMonth,
+      totalOwed: totalOwedCurrentMonth,
+      pre2024: {
+        initial: pre2024InitialDebt,
+        paid: pre2024Paid,
+        remaining: pre2024Remaining
+      }
     });
   } catch (error) {
     console.error('Error fetching unit:', error);

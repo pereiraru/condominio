@@ -9,9 +9,19 @@ import TransactionEditPanel from '@/components/TransactionEditPanel';
 import HistoryEditPanel from '@/components/HistoryEditPanel';
 import FeeHistoryManager from '@/components/FeeHistoryManager';
 import ExtraChargesManager from '@/components/ExtraChargesManager';
-import { Unit, Transaction, Creditor, MonthPaymentStatus, FeeHistory, ExtraCharge, Owner, MonthExpectedBreakdown } from '@/lib/types';
+import { Unit, Transaction, Creditor, MonthPaymentStatus, FeeHistory, ExtraCharge, Owner, MonthExpectedBreakdown, DescriptionMapping } from '@/lib/types';
 
 type TabType = 'geral' | 'historico' | 'config';
+
+interface EnhancedUnit extends Unit {
+  transactions?: Transaction[];
+  descriptionMappings?: DescriptionMapping[];
+  pre2024?: {
+    initial: number;
+    paid: number;
+    remaining: number;
+  };
+}
 
 export default function UnitDetailV2Page() {
   const params = useParams();
@@ -20,7 +30,7 @@ export default function UnitDetailV2Page() {
   const isAdmin = session?.user?.role === 'admin';
   const id = params.id as string;
 
-  const [unit, setUnit] = useState<Unit & { transactions?: Transaction[] } | null>(null);
+  const [unit, setUnit] = useState<EnhancedUnit | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [activeTab, setActiveTab] = useState<TabType>('geral');
@@ -177,6 +187,7 @@ export default function UnitDetailV2Page() {
         fetchMonthlyStatus(selectedOwnerId || undefined),
         fetchPastYearsDebt(selectedOwnerId || undefined),
         fetchPaymentHistory(selectedOwnerId || undefined),
+        fetchUnit()
       ]);
     } finally { setRecalculating(false); }
   }
@@ -215,13 +226,11 @@ export default function UnitDetailV2Page() {
     setOwners(updated);
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   function handleFeeHistoryUpdate() {
     fetchFeeHistory();
     fetchMonthlyStatus();
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   function handleExtraChargesUpdate() {
     fetchExtraCharges();
     fetchMonthlyStatus();
@@ -282,6 +291,7 @@ export default function UnitDetailV2Page() {
   if (!unit) return null;
 
   const currentOwner = owners.find(o => !o.endMonth) || owners[0];
+  const totalDebt = (pastYearsDebt + previousDebtRemaining + (unit.totalOwed ?? 0) + (unit.pre2024?.remaining ?? 0));
 
   return (
     <div className="flex min-h-screen bg-gray-50/50">
@@ -469,17 +479,26 @@ export default function UnitDetailV2Page() {
                           {(unit.totalOwed ?? 0).toFixed(2)}€
                         </span>
                       </div>
+                      
+                      {/* Pre-2024 Debt Row */}
+                      <div className="flex justify-between items-center">
+                        <span className="text-gray-500">Dívida Anterior (Pre-2024):</span>
+                        <span className={`text-lg font-bold ${(unit.pre2024?.remaining ?? 0) > 0 ? 'text-orange-600' : 'text-green-600'}`}>
+                          {(unit.pre2024?.remaining ?? 0).toFixed(2)}€
+                        </span>
+                      </div>
+
                       <div className="flex justify-between items-center pt-4 border-t border-gray-100">
                         <span className="text-gray-900 font-bold">Dívida Total:</span>
-                        <span className={`text-xl font-black ${(pastYearsDebt + previousDebtRemaining + (unit.totalOwed ?? 0)) > 0 ? 'text-red-600' : 'text-green-600'}`}>
-                          {(pastYearsDebt + previousDebtRemaining + (unit.totalOwed ?? 0)).toFixed(2)}€
+                        <span className={`text-xl font-black ${totalDebt > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                          {totalDebt.toFixed(2)}€
                         </span>
                       </div>
                     </div>
                   </div>
-                  <div className={`px-6 py-4 border-t flex items-center justify-center gap-2 font-bold text-sm ${ (unit.totalOwed ?? 0) > 0 ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700' }`}>
-                    <div className={`w-2 h-2 rounded-full animate-pulse ${ (unit.totalOwed ?? 0) > 0 ? 'bg-red-500' : 'bg-green-500' }`}></div>
-                    {(unit.totalOwed ?? 0) > 0 ? 'EXISTEM VALORES PENDENTES' : 'SITUAÇÃO REGULARIZADA'}
+                  <div className={`px-6 py-4 border-t flex items-center justify-center gap-2 font-bold text-sm ${ totalDebt > 0 ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700' }`}>
+                    <div className={`w-2 h-2 rounded-full animate-pulse ${ totalDebt > 0 ? 'bg-red-500' : 'bg-green-500' }`}></div>
+                    {totalDebt > 0 ? 'EXISTEM VALORES PENDENTES' : 'SITUAÇÃO REGULARIZADA'}
                   </div>
                 </div>
 
@@ -505,6 +524,17 @@ export default function UnitDetailV2Page() {
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                       </svg>
                     </button>
+                    {isAdmin && (unit.pre2024?.remaining ?? 0) > 0 && (
+                      <button 
+                        onClick={() => router.push(`/dashboard/payments?unitId=${id}&month=PREV-DEBT`)}
+                        className="w-full flex items-center justify-between p-3 rounded-xl border border-orange-100 bg-orange-50 hover:bg-orange-100 transition-colors group"
+                      >
+                        <span className="text-sm font-bold text-orange-700">Registar Pag. Dívida Ant.</span>
+                        <svg className="w-4 h-4 text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                        </svg>
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
@@ -531,7 +561,7 @@ export default function UnitDetailV2Page() {
                 <div className="card bg-white border-l-4 border-l-orange-500 flex flex-col justify-between">
                   <div>
                     <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Dívida Total Acumulada</p>
-                    <p className="text-2xl font-black text-orange-600">{(pastYearsDebt + previousDebtRemaining + (unit.totalOwed ?? 0)).toFixed(2)}€</p>
+                    <p className="text-2xl font-black text-orange-600">{totalDebt.toFixed(2)}€</p>
                   </div>
                   <button 
                     onClick={handleRecalculate}
@@ -603,7 +633,7 @@ export default function UnitDetailV2Page() {
                         ))}
                         <th className="py-3 px-3 text-right bg-green-50/50 border-l border-gray-200">Pago</th>
                         <th className="py-3 px-3 text-right bg-red-50/50 border-l border-gray-200">Dívida</th>
-                        <th className="py-3 px-3 text-right bg-gray-100 border-l border-gray-200">Acum.</th>
+                        <th className="py-3 px-3 text-right bg-gray-100 border-l border-gray-200">Acum..</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-200">
@@ -637,7 +667,6 @@ export default function UnitDetailV2Page() {
                                     isUnpaid ? 'bg-red-50/50 text-red-400 hover:bg-red-100' : 'hover:bg-gray-50'
                                   }`}
                                 >
-                                  {/* Cellular render logic same as original but cleaned up */}
                                   <div className="flex flex-col items-center gap-0.5 min-h-[32px] justify-center">
                                     {paid > 0 ? (
                                       <span className="font-bold">{Number.isInteger(paid) ? paid : paid.toFixed(1)}</span>
@@ -646,7 +675,6 @@ export default function UnitDetailV2Page() {
                                     ) : (
                                       <span className="text-gray-200">-</span>
                                     )}
-                                    {/* Brief Extras display if any */}
                                     {(eb?.extras.length || 0) > 0 && <div className="w-1 h-1 rounded-full bg-blue-400"></div>}
                                   </div>
                                 </td>
@@ -706,6 +734,86 @@ export default function UnitDetailV2Page() {
           {activeTab === 'config' && (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
               <div className="space-y-8">
+                {/* Mappings Card */}
+                <div className="card">
+                  <div className="flex justify-between items-center mb-6">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 bg-purple-100 rounded-lg flex items-center justify-center">
+                        <svg className="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                        </svg>
+                      </div>
+                      <h2 className="text-xl font-bold text-gray-900">Mapeamentos Bancários</h2>
+                    </div>
+                    {isAdmin && (
+                      <button 
+                        onClick={() => router.push('/dashboard/transactions')}
+                        className="text-primary-600 text-xs font-bold uppercase tracking-widest hover:underline"
+                      >
+                        Gerir
+                      </button>
+                    )}
+                  </div>
+                  <p className="text-sm text-gray-500 mb-4">
+                    Palavras-chave que identificam automaticamente pagamentos desta fração no extrato.
+                  </p>
+                  <div className="space-y-2">
+                    {unit.descriptionMappings && unit.descriptionMappings.length > 0 ? (
+                      unit.descriptionMappings.map(m => (
+                        <div key={m.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-xl border border-gray-100">
+                          <span className="font-mono text-sm text-gray-700 font-bold">{m.pattern}</span>
+                          <span className="text-[10px] bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full font-bold uppercase tracking-wider">Automático</span>
+                        </div>
+                      ))
+                    ) : (
+                      <p className="text-sm text-gray-400 italic py-4 text-center">Nenhum mapeamento configurado.</p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Pre-2024 Debt Control Card */}
+                <div className="card border-l-4 border-l-orange-500 bg-orange-50/10">
+                  <div className="flex items-center gap-2 mb-6">
+                    <div className="w-8 h-8 bg-orange-100 rounded-lg flex items-center justify-center">
+                      <svg className="w-5 h-5 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                    </div>
+                    <h2 className="text-xl font-bold text-gray-900">Dívida Anterior a 2024</h2>
+                  </div>
+                  
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="p-3 bg-white rounded-xl border border-orange-100">
+                        <p className="text-[10px] font-bold text-gray-400 uppercase mb-1">Dívida Inicial</p>
+                        <p className="text-lg font-bold text-gray-900">{(unit.pre2024?.initial ?? 0).toFixed(2)}€</p>
+                      </div>
+                      <div className="p-3 bg-white rounded-xl border border-green-100">
+                        <p className="text-[10px] font-bold text-gray-400 uppercase mb-1">Amortizado</p>
+                        <p className="text-lg font-bold text-green-600">{(unit.pre2024?.paid ?? 0).toFixed(2)}€</p>
+                      </div>
+                    </div>
+                    
+                    <div className="p-4 bg-orange-500 rounded-2xl text-white">
+                      <p className="text-[10px] font-bold uppercase opacity-80 mb-1">Saldo Devedor Histórico</p>
+                      <div className="flex justify-between items-end">
+                        <p className="text-3xl font-black">{(unit.pre2024?.remaining ?? 0).toFixed(2)}€</p>
+                        {isAdmin && (unit.pre2024?.remaining ?? 0) > 0 && (
+                          <button 
+                            onClick={() => router.push(`/dashboard/payments?unitId=${id}&month=PREV-DEBT`)}
+                            className="bg-white text-orange-600 text-[10px] font-bold uppercase px-3 py-1.5 rounded-lg hover:bg-orange-50 transition-colors"
+                          >
+                            Registar Amortização
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                    <p className="text-[10px] text-gray-400 italic text-center">
+                      * A dívida inicial é editada no histórico de proprietários abaixo.
+                    </p>
+                  </div>
+                </div>
+
                 {/* Fee History Section */}
                 <FeeHistoryManager
                   unitId={id}
@@ -729,9 +837,9 @@ export default function UnitDetailV2Page() {
                 <div className="card">
                   <div className="flex justify-between items-center mb-6">
                     <div className="flex items-center gap-2">
-                      <div className="w-8 h-8 bg-orange-100 rounded-lg flex items-center justify-center">
-                        <svg className="w-5 h-5 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
+                        <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
                         </svg>
                       </div>
                       <h2 className="text-xl font-bold">Histórico de Proprietários</h2>
@@ -787,9 +895,9 @@ export default function UnitDetailV2Page() {
                             />
                           </div>
                           <div className="col-span-2">
-                            <label className="text-[10px] font-bold text-gray-400 uppercase">Dívida Inicial Transitada (EUR)</label>
+                            <label className="text-[10px] font-bold text-gray-400 uppercase text-orange-600 font-bold">Dívida Inicial (Pre-2024)</label>
                             <input 
-                              type="number" step="0.01" className="input text-xs h-8" 
+                              type="number" step="0.01" className="input text-xs h-8 border-orange-100" 
                               value={owner.previousDebt ?? 0} 
                               onChange={e => updateOwnerField(owners.indexOf(owner), 'previousDebt', parseFloat(e.target.value) || 0)}
                               disabled={!isAdmin}
