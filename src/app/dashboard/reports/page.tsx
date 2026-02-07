@@ -646,6 +646,8 @@ export default function ReportsPage() {
                     resumoYear === 'all' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
                   }`}
                   onClick={() => setResumoYear('all')}
+                >
+                  Todos
                 </button>
                 {availableYears.slice(0, 5).map(year => (
                   <button
