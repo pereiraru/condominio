@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import Sidebar from '@/components/Sidebar';
@@ -20,6 +20,12 @@ interface EnhancedUnit extends Unit {
     initial: number;
     paid: number;
     remaining: number;
+    payments: {
+      id: string;
+      date: string;
+      description: string;
+      amount: number;
+    }[];
   };
 }
 
@@ -49,6 +55,9 @@ export default function UnitDetailV2Page() {
   const [selectedTx, setSelectedTx] = useState<Transaction | null>(null);
   const [allUnits, setAllUnits] = useState<Unit[]>([]);
   const [creditors, setCreditors] = useState<Creditor[]>([]);
+
+  // Refs for navigation
+  const ownerHistoryRef = useRef<HTMLDivElement>(null);
 
   // Calendar and summary state
   const [calendarYear, setCalendarYear] = useState(new Date().getFullYear());
@@ -287,6 +296,13 @@ export default function UnitDetailV2Page() {
     finally { setSaving(false); }
   }
 
+  const scrollToOwnerHistory = () => {
+    setActiveTab('config');
+    setTimeout(() => {
+      ownerHistoryRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }, 100);
+  };
+
   if (loading) return <div className="flex min-h-screen"><Sidebar /><main className="flex-1 p-8 text-gray-500">A carregar...</main></div>;
   if (!unit) return null;
 
@@ -470,35 +486,35 @@ export default function UnitDetailV2Page() {
                     <h2 className="text-xl font-bold mb-6">Resumo Financeiro</h2>
                     <div className="space-y-4">
                       <div className="flex justify-between items-center">
-                        <span className="text-gray-500">Quota Mensal:</span>
-                        <span className="text-lg font-bold text-gray-900">{unit.monthlyFee.toFixed(2)}€</span>
+                        <span className="text-gray-500 text-sm">Quota Mensal:</span>
+                        <span className="font-bold text-gray-900">{unit.monthlyFee.toFixed(2)}€</span>
                       </div>
                       <div className="flex justify-between items-center">
-                        <span className="text-gray-500">Dívida {new Date().getFullYear()}:</span>
-                        <span className={`text-lg font-bold ${(unit.totalOwed ?? 0) > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                        <span className="text-gray-500 text-sm">Dívida {new Date().getFullYear()}:</span>
+                        <span className={`font-bold ${(unit.totalOwed ?? 0) > 0 ? 'text-red-600' : 'text-green-600'}`}>
                           {(unit.totalOwed ?? 0).toFixed(2)}€
                         </span>
                       </div>
                       
                       {/* Pre-2024 Debt Row */}
                       <div className="flex justify-between items-center">
-                        <span className="text-gray-500">Dívida Anterior (Pre-2024):</span>
-                        <span className={`text-lg font-bold ${(unit.pre2024?.remaining ?? 0) > 0 ? 'text-orange-600' : 'text-green-600'}`}>
+                        <span className="text-gray-500 text-sm">Dívida Anterior (Pre-2024):</span>
+                        <span className={`font-bold ${(unit.pre2024?.remaining ?? 0) > 0 ? 'text-orange-600' : 'text-green-600'}`}>
                           {(unit.pre2024?.remaining ?? 0).toFixed(2)}€
                         </span>
                       </div>
 
-                      <div className="flex justify-between items-center pt-4 border-t border-gray-100">
-                        <span className="text-gray-900 font-bold">Dívida Total:</span>
-                        <span className={`text-xl font-black ${totalDebt > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                      <div className="flex justify-between items-center pt-4 border-t border-gray-100 font-black">
+                        <span className="text-gray-900 uppercase text-xs tracking-wider">Dívida Total</span>
+                        <span className={`text-xl ${totalDebt > 0 ? 'text-red-600' : 'text-green-600'}`}>
                           {totalDebt.toFixed(2)}€
                         </span>
                       </div>
                     </div>
                   </div>
-                  <div className={`px-6 py-4 border-t flex items-center justify-center gap-2 font-bold text-sm ${ totalDebt > 0 ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700' }`}>
+                  <div className={`px-6 py-4 border-t flex items-center justify-center gap-2 font-bold text-[10px] uppercase tracking-widest ${ totalDebt > 0 ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700' }`}>
                     <div className={`w-2 h-2 rounded-full animate-pulse ${ totalDebt > 0 ? 'bg-red-500' : 'bg-green-500' }`}></div>
-                    {totalDebt > 0 ? 'EXISTEM VALORES PENDENTES' : 'SITUAÇÃO REGULARIZADA'}
+                    {totalDebt > 0 ? 'Valores Pendentes' : 'Regularizado'}
                   </div>
                 </div>
 
@@ -529,7 +545,7 @@ export default function UnitDetailV2Page() {
                         onClick={() => router.push(`/dashboard/payments?unitId=${id}&month=PREV-DEBT`)}
                         className="w-full flex items-center justify-between p-3 rounded-xl border border-orange-100 bg-orange-50 hover:bg-orange-100 transition-colors group"
                       >
-                        <span className="text-sm font-bold text-orange-700">Registar Pag. Dívida Ant.</span>
+                        <span className="text-sm font-bold text-orange-700">Pagar Dívida Anterior</span>
                         <svg className="w-4 h-4 text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
                         </svg>
@@ -772,46 +788,78 @@ export default function UnitDetailV2Page() {
                 </div>
 
                 {/* Pre-2024 Debt Control Card */}
-                <div className="card border-l-4 border-l-orange-500 bg-orange-50/10">
-                  <div className="flex items-center gap-2 mb-6">
-                    <div className="w-8 h-8 bg-orange-100 rounded-lg flex items-center justify-center">
-                      <svg className="w-5 h-5 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                      </svg>
-                    </div>
-                    <h2 className="text-xl font-bold text-gray-900">Dívida Anterior a 2024</h2>
-                  </div>
-                  
-                  <div className="space-y-4">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="p-3 bg-white rounded-xl border border-orange-100">
-                        <p className="text-[10px] font-bold text-gray-400 uppercase mb-1">Dívida Inicial</p>
-                        <p className="text-lg font-bold text-gray-900">{(unit.pre2024?.initial ?? 0).toFixed(2)}€</p>
+                <div className="card border-l-4 border-l-orange-500 bg-orange-50/10 overflow-hidden !p-0">
+                  <div className="p-6">
+                    <div className="flex items-center justify-between mb-6">
+                      <div className="flex items-center gap-2">
+                        <div className="w-8 h-8 bg-orange-100 rounded-lg flex items-center justify-center">
+                          <svg className="w-5 h-5 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                        </div>
+                        <h2 className="text-xl font-bold text-gray-900">Dívida Anterior a 2024</h2>
                       </div>
-                      <div className="p-3 bg-white rounded-xl border border-green-100">
-                        <p className="text-[10px] font-bold text-gray-400 uppercase mb-1">Amortizado</p>
-                        <p className="text-lg font-bold text-green-600">{(unit.pre2024?.paid ?? 0).toFixed(2)}€</p>
-                      </div>
+                      {isAdmin && (
+                        <button 
+                          onClick={scrollToOwnerHistory}
+                          className="flex items-center gap-1.5 text-[10px] font-bold text-primary-600 uppercase tracking-widest hover:bg-primary-50 px-2 py-1 rounded transition-colors border border-primary-100"
+                        >
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                          </svg>
+                          Editar Dívida Inicial
+                        </button>
+                      )}
                     </div>
                     
-                    <div className="p-4 bg-orange-500 rounded-2xl text-white">
-                      <p className="text-[10px] font-bold uppercase opacity-80 mb-1">Saldo Devedor Histórico</p>
-                      <div className="flex justify-between items-end">
-                        <p className="text-3xl font-black">{(unit.pre2024?.remaining ?? 0).toFixed(2)}€</p>
-                        {isAdmin && (unit.pre2024?.remaining ?? 0) > 0 && (
-                          <button 
-                            onClick={() => router.push(`/dashboard/payments?unitId=${id}&month=PREV-DEBT`)}
-                            className="bg-white text-orange-600 text-[10px] font-bold uppercase px-3 py-1.5 rounded-lg hover:bg-orange-50 transition-colors"
-                          >
-                            Registar Amortização
-                          </button>
-                        )}
+                    <div className="space-y-4">
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="p-3 bg-white rounded-xl border border-orange-100">
+                          <p className="text-[10px] font-bold text-gray-400 uppercase mb-1">Dívida Inicial</p>
+                          <p className="text-lg font-bold text-gray-900">{(unit.pre2024?.initial ?? 0).toFixed(2)}€</p>
+                        </div>
+                        <div className="p-3 bg-white rounded-xl border border-green-100">
+                          <p className="text-[10px] font-bold text-gray-400 uppercase mb-1">Total Amortizado</p>
+                          <p className="text-lg font-bold text-green-600">{(unit.pre2024?.paid ?? 0).toFixed(2)}€</p>
+                        </div>
+                      </div>
+                      
+                      <div className="p-4 bg-orange-500 rounded-2xl text-white shadow-lg shadow-orange-100">
+                        <p className="text-[10px] font-bold uppercase opacity-80 mb-1">Saldo Devedor Histórico</p>
+                        <div className="flex justify-between items-end">
+                          <p className="text-3xl font-black">{(unit.pre2024?.remaining ?? 0).toFixed(2)}€</p>
+                          {isAdmin && (unit.pre2024?.remaining ?? 0) > 0 && (
+                            <button 
+                              onClick={() => router.push(`/dashboard/payments?unitId=${id}&month=PREV-DEBT`)}
+                              className="bg-white text-orange-600 text-[10px] font-bold uppercase px-3 py-1.5 rounded-lg hover:bg-orange-50 transition-all active:scale-95 shadow-sm"
+                            >
+                              Registar Amortização
+                            </button>
+                          )}
+                        </div>
                       </div>
                     </div>
-                    <p className="text-[10px] text-gray-400 italic text-center">
-                      * A dívida inicial é editada no histórico de proprietários abaixo.
-                    </p>
                   </div>
+
+                  {/* Payment History Sub-section */}
+                  {unit.pre2024?.payments && unit.pre2024.payments.length > 0 && (
+                    <div className="border-t border-orange-100 bg-orange-50/20">
+                      <div className="px-6 py-3">
+                        <p className="text-[10px] font-black text-orange-800 uppercase tracking-widest">Pagamentos Registados</p>
+                      </div>
+                      <div className="divide-y divide-orange-100 max-h-[200px] overflow-y-auto">
+                        {unit.pre2024.payments.map(p => (
+                          <div key={p.id} className="px-6 py-2 flex justify-between items-center hover:bg-orange-50/50 cursor-pointer" onClick={() => openTxPanel({id: p.id} as any)}>
+                            <div>
+                              <p className="text-xs font-bold text-gray-700">{p.description}</p>
+                              <p className="text-[9px] text-gray-400 font-bold uppercase">{new Date(p.date).toLocaleDateString('pt-PT')}</p>
+                            </div>
+                            <p className="text-xs font-black text-green-600">+{p.amount.toFixed(2)}€</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* Fee History Section */}
@@ -834,7 +882,7 @@ export default function UnitDetailV2Page() {
 
               <div className="space-y-8">
                 {/* Owner History Card */}
-                <div className="card">
+                <div className="card scroll-mt-8" ref={ownerHistoryRef}>
                   <div className="flex justify-between items-center mb-6">
                     <div className="flex items-center gap-2">
                       <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
@@ -857,12 +905,12 @@ export default function UnitDetailV2Page() {
 
                   <div className="space-y-4">
                     {owners.sort((a, b) => (b.startMonth || '').localeCompare(a.startMonth || '')).map((owner, idx) => (
-                      <div key={owner.id || idx} className={`p-4 rounded-2xl border ${!owner.endMonth ? 'border-primary-200 bg-primary-50/30' : 'border-gray-100 bg-gray-50/30'}`}>
+                      <div key={owner.id || idx} className={`p-4 rounded-2xl border ${!owner.endMonth ? 'border-primary-200 bg-primary-50/30 shadow-sm' : 'border-gray-100 bg-gray-50/30'}`}>
                         <div className="flex justify-between items-start mb-3">
                           <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${!owner.endMonth ? 'bg-primary-600 text-white' : 'bg-gray-200 text-gray-500'}`}>
                             {!owner.endMonth ? 'Atual' : 'Anterior'}
                           </span>
-                          <span className="text-[10px] font-mono text-gray-400">
+                          <span className="text-[10px] font-mono text-gray-400 font-bold">
                             {owner.startMonth || '???'} → {owner.endMonth || 'Presente'}
                           </span>
                         </div>
@@ -895,13 +943,16 @@ export default function UnitDetailV2Page() {
                             />
                           </div>
                           <div className="col-span-2">
-                            <label className="text-[10px] font-bold text-gray-400 uppercase text-orange-600 font-bold">Dívida Inicial (Pre-2024)</label>
-                            <input 
-                              type="number" step="0.01" className="input text-xs h-8 border-orange-100" 
-                              value={owner.previousDebt ?? 0} 
-                              onChange={e => updateOwnerField(owners.indexOf(owner), 'previousDebt', parseFloat(e.target.value) || 0)}
-                              disabled={!isAdmin}
-                            />
+                            <label className="text-[10px] font-bold text-gray-400 uppercase text-orange-600 font-black">Dívida Inicial Transitada (Pre-2024)</label>
+                            <div className="relative mt-1">
+                              <input 
+                                type="number" step="0.01" className="input text-xs h-9 border-orange-200 focus:ring-orange-500 focus:border-orange-500 pl-8 font-bold text-gray-900 bg-orange-50/20" 
+                                value={owner.previousDebt ?? 0} 
+                                onChange={e => updateOwnerField(owners.indexOf(owner), 'previousDebt', parseFloat(e.target.value) || 0)}
+                                disabled={!isAdmin}
+                              />
+                              <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-orange-400 font-bold text-xs">€</span>
+                            </div>
                           </div>
                         </div>
                       </div>

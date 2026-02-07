@@ -45,13 +45,22 @@ export async function GET(
     // Calculate Pre-2024 Debt details
     const pre2024InitialDebt = unit.owners.reduce((sum, o) => sum + (o.previousDebt || 0), 0);
     
-    // Fetch all PREV-DEBT allocations for this unit
+    // Fetch all PREV-DEBT allocations for this unit with transaction details
     const prevDebtAllocations = await prisma.transactionMonth.findMany({
       where: {
         month: 'PREV-DEBT',
         transaction: { unitId: params.id }
       },
-      select: { amount: true }
+      include: {
+        transaction: {
+          select: {
+            id: true,
+            date: true,
+            description: true,
+            amount: true
+          }
+        }
+      }
     });
     const pre2024Paid = prevDebtAllocations.reduce((sum, a) => sum + a.amount, 0);
     const pre2024Remaining = Math.max(0, pre2024InitialDebt - pre2024Paid);
@@ -63,7 +72,13 @@ export async function GET(
       pre2024: {
         initial: pre2024InitialDebt,
         paid: pre2024Paid,
-        remaining: pre2024Remaining
+        remaining: pre2024Remaining,
+        payments: prevDebtAllocations.map(a => ({
+          id: a.transaction.id,
+          date: a.transaction.date,
+          description: a.transaction.description,
+          amount: a.amount
+        }))
       }
     });
   } catch (error) {
