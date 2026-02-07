@@ -526,8 +526,9 @@ export default function ReportsPage() {
 
                 {/* Debt table */}
                 <div className="card border border-gray-200 overflow-hidden !p-0">
-                  <div className="bg-gray-50 border-b border-gray-200 px-6 py-4">
+                  <div className="bg-gray-50 border-b border-gray-200 px-6 py-4 flex justify-between items-center">
                     <h2 className="text-lg font-bold text-gray-900">Divida por Ano</h2>
+                    <span className="text-[10px] text-gray-400">v2.0</span>
                   </div>
                   <div className="overflow-x-auto">
                     <table className="w-full text-[13px] border-collapse">
