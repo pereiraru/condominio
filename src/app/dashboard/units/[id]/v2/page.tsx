@@ -210,17 +210,19 @@ export default function UnitDetailV2Page() {
     } finally { setLoading(false); }
   }
 
-  function updateOwnerField(index: number, field: keyof Owner, value: any) {
+  function updateOwnerField(index: number, field: keyof Owner, value: string | number | null) {
     const updated = [...owners];
     updated[index] = { ...updated[index], [field]: value };
     setOwners(updated);
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   function handleFeeHistoryUpdate() {
     fetchFeeHistory();
     fetchMonthlyStatus();
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   function handleExtraChargesUpdate() {
     fetchExtraCharges();
     fetchMonthlyStatus();
@@ -621,7 +623,6 @@ export default function UnitDetailV2Page() {
                               const paid = paymentHistory[monthStr] || 0;
                               const expected = expectedHistory[monthStr] || 0;
                               const eb = expectedBreakdown[monthStr];
-                              const pb = paymentBreakdown[monthStr];
                               
                               const isPaidInFull = paid >= expected && expected > 0;
                               const isPartial = paid > 0 && paid < expected;
