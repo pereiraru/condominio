@@ -1,0 +1,104 @@
+name: Fix Production Data
+
+on:
+  workflow_dispatch:
+
+jobs:
+  fix-data:
+    runs-on: self-hosted
+
+    steps:
+      - name: Show current state
+        run: |
+          echo "=== Cesar 2D transaction ==="
+          docker exec condominio-app-1 sqlite3 /app/data/condominio.db "SELECT id, amount, unitId, description FROM 'Transaction' WHERE id = 'cml89n7k40059ztjsflvsf951';"
+
+          echo "=== Cesar 2D allocations ==="
+          docker exec condominio-app-1 sqlite3 /app/data/condominio.db "SELECT id, month, amount FROM TransactionMonth WHERE transactionId = 'cml89n7k40059ztjsflvsf951' ORDER BY month;"
+
+          echo "=== Cesar 2E split (should not exist yet) ==="
+          docker exec condominio-app-1 sqlite3 /app/data/condominio.db "SELECT id, amount, unitId FROM 'Transaction' WHERE id = 'cesar_2e_split';" || true
+
+          echo "=== Garagem 2nd transaction allocations ==="
+          docker exec condominio-app-1 sqlite3 /app/data/condominio.db "SELECT id, month, amount FROM TransactionMonth WHERE transactionId = 'cml89n7s800r7ztjs88pedru3' ORDER BY month;"
+
+          echo "=== FeeHistory count ==="
+          docker exec condominio-app-1 sqlite3 /app/data/condominio.db "SELECT COUNT(*) as total FROM FeeHistory;"
+          docker exec condominio-app-1 sqlite3 /app/data/condominio.db "SELECT COUNT(*) as pre2024 FROM FeeHistory WHERE effectiveTo IS NOT NULL AND effectiveTo < '2024-01';"
+
+      - name: "Fix 1: Delete pre-2024 FeeHistory"
+        run: |
+          docker exec condominio-app-1 sqlite3 /app/data/condominio.db "DELETE FROM FeeHistory WHERE effectiveTo IS NOT NULL AND effectiveTo < '2024-01';"
+          echo "Remaining FeeHistory:"
+          docker exec condominio-app-1 sqlite3 /app/data/condominio.db "SELECT COUNT(*) FROM FeeHistory;"
+
+      - name: "Fix 2a: Update Cesar transaction to 322.50 on 2D"
+        run: |
+          docker exec condominio-app-1 sqlite3 /app/data/condominio.db "UPDATE 'Transaction' SET amount = 322.5, unitId = 'cml24ruw6000af5lpllugo2nt' WHERE id = 'cml89n7k40059ztjsflvsf951';"
+
+      - name: "Fix 2b: Replace Cesar 2D allocations (Jan-Aug 2024)"
+        run: |
+          docker exec condominio-app-1 sqlite3 /app/data/condominio.db "DELETE FROM TransactionMonth WHERE transactionId = 'cml89n7k40059ztjsflvsf951';"
+          docker exec condominio-app-1 sqlite3 /app/data/condominio.db "
+          INSERT INTO TransactionMonth (id, transactionId, month, amount, createdAt) VALUES
+            ('alloc_2d_jan', 'cml89n7k40059ztjsflvsf951', '2024-01', 37.5, datetime('now')),
+            ('alloc_2d_feb', 'cml89n7k40059ztjsflvsf951', '2024-02', 37.5, datetime('now')),
+            ('alloc_2d_mar', 'cml89n7k40059ztjsflvsf951', '2024-03', 37.5, datetime('now')),
+            ('alloc_2d_apr', 'cml89n7k40059ztjsflvsf951', '2024-04', 37.5, datetime('now')),
+            ('alloc_2d_may', 'cml89n7k40059ztjsflvsf951', '2024-05', 37.5, datetime('now')),
+            ('alloc_2d_jun', 'cml89n7k40059ztjsflvsf951', '2024-06', 45.0, datetime('now')),
+            ('alloc_2d_jul', 'cml89n7k40059ztjsflvsf951', '2024-07', 45.0, datetime('now')),
+            ('alloc_2d_aug', 'cml89n7k40059ztjsflvsf951', '2024-08', 45.0, datetime('now'));
+          "
+
+      - name: "Fix 2c: Create Cesar 2E split transaction (127.50)"
+        run: |
+          docker exec condominio-app-1 sqlite3 /app/data/condominio.db "
+          INSERT INTO 'Transaction' (id, date, amount, description, type, unitId, creditorId, createdAt, updatedAt)
+          SELECT 'cesar_2e_split', date, 127.5, 'TR-CESAR DAVID SANTOS SA (2E)', type, 'cml24ruwa000ff5lppdhcjvaf', creditorId, datetime('now'), datetime('now')
+          FROM 'Transaction' WHERE id = 'cml89n7k40059ztjsflvsf951';
+          "
+          docker exec condominio-app-1 sqlite3 /app/data/condominio.db "
+          INSERT INTO TransactionMonth (id, transactionId, month, amount, createdAt) VALUES
+            ('alloc_2e_split', 'cesar_2e_split', '2024-05', 127.5, datetime('now'));
+          "
+
+      - name: "Fix 3: Garagem 2nd transaction (Jan-Oct 2025)"
+        run: |
+          docker exec condominio-app-1 sqlite3 /app/data/condominio.db "DELETE FROM TransactionMonth WHERE transactionId = 'cml89n7s800r7ztjs88pedru3';"
+          docker exec condominio-app-1 sqlite3 /app/data/condominio.db "
+          INSERT INTO TransactionMonth (id, transactionId, month, amount, createdAt) VALUES
+            ('alloc_gar_2025_01', 'cml89n7s800r7ztjs88pedru3', '2025-01', 45.0, datetime('now')),
+            ('alloc_gar_2025_02', 'cml89n7s800r7ztjs88pedru3', '2025-02', 45.0, datetime('now')),
+            ('alloc_gar_2025_03', 'cml89n7s800r7ztjs88pedru3', '2025-03', 45.0, datetime('now')),
+            ('alloc_gar_2025_04', 'cml89n7s800r7ztjs88pedru3', '2025-04', 45.0, datetime('now')),
+            ('alloc_gar_2025_05', 'cml89n7s800r7ztjs88pedru3', '2025-05', 45.0, datetime('now')),
+            ('alloc_gar_2025_06', 'cml89n7s800r7ztjs88pedru3', '2025-06', 45.0, datetime('now')),
+            ('alloc_gar_2025_07', 'cml89n7s800r7ztjs88pedru3', '2025-07', 45.0, datetime('now')),
+            ('alloc_gar_2025_08', 'cml89n7s800r7ztjs88pedru3', '2025-08', 45.0, datetime('now')),
+            ('alloc_gar_2025_09', 'cml89n7s800r7ztjs88pedru3', '2025-09', 45.0, datetime('now')),
+            ('alloc_gar_2025_10', 'cml89n7s800r7ztjs88pedru3', '2025-10', 45.0, datetime('now'));
+          "
+
+      - name: Verify all fixes
+        run: |
+          echo "=== Cesar 2D transaction ==="
+          docker exec condominio-app-1 sqlite3 /app/data/condominio.db "SELECT id, amount, unitId FROM 'Transaction' WHERE id = 'cml89n7k40059ztjsflvsf951';"
+
+          echo "=== Cesar 2D allocations (should be Jan-Aug 2024, total 322.50) ==="
+          docker exec condominio-app-1 sqlite3 /app/data/condominio.db "SELECT month, amount FROM TransactionMonth WHERE transactionId = 'cml89n7k40059ztjsflvsf951' ORDER BY month;"
+          docker exec condominio-app-1 sqlite3 /app/data/condominio.db "SELECT SUM(amount) as total FROM TransactionMonth WHERE transactionId = 'cml89n7k40059ztjsflvsf951';"
+
+          echo "=== Cesar 2E split (should be 127.50) ==="
+          docker exec condominio-app-1 sqlite3 /app/data/condominio.db "SELECT id, amount, unitId FROM 'Transaction' WHERE id = 'cesar_2e_split';"
+          docker exec condominio-app-1 sqlite3 /app/data/condominio.db "SELECT month, amount FROM TransactionMonth WHERE transactionId = 'cesar_2e_split';"
+
+          echo "=== Garagem allocations (should be Jan-Oct 2025, total 450) ==="
+          docker exec condominio-app-1 sqlite3 /app/data/condominio.db "SELECT month, amount FROM TransactionMonth WHERE transactionId = 'cml89n7s800r7ztjs88pedru3' ORDER BY month;"
+          docker exec condominio-app-1 sqlite3 /app/data/condominio.db "SELECT SUM(amount) as total FROM TransactionMonth WHERE transactionId = 'cml89n7s800r7ztjs88pedru3';"
+
+          echo "=== FeeHistory count (should have no pre-2024) ==="
+          docker exec condominio-app-1 sqlite3 /app/data/condominio.db "SELECT COUNT(*) FROM FeeHistory;"
+          docker exec condominio-app-1 sqlite3 /app/data/condominio.db "SELECT COUNT(*) as pre2024 FROM FeeHistory WHERE effectiveTo IS NOT NULL AND effectiveTo < '2024-01';"
+
+          echo "=== ALL FIXES APPLIED SUCCESSFULLY ==="
