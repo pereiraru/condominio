@@ -252,15 +252,23 @@ export default function UnitsPage() {
                         <div className={`${isGaragem ? 'p-3' : 'p-5'} flex-1`}>
                           <div className={`flex justify-between items-start ${isGaragem ? 'mb-2' : 'mb-4'}`}>
                             <div className="flex items-center gap-3">
-                              <div className={`${isGaragem ? 'w-10 h-10 text-base' : 'w-12 h-12 text-lg'} rounded-xl flex items-center justify-center font-bold ${hasPastDebt ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-600'}`}>
-                                {unit.code}
+                              <div className={`${isGaragem ? 'w-8 h-8' : 'w-10 h-10'} rounded-lg flex items-center justify-center ${hasPastDebt ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-600'}`}>
+                                {isGaragem ? (
+                                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                                  </svg>
+                                ) : (
+                                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                                  </svg>
+                                )}
                               </div>
                               <div>
                                 <h3 className={`${isGaragem ? 'text-sm' : 'text-lg'} font-bold text-gray-900 group-hover:text-primary-600 transition-colors`}>
                                   {isGaragem ? `Garagem ${unit.code.replace('G', '')}` : formatUnitCode(unit.code)}
                                 </h3>
                                 <p className="text-[10px] text-gray-400 font-medium uppercase tracking-wider">
-                                  {isGaragem ? 'Lugar' : (unit.floor != null ? `${unit.floor}º Andar` : 'Fração')}
+                                  {isGaragem ? 'Lugar de Estacionamento' : (unit.floor != null ? `${unit.floor}º Andar` : 'Fração Autónoma')}
                                 </p>
                               </div>
                             </div>
