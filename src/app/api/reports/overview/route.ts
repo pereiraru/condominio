@@ -129,7 +129,7 @@ export async function GET(request: NextRequest) {
 
           paidForYear += entityAllocs
             .filter((a) => a.month === monthStr)
-            .reduce((sum, a) => sum + a.amount, 0);
+            .reduce((sum, a) => sum + (entityType === 'unit' ? a.amount : Math.abs(a.amount)), 0);
         }
 
         // Surplus from overpayment reduces previously accumulated debt
@@ -224,26 +224,31 @@ export async function GET(request: NextRequest) {
         const monthAllocs = yearAllocations.filter(
           (a) => a.transaction.creditorId === creditor.id && a.month === monthStr && a.transaction.amount < 0
         );
-        const paid = monthAllocs.reduce((sum, a) => sum + a.amount, 0);
-        const feeData = getTotalFeeForMonth(
-          creditor.feeHistory as FeeHistoryRecord[],
-          [], // Creditors don't have extra charges
-          monthStr,
-          creditor.amountDue ?? 0
-        );
+        const paid = monthAllocs.reduce((sum, a) => sum + Math.abs(a.amount), 0);
+        
+        let expected = 0;
+        if (creditor.isFixed) {
+          const feeData = getTotalFeeForMonth(
+            creditor.feeHistory as FeeHistoryRecord[],
+            [], // Creditors don't have extra charges
+            monthStr,
+            creditor.amountDue ?? 0
+          );
+          expected = feeData.total;
+        }
 
         months[monthStr] = {
           paid,
-          expected: feeData.total,
+          expected,
           transactions: monthAllocs.map((a) => ({
             id: a.transaction.id,
-            amount: a.amount,
+            amount: Math.abs(a.amount),
             date: a.transaction.date.toISOString(),
             description: a.transaction.description,
           })),
         };
         totalPaid += paid;
-        totalExpected += feeData.total;
+        totalExpected += expected;
       }
 
       const pastYearsDebt = calculatePastYearsDebt(

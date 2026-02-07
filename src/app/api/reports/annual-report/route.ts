@@ -383,6 +383,8 @@ export async function GET(request: NextRequest) {
         code: unit.code,
         description: unit.description || '',
         ownerName,
+        saldoAnterior2024: debtInfo.previousDebtRemaining,
+        saldoAnosAnteriores: debtInfo.pastYearsDebt,
         saldoInicial: Math.max(0, saldoInicial),
         previsto,
         recebido,
@@ -391,6 +393,8 @@ export async function GET(request: NextRequest) {
     });
 
     const debtTotals = {
+      saldoAnterior2024: unitDebtData.reduce((sum, u) => sum + u.saldoAnterior2024, 0),
+      saldoAnosAnteriores: unitDebtData.reduce((sum, u) => sum + u.saldoAnosAnteriores, 0),
       saldoInicial: unitDebtData.reduce((sum, u) => sum + u.saldoInicial, 0),
       previsto: unitDebtData.reduce((sum, u) => sum + u.previsto, 0),
       recebido: unitDebtData.reduce((sum, u) => sum + u.recebido, 0),
