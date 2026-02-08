@@ -96,7 +96,7 @@ export default function BankAccountsPage() {
     }
   }
 
-  function openEditModal(accountId: string, snapshot: any) {
+  function openEditModal(accountId: string, snapshot: { id: string; date: string; balance: number; description: string | null }) {
     setSelectedAccountId(accountId);
     setEditingSnapshotId(snapshot.id);
     setSnapshotForm({
