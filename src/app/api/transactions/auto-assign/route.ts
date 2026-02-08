@@ -10,101 +10,150 @@ export async function POST() {
   }
 
   try {
-    // Get all description mappings
+    // Get all creditors to build pattern matching
+    const creditors = await prisma.creditor.findMany();
+    const creditorByName: Record<string, string> = {};
+    for (const c of creditors) {
+      creditorByName[c.name] = c.id;
+    }
+
+    // Get any existing description mappings
     const mappings = await prisma.descriptionMapping.findMany();
 
-    // Get all unassigned expense transactions (no creditorId, no unitId)
+    // Built-in patterns for known creditor descriptions
+    // Maps description patterns to creditor names
+    const builtInPatterns: { pattern: string; creditorName: string; category?: string; type?: string }[] = [
+      // Savings
+      { pattern: 'POUPANÇA', creditorName: 'Conta Poupança', category: 'savings', type: 'transfer' },
+      { pattern: '027-15.010650-1', creditorName: 'Conta Poupança', category: 'savings', type: 'transfer' },
+      // Elevator
+      { pattern: 'OTIS', creditorName: 'Otis Elevadores' },
+      // Electricity
+      { pattern: 'ENDESA', creditorName: 'Endesa Energia' },
+      // Cleaning
+      { pattern: 'LUAR', creditorName: 'Luar Limpeza' },
+      // Bank fees
+      { pattern: 'EMISS', creditorName: 'Despesas Bancárias' },
+      { pattern: 'I.SELO', creditorName: 'Despesas Bancárias' },
+      { pattern: 'IMP.SELO', creditorName: 'Despesas Bancárias' },
+      { pattern: 'COMISS', creditorName: 'Despesas Bancárias' },
+      { pattern: 'COM. MAN', creditorName: 'Despesas Bancárias' },
+      { pattern: 'CONDOM', creditorName: 'Despesas Bancárias' },
+      // Extinguishers
+      { pattern: 'EXTINTORES', creditorName: 'JCSS Unipessoal - Extintores' },
+    ];
+
+    // Get all unassigned transactions (no creditorId, no unitId)
     const unassigned = await prisma.transaction.findMany({
       where: {
         creditorId: null,
         unitId: null,
-        category: { not: 'savings' },
+      },
+      include: {
+        monthAllocations: { take: 1 },
       },
       orderBy: { date: 'asc' },
     });
 
     let assignedCount = 0;
     let allocatedCount = 0;
+    let skippedSavings = 0;
     const details: { description: string; creditor: string; month: string }[] = [];
 
     for (const tx of unassigned) {
-      // Check savings pattern first
-      if (tx.description.includes('POUPANÇA') || tx.description.includes('027-15.010650-1')) {
-        await prisma.transaction.update({
-          where: { id: tx.id },
-          data: { category: 'savings', type: 'transfer' },
-        });
-        assignedCount++;
+      const descUpper = tx.description.toUpperCase();
+
+      // 1. Try built-in patterns first
+      let matchedCreditorId: string | null = null;
+      let matchedCategory: string | null = null;
+      let matchedType: string | null = null;
+
+      for (const bp of builtInPatterns) {
+        if (descUpper.includes(bp.pattern.toUpperCase())) {
+          matchedCreditorId = creditorByName[bp.creditorName] || null;
+          matchedCategory = bp.category || null;
+          matchedType = bp.type || null;
+          break;
+        }
+      }
+
+      // 2. Try description mappings as fallback
+      if (!matchedCreditorId && !matchedCategory) {
+        const mapping = mappings.find(m =>
+          descUpper.includes(m.pattern.toUpperCase())
+        );
+        if (mapping) {
+          matchedCreditorId = mapping.creditorId;
+          if (mapping.unitId && tx.amount > 0) {
+            // Income with unit mapping
+            await prisma.transaction.update({
+              where: { id: tx.id },
+              data: { unitId: mapping.unitId },
+            });
+            assignedCount++;
+
+            // Create allocation if none exists
+            if (tx.monthAllocations.length === 0) {
+              const txMonth = tx.date.toISOString().substring(0, 7);
+              await prisma.transactionMonth.create({
+                data: { transactionId: tx.id, month: txMonth, amount: tx.amount },
+              });
+              allocatedCount++;
+            }
+            continue;
+          }
+        }
+      }
+
+      if (!matchedCreditorId && !matchedCategory) continue;
+
+      // Handle savings transfers
+      if (matchedCategory === 'savings') {
+        if (tx.category !== 'savings') {
+          await prisma.transaction.update({
+            where: { id: tx.id },
+            data: {
+              category: 'savings',
+              type: matchedType || 'transfer',
+              ...(matchedCreditorId ? { creditorId: matchedCreditorId } : {}),
+            },
+          });
+          skippedSavings++;
+          assignedCount++;
+        }
         continue;
       }
 
-      // Try to match description against mappings
-      const mapping = mappings.find(m =>
-        tx.description.toUpperCase().includes(m.pattern.toUpperCase())
-      );
+      // Update the transaction with creditor
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const updateData: any = {};
+      if (matchedCreditorId) updateData.creditorId = matchedCreditorId;
+      if (matchedType) updateData.type = matchedType;
 
-      if (!mapping) continue;
-
-      const updateData: Record<string, string | null> = {};
-      if (mapping.creditorId) updateData.creditorId = mapping.creditorId;
-      if (mapping.unitId) updateData.unitId = mapping.unitId;
-
-      // Update the transaction
       await prisma.transaction.update({
         where: { id: tx.id },
         data: updateData,
       });
       assignedCount++;
 
-      // If it's an expense with a creditor, create a month allocation
-      if (tx.amount < 0 && mapping.creditorId) {
+      // Create month allocation if expense with creditor and no existing allocation
+      if (tx.amount < 0 && matchedCreditorId && tx.monthAllocations.length === 0) {
         const txMonth = tx.date.toISOString().substring(0, 7);
-
-        // Check if allocation already exists
-        const existing = await prisma.transactionMonth.findFirst({
-          where: { transactionId: tx.id },
-        });
-
-        if (!existing) {
-          await prisma.transactionMonth.create({
-            data: {
-              transactionId: tx.id,
-              month: txMonth,
-              amount: tx.amount, // Keep negative for expenses
-            },
-          });
-          allocatedCount++;
-
-          const creditor = await prisma.creditor.findUnique({
-            where: { id: mapping.creditorId },
-            select: { name: true },
-          });
-          details.push({
-            description: tx.description.substring(0, 40),
-            creditor: creditor?.name || 'Unknown',
+        await prisma.transactionMonth.create({
+          data: {
+            transactionId: tx.id,
             month: txMonth,
-          });
-        }
-      }
-
-      // If it's income with a unit, create a month allocation
-      if (tx.amount > 0 && mapping.unitId) {
-        const txMonth = tx.date.toISOString().substring(0, 7);
-
-        const existing = await prisma.transactionMonth.findFirst({
-          where: { transactionId: tx.id },
+            amount: tx.amount,
+          },
         });
+        allocatedCount++;
 
-        if (!existing) {
-          await prisma.transactionMonth.create({
-            data: {
-              transactionId: tx.id,
-              month: txMonth,
-              amount: tx.amount,
-            },
-          });
-          allocatedCount++;
-        }
+        const creditor = creditors.find(c => c.id === matchedCreditorId);
+        details.push({
+          description: tx.description.substring(0, 40),
+          creditor: creditor?.name || 'Unknown',
+          month: txMonth,
+        });
       }
     }
 
@@ -113,7 +162,8 @@ export async function POST() {
       totalUnassigned: unassigned.length,
       assigned: assignedCount,
       allocated: allocatedCount,
-      details: details.slice(0, 20), // Return sample
+      skippedSavings,
+      details: details.slice(0, 30),
     });
   } catch (error) {
     console.error('Error auto-assigning transactions:', error);
