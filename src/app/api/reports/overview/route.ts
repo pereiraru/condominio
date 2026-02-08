@@ -270,15 +270,18 @@ export async function GET(request: NextRequest) {
       };
     });
 
+    // Filter out creditors with no activity for the year
+    const activeCreditors = creditorData.filter(c => c.totalPaid > 0 || c.totalExpected > 0 || c.pastYearsDebt > 0);
+
     // Calculate totals
     const totalReceitas = unitData.reduce((sum, u) => sum + u.totalPaid, 0);
-    const totalDespesas = creditorData.reduce((sum, c) => sum + c.totalPaid, 0);
+    const totalDespesas = activeCreditors.reduce((sum, c) => sum + c.totalPaid, 0);
     const totalDebtAllUnits = unitData.reduce((sum, u) => sum + u.totalDebt, 0);
 
     return NextResponse.json({
       year,
       units: unitData,
-      creditors: creditorData,
+      creditors: activeCreditors,
       totals: {
         receitas: totalReceitas,
         despesas: totalDespesas,
