@@ -13,7 +13,6 @@ interface VirtualInvoice {
   supplier: string;
   invoiceNumber: string;
   entryNumber: string;
-  creditor?: { name: string; category: string };
 }
 
 interface ReportCategoryGroup {
