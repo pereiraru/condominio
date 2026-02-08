@@ -10,7 +10,7 @@ export async function GET() {
   }
 
   const accounts = await prisma.bankAccount.findMany({
-    include: { snapshots: { orderBy: { date: 'desc' }, take: 1 } },
+    include: { snapshots: { orderBy: { date: 'desc' } } },
     orderBy: { name: 'asc' },
   });
 
