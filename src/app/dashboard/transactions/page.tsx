@@ -41,11 +41,31 @@ function TransactionsContent() {
 
   const [saving, setSaving] = useState(false);
 
-  const [importing, setImporting] = useState(false);
+    const [importing, setImporting] = useState(false);
 
-  const [importResult, setImportResult] = useState<{ success: boolean; message: string } | null>(null);
+    const [importResult, setImportResult] = useState<{
 
-  const fileInputRef = useRef<HTMLInputElement>(null);
+      success: boolean;
+
+      message: string;
+
+      importedCount: number;
+
+      duplicateCount: number;
+
+      updatedCount: number;
+
+      autoAssignedCount: number;
+
+      latestBalance: number;
+
+      errors: string[];
+
+    } | null>(null);
+
+    const fileInputRef = useRef<HTMLInputElement>(null);
+
+  
 
   const [filter, setFilter] = useState({
 
@@ -671,25 +691,145 @@ function TransactionsContent() {
 
 
 
-      const data = await res.json();
+            const data = await res.json();
 
-      if (res.ok) {
 
-        setImportResult({ success: true, message: data.message });
 
-        fetchTransactions();
+            if (res.ok) {
 
-      } else {
 
-        setImportResult({ success: false, message: data.error || 'Erro na importação' });
 
-      }
+              setImportResult(data);
 
-    } catch {
 
-      setImportResult({ success: false, message: 'Erro de ligação ao servidor' });
 
-    } finally {
+              fetchTransactions();
+
+
+
+            } else {
+
+
+
+              setImportResult({ 
+
+
+
+                success: false, 
+
+
+
+                message: data.error || 'Erro na importação',
+
+
+
+                importedCount: 0,
+
+
+
+                duplicateCount: 0,
+
+
+
+                updatedCount: 0,
+
+
+
+                autoAssignedCount: 0,
+
+
+
+                latestBalance: 0,
+
+
+
+                errors: [data.error || 'Erro desconhecido']
+
+
+
+              });
+
+
+
+            }
+
+
+
+      
+
+        } catch {
+
+
+
+      
+
+          setImportResult({ 
+
+
+
+      
+
+            success: false, 
+
+
+
+      
+
+            message: 'Erro de ligação ao servidor',
+
+
+
+      
+
+            importedCount: 0,
+
+
+
+      
+
+            duplicateCount: 0,
+
+
+
+      
+
+            updatedCount: 0,
+
+
+
+      
+
+            autoAssignedCount: 0,
+
+
+
+      
+
+            latestBalance: 0,
+
+
+
+      
+
+            errors: ['Falha catastrófica no processamento']
+
+
+
+      
+
+          });
+
+
+
+      
+
+        } finally {
+
+
+
+      
+
+    
 
       setImporting(false);
 
@@ -1108,6 +1248,77 @@ function TransactionsContent() {
                   <button type="submit" className="btn-primary" disabled={saving}>{saving ? 'A guardar...' : 'Guardar'}</button>
                 </div>
               </form>
+            </div>
+          </div>
+        )}
+
+        {/* Import Report Modal */}
+        {importResult && (
+          <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm flex items-center justify-center z-[60] p-4">
+            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in duration-200">
+              <div className={`p-6 text-white flex flex-col items-center gap-4 ${importResult.success ? 'bg-green-600' : 'bg-red-600'}`}>
+                <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center">
+                  {importResult.success ? (
+                    <svg className="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>
+                  ) : (
+                    <svg className="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M6 18L18 6M6 6l12 12" /></svg>
+                  )}
+                </div>
+                <div className="text-center">
+                  <h2 className="text-2xl font-black uppercase tracking-tight">Resumo da Importação</h2>
+                  <p className="opacity-90 font-medium">Processamento concluído com sucesso</p>
+                </div>
+              </div>
+
+              <div className="p-8">
+                <div className="grid grid-cols-2 gap-4 mb-8">
+                  <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100">
+                    <p className="text-[10px] font-bold text-gray-400 uppercase mb-1">Novas Transações</p>
+                    <p className="text-2xl font-black text-gray-900">{importResult.importedCount}</p>
+                  </div>
+                  <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100">
+                    <p className="text-[10px] font-bold text-gray-400 uppercase mb-1">Duplicadas (Ignoradas)</p>
+                    <p className="text-2xl font-black text-gray-500">{importResult.duplicateCount}</p>
+                  </div>
+                  <div className="bg-blue-50 p-4 rounded-2xl border border-blue-100">
+                    <p className="text-[10px] font-bold text-blue-400 uppercase mb-1">Saldos Atualizados</p>
+                    <p className="text-2xl font-black text-blue-600">{importResult.updatedCount}</p>
+                  </div>
+                  <div className="bg-purple-50 p-4 rounded-2xl border border-purple-100">
+                    <p className="text-[10px] font-bold text-purple-400 uppercase mb-1">Atribuições Auto</p>
+                    <p className="text-2xl font-black text-purple-600">{importResult.autoAssignedCount}</p>
+                  </div>
+                </div>
+
+                <div className="p-4 bg-gray-900 rounded-2xl text-white flex justify-between items-center mb-8">
+                  <div>
+                    <p className="text-[10px] font-bold text-gray-400 uppercase">Novo Saldo Bancário</p>
+                    <p className="text-xl font-black">{importResult.latestBalance.toFixed(2)}€</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-[10px] font-bold text-gray-400 uppercase">Conta</p>
+                    <p className="text-sm font-bold opacity-80 italic text-primary-400">Montepio (DO)</p>
+                  </div>
+                </div>
+
+                {importResult.errors.length > 0 && (
+                  <div className="mb-8">
+                    <p className="text-[10px] font-bold text-red-500 uppercase mb-2">Erros Encontrados ({importResult.errors.length})</p>
+                    <div className="max-h-32 overflow-y-auto space-y-1 p-3 bg-red-50 rounded-xl border border-red-100">
+                      {importResult.errors.map((err, i) => (
+                        <p key={i} className="text-[11px] text-red-700 font-medium">#{i+1}: {err}</p>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <button 
+                  onClick={() => setImportResult(null)}
+                  className="w-full py-4 bg-gray-900 text-white rounded-2xl font-bold uppercase tracking-widest hover:bg-black transition-all shadow-lg active:scale-[0.98]"
+                >
+                  Fechar Relatório
+                </button>
+              </div>
             </div>
           </div>
         )}

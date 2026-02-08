@@ -30,110 +30,102 @@ export async function POST(request: NextRequest) {
 
     let importedCount = 0;
     let duplicateCount = 0;
+    let updatedCount = 0;
+    let autoAssignedCount = 0;
     let latestBalance = 0;
     let latestDate: Date | null = null;
+    const errors: string[] = [];
 
     for (const line of dataLines) {
       const parts = line.split('\t');
       if (parts.length < 6) continue;
-
-      // DATA MOVIMENTO	DATA OPERAÇÃO	DESCRIÇÃO	IMPORTÂNCIA	MOEDA	SALDO CONTABILÍSTICO
-      const [dateMov, , description, importance, , balanceStr] = parts;
-
-      // Parse date (D/M/YY)
-      const dateParts = dateMov.split('/');
-      if (dateParts.length < 3) continue;
       
-      const d = parseInt(dateParts[0]);
-      const m = parseInt(dateParts[1]);
-      const y = parseInt(dateParts[2]);
-      const date = new Date(2000 + y, m - 1, d);
-      
-      // Parse amounts (format "1.234,56" or "123,45")
-      const parseAmount = (s: string) => {
-        const cleaned = s.replace(/"/g, '').replace(/\./g, '').replace(',', '.');
-        return parseFloat(cleaned);
-      };
+      let description = '';
+      try {
+        const [dateMov, , desc, importance, , balanceStr] = parts;
+        description = desc;
+        const dateParts = dateMov.split('/');
+        
+        if (dateParts.length < 3) continue;
+        
+        const d = parseInt(dateParts[0]);
+        const m = parseInt(dateParts[1]);
+        const y = parseInt(dateParts[2]);
+        const date = new Date(2000 + y, m - 1, d);
+        
+        const parseAmount = (s: string) => {
+          const cleaned = s.replace(/"/g, '').replace(/\./g, '').replace(',', '.');
+          return parseFloat(cleaned);
+        };
 
-      const amount = parseAmount(importance);
-      const currentBalance = parseAmount(balanceStr);
+        const amount = parseAmount(importance);
+        const currentBalance = parseAmount(balanceStr);
 
-      // Keep track of the latest balance
-      if (!latestDate || date >= latestDate) {
-        latestDate = date;
-        latestBalance = currentBalance;
-      }
-
-      // 2. Robust Deduplication check
-      // First, try a strict match including balance
-      let existing = await prisma.transaction.findFirst({
-        where: {
-          date,
-          amount,
-          description: description.trim(),
-          balance: currentBalance,
+        if (!latestDate || date >= latestDate) {
+          latestDate = date;
+          latestBalance = currentBalance;
         }
-      });
 
-      // If not found, try a match without balance (to catch items imported via other means)
-      if (!existing) {
-        existing = await prisma.transaction.findFirst({
-          where: {
+        let existing = await prisma.transaction.findFirst({
+          where: { date, amount, description: description.trim(), balance: currentBalance }
+        });
+
+        if (!existing) {
+          existing = await prisma.transaction.findFirst({
+            where: { date, amount, description: description.trim() }
+          });
+
+          if (existing && !existing.balance && !isNaN(currentBalance)) {
+            await prisma.transaction.update({
+              where: { id: existing.id },
+              data: { balance: currentBalance }
+            });
+            updatedCount++;
+            duplicateCount++;
+            continue;
+          }
+        }
+
+        if (existing) {
+          duplicateCount++;
+          continue;
+        }
+
+        let unitId: string | null = null;
+        let creditorId: string | null = null;
+        let category: string | null = null;
+        let type: string = amount > 0 ? 'payment' : 'expense';
+
+        if (description.includes('POUPANÇA') || description.includes('027-15.010650-1')) {
+          category = 'savings';
+          type = 'transfer';
+          autoAssignedCount++;
+        } else {
+          const mapping = mappings.find(m => description.toUpperCase().includes(m.pattern.toUpperCase()));
+          if (mapping) {
+            unitId = mapping.unitId;
+            creditorId = mapping.creditorId;
+            autoAssignedCount++;
+          }
+        }
+
+        await prisma.transaction.create({
+          data: {
             date,
-            amount,
             description: description.trim(),
+            amount,
+            balance: isNaN(currentBalance) ? null : currentBalance,
+            type,
+            category,
+            unitId,
+            creditorId,
           }
         });
 
-        // If we found it now, it means we have the transaction but without the balance
-        // Let's update it to "repair" the record
-        if (existing && !existing.balance && !isNaN(currentBalance)) {
-          await prisma.transaction.update({
-            where: { id: existing.id },
-            data: { balance: currentBalance }
-          });
-        }
+        importedCount++;
+      } catch (err) {
+        errors.push(`Erro na linha: ${description.substring(0, 20)}... - ${String(err)}`);
       }
-
-      if (existing) {
-        duplicateCount++;
-        continue;
-      }
-
-      // 3. Auto-assignment
-      let unitId: string | null = null;
-      let creditorId: string | null = null;
-      let category: string | null = null;
-      let type: string = amount > 0 ? 'payment' : 'expense';
-
-      // Check for savings transfers (Montepio 60€)
-      if (description.includes('POUPANÇA') || description.includes('027-15.010650-1')) {
-        category = 'savings';
-        type = 'transfer';
-      } else {
-        // Apply mappings
-        const mapping = mappings.find(m => description.toUpperCase().includes(m.pattern.toUpperCase()));
-        if (mapping) {
-          unitId = mapping.unitId;
-          creditorId = mapping.creditorId;
-        }
-      }
-
-      // Create transaction
-      await prisma.transaction.create({
-        data: {
-          date,
-          description: description.trim(),
-          amount,
-          balance: isNaN(currentBalance) ? null : currentBalance,
-          type,
-          category,
-          unitId,
-          creditorId,
-        }
-      });
-
-      importedCount++;
     }
 
     // 4. Update Bank Balance Snapshot
@@ -146,7 +138,6 @@ export async function POST(request: NextRequest) {
         bankAccount = await prisma.bankAccount.findFirst({ where: { accountType: 'current' } });
       }
 
-      // If still not found, create it automatically
       if (!bankAccount) {
         bankAccount = await prisma.bankAccount.create({
           data: { name: 'Montepio (DO)', accountType: 'current' }
@@ -177,7 +168,6 @@ export async function POST(request: NextRequest) {
     }
 
     if (importedCount > 0) {
-        // Ensure Savings account exists for the dynamic balance logic to work
         const hasSavings = await prisma.transaction.findFirst({ where: { category: 'savings' } });
         if (hasSavings) {
             const savExists = await prisma.bankAccount.findFirst({ where: { accountType: 'savings' } });
@@ -190,14 +180,18 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json({
-      message: `Sucesso: ${importedCount} novas transações, ${duplicateCount} duplicadas ignoradas. Saldo atualizado para ${latestBalance.toFixed(2)}€`,
+      message: `Sucesso: ${importedCount} novas transações, ${duplicateCount} duplicadas ignoradas.`,
       importedCount,
       duplicateCount,
-      latestBalance
+      updatedCount,
+      autoAssignedCount,
+      latestBalance,
+      errors,
+      success: true
     });
 
   } catch (error) {
     console.error('[BankImport]', error);
-    return NextResponse.json({ error: 'Falha ao processar extrato' }, { status: 500 });
+    return NextResponse.json({ error: 'Falha ao processar extrato', success: false }, { status: 500 });
   }
 }
