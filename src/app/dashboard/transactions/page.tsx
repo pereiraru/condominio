@@ -1049,19 +1049,21 @@ function TransactionsContent() {
 
           <div className="flex gap-2">
 
-            <input
+                        <input
 
-              type="file"
+                          type="file"
 
-              ref={fileInputRef}
+                          ref={fileInputRef}
 
-              onChange={handleImportExtrato}
+                          onChange={handleImportExtrato}
 
-              accept=".txt"
+                          accept=".txt,.xls,.xlsx,.csv"
 
-              className="hidden"
+                          className="hidden"
 
-            />
+                        />
+
+            
 
             <button 
 

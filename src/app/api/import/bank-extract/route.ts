@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { prisma } from '@/lib/prisma';
 import { authOptions } from '@/lib/auth';
+import * as XLSX from 'xlsx';
 
 export async function POST(request: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -15,15 +16,41 @@ export async function POST(request: NextRequest) {
     if (!file) return NextResponse.json({ error: 'No file uploaded' }, { status: 400 });
 
     const buffer = Buffer.from(await file.arrayBuffer());
-    // Use Windows-1252 for Portuguese bank files (TextDecoder is built-in, no external deps)
-    const decoder = new TextDecoder('windows-1252');
-    const content = decoder.decode(buffer);
-    const lines = content.split(/\r?\n/).filter(line => line.trim() !== '');
+    let rows: any[] = [];
 
-    if (lines.length < 2) return NextResponse.json({ error: 'Empty file' }, { status: 400 });
+    if (file.name.toLowerCase().endsWith('.txt')) {
+      // Logic for tab-separated TXT
+      const decoder = new TextDecoder('windows-1252');
+      const content = decoder.decode(buffer);
+      const lines = content.split(/\r?\n/).filter(line => line.trim() !== '');
+      if (lines.length < 2) return NextResponse.json({ error: 'Empty file' }, { status: 400 });
+      
+      const dataLines = lines.slice(1);
+      rows = dataLines.map(line => {
+        const parts = line.split('\t');
+        return {
+          dateMov: parts[0],
+          description: parts[2],
+          importance: parts[3],
+          balanceStr: parts[5]
+        };
+      });
+    } else {
+      // Logic for Excel / CSV
+      const workbook = XLSX.read(buffer, { type: 'buffer', cellDates: true });
+      const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+      const excelData = XLSX.utils.sheet_to_json<any>(firstSheet);
+      
+      rows = excelData.map(r => ({
+        // Try to map different possible column names
+        dateMov: r['DATA MOVIMENTO'] || r['Data Movimento'] || r['Data'],
+        description: r['DESCRIÇÃO'] || r['Descrição'] || r['Descricao'],
+        importance: r['IMPORTÂNCIA'] || r['Importância'] || r['Valor'],
+        balanceStr: r['SALDO CONTABILÍSTICO'] || r['Saldo Contabilístico'] || r['Saldo']
+      }));
+    }
 
-    // Skip header
-    const dataLines = lines.slice(1);
+    if (rows.length === 0) return NextResponse.json({ error: 'Nenhum dado encontrado no ficheiro' }, { status: 400 });
     
     // 1. Get mappings for auto-assignment
     const mappings = await prisma.descriptionMapping.findMany();
@@ -36,36 +63,33 @@ export async function POST(request: NextRequest) {
     let latestDate: Date | null = null;
     const errors: string[] = [];
 
-    for (const line of dataLines) {
-      const parts = line.split('\t');
-      if (parts.length < 6) continue;
-      
-      let description = '';
+    for (const row of rows) {
+      let description = row.description?.toString() || '';
       try {
-        const [dateMov, , desc, importance, , balanceStr] = parts;
-        description = desc;
-        const dateParts = dateMov.split('/');
+        if (!row.dateMov || !row.importance) continue;
 
-        if (dateParts.length < 3) continue;
-
-        // Bank extract uses M/D/YY format (American)
-        const m = parseInt(dateParts[0]);
-        const d = parseInt(dateParts[1]);
-        let y = parseInt(dateParts[2]);
+        let date: Date;
+        if (row.dateMov instanceof Date) {
+          date = row.dateMov;
+          date.setHours(12, 0, 0, 0);
+        } else {
+          const dateParts = row.dateMov.toString().split(/[\/\-]/);
+          if (dateParts.length < 3) continue;
+          const m = parseInt(dateParts[0]);
+          const d = parseInt(dateParts[1]);
+          let y = parseInt(dateParts[2]);
+          if (y < 100) y += 2000;
+          date = new Date(y, m - 1, d, 12, 0, 0);
+        }
         
-        // Handle 2-digit vs 4-digit years safely
-        if (y < 100) y += 2000;
-        
-        // Use noon to avoid TZ shift bugs
-        const date = new Date(y, m - 1, d, 12, 0, 0);
-        
-        const parseAmount = (s: string) => {
-          const cleaned = s.replace(/"/g, '').replace(/\./g, '').replace(',', '.');
+        const parseAmount = (val: any) => {
+          if (typeof val === 'number') return val;
+          const cleaned = val.toString().replace(/"/g, '').replace(/\./g, '').replace(',', '.');
           return parseFloat(cleaned);
         };
 
-        const amount = parseAmount(importance);
-        const currentBalance = parseAmount(balanceStr);
+        const amount = parseAmount(row.importance);
+        const currentBalance = parseAmount(row.balanceStr);
 
         if (!latestDate || date >= latestDate) {
           latestDate = date;
