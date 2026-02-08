@@ -313,9 +313,9 @@ export async function GET(request: NextRequest) {
       expensesByCreditor[label].amount += Math.abs(tx.amount);
     }
 
-    const despesasCategories = Object.values(expensesByCreditor).sort((a, b) =>
-      a.label.localeCompare(b.label)
-    );
+    const despesasCategories = Object.values(expensesByCreditor)
+      .filter(c => c.amount > 0.01)
+      .sort((a, b) => a.label.localeCompare(b.label));
     const totalDespesasOperacionais = despesasCategories.reduce((sum, c) => sum + c.amount, 0);
     const totalDespesasGeral = totalDespesasOperacionais + totalReforcoPoupanca;
 
