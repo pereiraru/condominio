@@ -5,10 +5,10 @@ import { authOptions } from '@/lib/auth';
 import * as XLSX from 'xlsx';
 
 interface BankRow {
-  dateMov: string | Date;
+  dateMov: string;
   description: string;
-  importance: string | number;
-  balanceStr: string | number;
+  importance: string;
+  balanceStr: string;
 }
 
 export async function POST(request: NextRequest) {
@@ -26,36 +26,54 @@ export async function POST(request: NextRequest) {
     let rows: BankRow[] = [];
 
     if (file.name.toLowerCase().endsWith('.txt')) {
+      // TXT: Windows-1252 encoded, tab-separated
       const decoder = new TextDecoder('windows-1252');
       const content = decoder.decode(buffer);
       const lines = content.split(/\r?\n/).filter(line => line.trim() !== '');
       if (lines.length < 2) return NextResponse.json({ error: 'Empty file' }, { status: 400 });
-      
+
       const dataLines = lines.slice(1);
       rows = dataLines.map(line => {
         const parts = line.split('\t');
         return {
-          dateMov: parts[0],
+          dateMov: parts[0] || '',
           description: parts[2] || '',
-          importance: parts[3],
-          balanceStr: parts[5]
+          importance: parts[3] || '',
+          balanceStr: parts[5] || ''
         };
       });
     } else {
+      // XLS/XLSX: Read twice - cellDates for correct dates, raw:false for formatted amounts
       const workbook = XLSX.read(buffer, { type: 'buffer', cellDates: true });
       const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-      const excelData = XLSX.utils.sheet_to_json<Record<string, string | number | Date>>(firstSheet);
-      
-      rows = excelData.map(r => ({
-        dateMov: (r['DATA MOVIMENTO'] || r['Data Movimento'] || r['Data']) as string | Date,
-        description: (r['DESCRIÇÃO'] || r['Descrição'] || r['Descricao'] || '').toString(),
-        importance: (r['IMPORTÂNCIA'] || r['Importância'] || r['Valor']) as string | number,
-        balanceStr: (r['SALDO CONTABILÍSTICO'] || r['Saldo Contabilístico'] || r['Saldo']) as string | number
-      }));
+
+      // Get dates from cellDates (handles timezone correctly)
+      const dataWithDates = XLSX.utils.sheet_to_json<Record<string, any>>(firstSheet);
+      // Get formatted strings for amounts/balances (avoids cents vs euros issues)
+      const dataFormatted = XLSX.utils.sheet_to_json<Record<string, string>>(firstSheet, { raw: false });
+
+      rows = dataFormatted.map((r, i) => {
+        const dateRow = dataWithDates[i];
+        // Use the Date object from cellDates, format as M/D/YYYY for consistent parsing
+        const dateVal = dateRow?.['DATA MOVIMENTO'] || dateRow?.['Data Movimento'] || dateRow?.['Data'];
+        let dateStr = '';
+        if (dateVal instanceof Date) {
+          dateStr = `${dateVal.getUTCMonth() + 1}/${dateVal.getUTCDate()}/${dateVal.getUTCFullYear()}`;
+        } else {
+          dateStr = (r['DATA MOVIMENTO'] || r['Data Movimento'] || r['Data'] || '').toString();
+        }
+
+        return {
+          dateMov: dateStr,
+          description: (r['DESCRIÇÃO'] || r['Descrição'] || r['Descricao'] || '').toString(),
+          importance: (r['IMPORTÂNCIA'] || r['Importância'] || r['Valor'] || '').toString(),
+          balanceStr: (r['SALDO CONTABILÍSTICO'] || r['Saldo Contabilístico'] || r['Saldo'] || '').toString()
+        };
+      });
     }
 
     if (rows.length === 0) return NextResponse.json({ error: 'Nenhum dado encontrado no ficheiro' }, { status: 400 });
-    
+
     const mappings = await prisma.descriptionMapping.findMany();
 
     let importedCount = 0;
@@ -66,73 +84,87 @@ export async function POST(request: NextRequest) {
     let latestDate: Date | null = null;
     const errors: string[] = [];
 
+    // Parse Portuguese number format: "1.223,18" → 1223.18
+    const parseAmount = (val: string): number => {
+      if (!val) return 0;
+      const cleaned = val.replace(/"/g, '').replace(/\./g, '').replace(',', '.');
+      return parseFloat(cleaned);
+    };
+
+    // Strip non-ASCII for fuzzy description matching (encoding differences)
+    const stripNonAscii = (s: string) => s.replace(/[^\x20-\x7E]/g, '').trim();
+
     for (const row of rows) {
       const description = row.description.trim();
       try {
-        if (!row.dateMov || row.importance === undefined) continue;
+        if (!row.dateMov || !row.importance) continue;
 
-        let date: Date;
-        if (row.dateMov instanceof Date) {
-          date = row.dateMov;
-          date.setHours(12, 0, 0, 0);
-        } else {
-          const dateParts = row.dateMov.toString().split(/[\/\-]/);
-          if (dateParts.length < 3) continue;
-          // American format M/D/YY from bank file
-          const m = parseInt(dateParts[0]);
-          const d = parseInt(dateParts[1]);
-          let y = parseInt(dateParts[2]);
-          if (y < 100) y += 2000;
-          date = new Date(y, m - 1, d, 12, 0, 0);
+        // Parse date: M/D/YY format (American, from bank export)
+        const dateParts = row.dateMov.split(/[\/\-]/);
+        if (dateParts.length < 3) continue;
+        const m = parseInt(dateParts[0]);
+        const d = parseInt(dateParts[1]);
+        let y = parseInt(dateParts[2]);
+        if (y < 100) y += 2000;
+        // Use noon to avoid timezone shift
+        const date = new Date(y, m - 1, d, 12, 0, 0);
+
+        if (isNaN(date.getTime()) || m < 1 || m > 12 || d < 1 || d > 31) {
+          errors.push(`Data inválida: ${row.dateMov}`);
+          continue;
         }
-        
-        const parseAmount = (val: string | number): number => {
-          if (typeof val === 'number') return val;
-          if (!val) return 0;
-          const cleaned = val.toString().replace(/"/g, '').replace(/\./g, '').replace(',', '.');
-          return parseFloat(cleaned);
-        };
 
         const amount = parseAmount(row.importance);
         const currentBalance = parseAmount(row.balanceStr);
+
+        if (isNaN(amount) || amount === 0) continue;
 
         if (!latestDate || date >= latestDate) {
           latestDate = date;
           latestBalance = currentBalance;
         }
 
+        // Duplicate detection: try exact match first, then fuzzy (encoding-safe)
         let existing = await prisma.transaction.findFirst({
-          where: { date, amount, description, balance: currentBalance }
+          where: { date, amount, description }
         });
 
         if (!existing) {
-          existing = await prisma.transaction.findFirst({
-            where: { date, amount, description }
+          // Fuzzy match: same date + amount, matching ASCII description prefix
+          // Handles encoding differences (CONCEIÇÃO vs CONCEI¸¶O)
+          const descAscii = stripNonAscii(description).substring(0, 20);
+          const candidates = await prisma.transaction.findMany({
+            where: { date, amount }
           });
+          if (candidates.length > 0) {
+            existing = candidates.find(c =>
+              stripNonAscii(c.description).substring(0, 20) === descAscii
+            ) || null;
+          }
+        }
 
-          if (existing && !existing.balance && !isNaN(currentBalance)) {
+        if (existing) {
+          // Update balance if missing on existing record
+          if (!existing.balance && !isNaN(currentBalance)) {
             await prisma.transaction.update({
               where: { id: existing.id },
               data: { balance: currentBalance }
             });
             updatedCount++;
-            duplicateCount++;
-            continue;
           }
-        }
-
-        if (existing) {
           duplicateCount++;
           continue;
         }
 
+        // Auto-assign unit/creditor via description mappings
         let unitId: string | null = null;
         let creditorId: string | null = null;
         let category: string | null = null;
-        const type: string = amount > 0 ? 'payment' : 'expense';
+        let type: string = amount > 0 ? 'payment' : 'expense';
 
         if (description.includes('POUPANÇA') || description.includes('027-15.010650-1')) {
           category = 'savings';
+          type = 'transfer';
           autoAssignedCount++;
         } else {
           const mapping = mappings.find(m => description.toUpperCase().includes(m.pattern.toUpperCase()));
@@ -162,6 +194,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Update bank account snapshot with latest balance
     if (latestDate && !isNaN(latestBalance)) {
       let bankAccount = await prisma.bankAccount.findFirst({
         where: { name: { contains: 'Montepio' }, accountType: 'current' }
@@ -197,20 +230,21 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Ensure savings bank account exists if savings transactions found
     if (importedCount > 0 || updatedCount > 0) {
-        const hasSavings = await prisma.transaction.findFirst({ where: { category: 'savings' } });
-        if (hasSavings) {
-            const savExists = await prisma.bankAccount.findFirst({ where: { accountType: 'savings' } });
-            if (!savExists) {
-                await prisma.bankAccount.create({
-                    data: { name: 'Montepio Poupança', accountType: 'savings' }
-                });
-            }
+      const hasSavings = await prisma.transaction.findFirst({ where: { category: 'savings' } });
+      if (hasSavings) {
+        const savExists = await prisma.bankAccount.findFirst({ where: { accountType: 'savings' } });
+        if (!savExists) {
+          await prisma.bankAccount.create({
+            data: { name: 'Montepio Poupança', accountType: 'savings' }
+          });
         }
+      }
     }
 
     return NextResponse.json({
-      message: `Sucesso: ${importedCount} novas transações, ${duplicateCount} duplicadas ignoradas.`,
+      message: `Sucesso: ${importedCount} novas transações, ${duplicateCount} duplicadas ignoradas${updatedCount > 0 ? `, ${updatedCount} saldos atualizados` : ''}.`,
       importedCount,
       duplicateCount,
       updatedCount,
