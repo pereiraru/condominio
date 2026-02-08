@@ -211,64 +211,66 @@ export async function GET(request: NextRequest) {
     });
 
     // Build creditor data (despesas)
-    const creditorData = creditors.map((creditor) => {
-      const months: Record<
-        string,
-        { paid: number; expected: number; transactions: { id: string; amount: number; date: string; description: string }[] }
-      > = {};
-      let totalPaid = 0;
-      let totalExpected = 0;
+    const creditorData = creditors
+      .map((creditor) => {
+        const months: Record<
+          string,
+          { paid: number; expected: number; transactions: { id: string; amount: number; date: string; description: string }[] }
+        > = {};
+        let totalPaid = 0;
+        let totalExpected = 0;
 
-      for (let m = 1; m <= 12; m++) {
-        const monthStr = `${year}-${m.toString().padStart(2, '0')}`;
-        const monthAllocs = yearAllocations.filter(
-          (a) => a.transaction.creditorId === creditor.id && a.month === monthStr && a.transaction.amount < 0
-        );
-        const paid = monthAllocs.reduce((sum, a) => sum + Math.abs(a.amount), 0);
-        
-        let expected = 0;
-        if (creditor.isFixed) {
-          const feeData = getTotalFeeForMonth(
-            creditor.feeHistory as FeeHistoryRecord[],
-            [], // Creditors don't have extra charges
-            monthStr,
-            creditor.amountDue ?? 0
+        for (let m = 1; m <= 12; m++) {
+          const monthStr = `${year}-${m.toString().padStart(2, '0')}`;
+          const monthAllocs = yearAllocations.filter(
+            (a) => a.transaction.creditorId === creditor.id && a.month === monthStr && a.transaction.amount < 0
           );
-          expected = feeData.total;
+          const paid = monthAllocs.reduce((sum, a) => sum + Math.abs(a.amount), 0);
+          
+          let expected = 0;
+          if (creditor.isFixed) {
+            const feeData = getTotalFeeForMonth(
+              creditor.feeHistory as FeeHistoryRecord[],
+              [], // Creditors don't have extra charges
+              monthStr,
+              creditor.amountDue ?? 0
+            );
+            expected = feeData.total;
+          }
+
+          months[monthStr] = {
+            paid,
+            expected,
+            transactions: monthAllocs.map((a) => ({
+              id: a.transaction.id,
+              amount: Math.abs(a.amount),
+              date: a.transaction.date.toISOString(),
+              description: a.transaction.description,
+            })),
+          };
+          totalPaid += paid;
+          totalExpected += expected;
         }
 
-        months[monthStr] = {
-          paid,
-          expected,
-          transactions: monthAllocs.map((a) => ({
-            id: a.transaction.id,
-            amount: Math.abs(a.amount),
-            date: a.transaction.date.toISOString(),
-            description: a.transaction.description,
-          })),
+        const pastYearsDebt = calculatePastYearsDebt(
+          creditor.id,
+          'creditor',
+          creditor.feeHistory as FeeHistoryRecord[],
+          creditor.amountDue ?? 0,
+          []
+        );
+
+        return {
+          id: creditor.id,
+          code: creditor.name,
+          name: creditor.name,
+          months,
+          totalPaid,
+          totalExpected,
+          pastYearsDebt,
         };
-        totalPaid += paid;
-        totalExpected += expected;
-      }
-
-      const pastYearsDebt = calculatePastYearsDebt(
-        creditor.id,
-        'creditor',
-        creditor.feeHistory as FeeHistoryRecord[],
-        creditor.amountDue ?? 0,
-        []
-      );
-
-      return {
-        id: creditor.id,
-        code: creditor.name,
-        name: creditor.name,
-        months,
-        totalPaid,
-        totalExpected,
-        pastYearsDebt,
-      };
-    });
+      })
+      .filter((c) => c.totalPaid > 0.01 || c.totalExpected > 0.01 || c.pastYearsDebt > 0.01);
 
     // Calculate totals
     const totalReceitas = unitData.reduce((sum, u) => sum + u.totalPaid, 0);
