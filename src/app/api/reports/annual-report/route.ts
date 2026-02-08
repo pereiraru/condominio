@@ -223,7 +223,7 @@ export async function GET(request: NextRequest) {
         if (category === 'savings') continue;
         const label = creditor?.name || tx.category || 'Outros';
         if (!paidInvoicesByCategory[category]) paidInvoicesByCategory[category] = { category, categoryLabel: label, invoices: [], categoryTotal: 0, categoryTotalPaid: 0, documentCount: 0 };
-        paidInvoicesByCategory[category].invoices.push({ date: tx.date, description: tx.description, amountDue: Math.abs(tx.amount), amountPaid: Math.abs(tx.amount), supplier: label, invoiceNumber: '-', entryNumber: '-' });
+        paidInvoicesByCategory[category].invoices.push({ id: tx.id, date: tx.date, description: tx.description, amountDue: Math.abs(tx.amount), amountPaid: Math.abs(tx.amount), supplier: label, invoiceNumber: '-', entryNumber: '-' });
         paidInvoicesByCategory[category].categoryTotal += Math.abs(tx.amount);
         paidInvoicesByCategory[category].categoryTotalPaid += Math.abs(tx.amount);
         paidInvoicesByCategory[category].documentCount++;
@@ -253,7 +253,7 @@ export async function GET(request: NextRequest) {
         receitas: { orcamentoExercicio: totalBaseFeeExpected, quotasExtra: Object.values(extraChargeBreakdown), subTotalExercicio: totalBaseFeeExpected + totalExtraChargesExpected, receitasAnosAnteriores, receitasDesteExercicio, totalReceitas },
         despesas: { categories: despesasCategories, totalDespesasOperacionais, totalDespesas: totalDespesasGeral, totalReforcoPoupanca },
         saldoExercicio, saldoTransitar: saldoInicialTransitar, contasBancarias, totalBankBalance, saldoFinalDisponivel,
-        despesasPorLiquidar: finalUnpaid.reduce((sum, c) => sum + (c.categoryTotal - c.categoryTotalPaid), 0),
+        despesasPorLiquidar: finalUnpaid.reduce((sum: number, c: any) => sum + (c.categoryTotal - c.categoryTotalPaid), 0),
         quotasPorLiquidar: { total: unitDebtData.reduce((sum, u) => sum + u.saldo, 0) }
       },
       paidInvoices: finalPaid, unpaidInvoices: finalUnpaid,
