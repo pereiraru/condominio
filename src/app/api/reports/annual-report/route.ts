@@ -13,7 +13,6 @@ interface VirtualInvoice {
   supplier: string;
   invoiceNumber: string;
   entryNumber: string;
-  creditor?: { name: string; category: string };
 }
 
 interface ReportCategoryGroup {
@@ -119,7 +118,7 @@ export async function GET(request: NextRequest) {
       const unitExtraCharges = allExtraCharges.filter((e) => e.unitId === null || e.unitId === unit.id) as ExtraChargeRecord[];
       for (let m = 1; m <= 12; m++) {
         const monthStr = `${year}-${m.toString().padStart(2, '0')}`;
-        const feeData = getTotalFeeForMonth(unit.feeHistory as any as FeeHistoryRecord[], unitExtraCharges, monthStr, unit.monthlyFee, unit.id);
+        const feeData = getTotalFeeForMonth(unit.feeHistory as unknown as FeeHistoryRecord[], unitExtraCharges, monthStr, unit.monthlyFee, unit.id);
         totalBaseFeeExpected += feeData.baseFee;
         for (const extra of feeData.extras) {
           const key = extra.id || extra.description;
@@ -173,9 +172,9 @@ export async function GET(request: NextRequest) {
 
     const unitDebtData = units.map((unit) => {
       const unitExtraCharges = allExtraCharges.filter((e) => e.unitId === null || e.unitId === unit.id) as ExtraChargeRecord[];
-      const saldoInicial = calculatePastYearsDebt(unit.id, 'unit', unit.feeHistory as any as FeeHistoryRecord[], unit.monthlyFee, unitExtraCharges);
+      const saldoInicial = calculatePastYearsDebt(unit.id, 'unit', unit.feeHistory as unknown as FeeHistoryRecord[], unit.monthlyFee, unitExtraCharges);
       let previsto = 0;
-      for (let m = 1; m <= 12; m++) previsto += getTotalFeeForMonth(unit.feeHistory as any as FeeHistoryRecord[], unitExtraCharges, `${year}-${m.toString().padStart(2, '0')}`, unit.monthlyFee, unit.id).total;
+      for (let m = 1; m <= 12; m++) previsto += getTotalFeeForMonth(unit.feeHistory as unknown as FeeHistoryRecord[], unitExtraCharges, `${year}-${m.toString().padStart(2, '0')}`, unit.monthlyFee, unit.id).total;
       const recebido = incomeAllocations.filter((a) => a.transaction.unitId === unit.id).reduce((sum, a) => sum + a.amount, 0);
       const saldo = saldoInicial + previsto - recebido;
       const currentOwner = unit.owners?.find((o) => o.endMonth === null);
@@ -184,11 +183,11 @@ export async function GET(request: NextRequest) {
 
     const creditorDebts = creditors.filter(c => c.isFixed).map(creditor => {
       const items: { description: string; amount: number }[] = [];
-      const pastDebt = calculatePastYearsDebt(creditor.id, 'creditor', creditor.feeHistory as any as FeeHistoryRecord[], creditor.amountDue || 0, []);
+      const pastDebt = calculatePastYearsDebt(creditor.id, 'creditor', creditor.feeHistory as unknown as FeeHistoryRecord[], creditor.amountDue || 0, []);
       if (pastDebt > 0.01) items.push({ description: 'Dívida de Anos Anteriores', amount: pastDebt });
       for (let m = 1; m <= 12; m++) {
         const monthStr = `${year}-${m.toString().padStart(2, '0')}`;
-        const expected = getTotalFeeForMonth(creditor.feeHistory as any as FeeHistoryRecord[], [], monthStr, creditor.amountDue || 0, creditor.id).total;
+        const expected = getTotalFeeForMonth(creditor.feeHistory as unknown as FeeHistoryRecord[], [], monthStr, creditor.amountDue || 0, creditor.id).total;
         const paidResult = yearAllocations.filter(a => a.transaction.creditorId === creditor.id && a.month === monthStr).reduce((sum, a) => sum + Math.abs(a.amount), 0);
         if (expected - paidResult > 0.01) items.push({ description: `${monthStr}`, amount: expected - paidResult });
       }
