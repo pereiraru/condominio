@@ -659,6 +659,54 @@ export async function GET(request: NextRequest) {
       })
       .filter(c => c.unitTotal > 0.01);
 
+    // Build paid expenses from transactions (grouped by creditor) for Section 4
+    // This supplements/replaces supplier invoices when those don't exist
+    const paidExpensesByCreditor: Record<string, {
+      category: string;
+      categoryLabel: string;
+      transactions: { date: string; description: string; amount: number }[];
+      categoryTotal: number;
+    }> = {};
+
+    for (const tx of currentYearExpenseTransactions) {
+      const creditor = creditors.find((c) => c.id === tx.creditorId);
+      const category = creditor?.category || tx.category || 'other';
+
+      // Skip unassigned duplicates (same logic as above)
+      if (!tx.creditorId && !tx.category) {
+        const dateKey = tx.date.toISOString().split('T')[0];
+        if (assignedExpenseKeys.has(`${dateKey}|${tx.amount}`)) {
+          continue;
+        }
+      }
+
+      // Skip savings transfers — shown separately
+      if (category === 'savings') continue;
+
+      const label = creditor?.name || tx.category || 'Outros';
+      const key = creditor?.id || tx.category || 'outros';
+
+      if (!paidExpensesByCreditor[key]) {
+        paidExpensesByCreditor[key] = { category, categoryLabel: label, transactions: [], categoryTotal: 0 };
+      }
+      paidExpensesByCreditor[key].transactions.push({
+        date: tx.date.toISOString().split('T')[0],
+        description: tx.description,
+        amount: Math.abs(tx.amount),
+      });
+      paidExpensesByCreditor[key].categoryTotal += Math.abs(tx.amount);
+    }
+
+    // Sort transactions within each group by date
+    for (const group of Object.values(paidExpensesByCreditor)) {
+      group.transactions.sort((a, b) => a.date.localeCompare(b.date));
+    }
+
+    const paidExpenseGroups = Object.values(paidExpensesByCreditor).sort((a, b) =>
+      a.categoryLabel.localeCompare(b.categoryLabel)
+    );
+    const totalPaidExpenses = paidExpenseGroups.reduce((sum, g) => sum + g.categoryTotal, 0);
+
     const totalPaidInvoicesAmount = paidInvoices.reduce((sum, c) => sum + c.categoryTotalPaid, 0);
     const totalUnpaidInvoicesAmount = unpaidInvoices.reduce((sum, c) => sum + c.categoryTotal - c.categoryTotalPaid, 0);
     const totalUnpaidFixedExpenses = creditorDebts.reduce((sum, c) => sum + c.unitTotal, 0);
@@ -762,7 +810,17 @@ export async function GET(request: NextRequest) {
       // Section 3
       creditNotes,
 
-      // Section 4
+      // Section 4: Paid expenses from transactions (by creditor)
+      paidExpenses: paidExpenseGroups.map((g) => ({
+        category: g.category,
+        categoryLabel: g.categoryLabel,
+        transactions: g.transactions,
+        categoryTotal: g.categoryTotal,
+        transactionCount: g.transactions.length,
+      })),
+      totalPaidExpenses,
+
+      // Section 4 (legacy): Paid supplier invoices
       paidInvoices: paidInvoices.map((c) => ({
         category: c.category,
         categoryLabel: c.categoryLabel,

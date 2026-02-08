@@ -107,8 +107,8 @@ export default function RelatorioContasPage() {
             <Section3CreditNotes data={data.creditNotes} year={data.year} />
 
             <Section4PaidInvoices
-              data={data.paidInvoices}
-              totalPaid={data.totalPaidInvoices}
+              data={data.paidExpenses}
+              totalPaid={data.totalPaidExpenses}
               year={data.year}
             />
 
