@@ -19,52 +19,47 @@ jobs:
           echo "path=$DB_PATH" >> $GITHUB_OUTPUT
           echo "Database path: $DB_PATH"
 
-      - name: Apply Date Fixes
+      - name: Backup database
         run: |
           DB="${{ steps.setup.outputs.path }}"
-          echo "Applying year fixes from SQL script..."
+          cp "$DB" "${DB}.bak.$(date +%Y%m%d%H%M%S)"
+          echo "Backup created."
+
+      - name: "Pre-fix: Count records"
+        run: |
+          DB="${{ steps.setup.outputs.path }}"
+          echo "=== BEFORE FIX ==="
+          echo "Transactions: $(sqlite3 "$DB" "SELECT COUNT(*) FROM [Transaction];")"
+          echo "TransactionMonth: $(sqlite3 "$DB" "SELECT COUNT(*) FROM TransactionMonth;")"
+          echo "BankAccountSnapshot: $(sqlite3 "$DB" "SELECT COUNT(*) FROM BankAccountSnapshot;")"
+          echo "Garagem allocs at 37.50: $(sqlite3 "$DB" "SELECT COUNT(*) FROM TransactionMonth tm JOIN [Transaction] t ON tm.transactionId = t.id JOIN Unit u ON t.unitId = u.id WHERE u.code = 'Garagem' AND tm.amount = 37.5;")"
+
+      - name: Apply fixes
+        run: |
+          DB="${{ steps.setup.outputs.path }}"
+          echo "Applying fixes from SQL script..."
           sqlite3 "$DB" < scripts/fix-prod-years.sql
           echo "Fixes applied."
 
-      - name: "Diagnose: Full prod DB state"
+      - name: "Post-fix: Verify"
         run: |
           DB="${{ steps.setup.outputs.path }}"
-
-          echo "=== TABLE COUNTS ==="
-          for t in Unit Owner Transaction TransactionMonth FeeHistory ExtraCharge Creditor DescriptionMapping Document BankAccount BankAccountSnapshot SupplierInvoice Budget BudgetLine; do
-            COUNT=$(sqlite3 "$DB" "SELECT COUNT(*) FROM '$t';" 2>/dev/null || echo "TABLE NOT FOUND")
-            echo "  $t: $COUNT"
-          done
-
-          echo ""
-          echo "=== UNITS ==="
-          sqlite3 "$DB" "SELECT id, code, previousBalance FROM Unit ORDER BY code;"
-
-          echo ""
-          echo "=== FEE HISTORY (all) ==="
-          sqlite3 "$DB" "SELECT fh.id, u.code, fh.effectiveFrom, fh.effectiveTo, fh.amount FROM FeeHistory fh JOIN Unit u ON fh.unitId = u.id ORDER BY u.code, fh.effectiveFrom;"
-
-          echo ""
-          echo "=== TRANSACTIONS WITH CESAR ==="
-          sqlite3 "$DB" "SELECT t.id, t.date, t.amount, t.description, u.code as unit FROM 'Transaction' t LEFT JOIN Unit u ON t.unitId = u.id WHERE t.description LIKE '%CESAR%' ORDER BY t.date;"
-
-          echo ""
-          echo "=== GARAGEM TRANSACTIONS ==="
-          sqlite3 "$DB" "SELECT t.id, t.date, t.amount, t.description FROM 'Transaction' t JOIN Unit u ON t.unitId = u.id WHERE u.code = 'Garagem' ORDER BY t.date;"
+          echo "=== AFTER FIX ==="
+          echo "Transactions: $(sqlite3 "$DB" "SELECT COUNT(*) FROM [Transaction];")"
+          echo "TransactionMonth: $(sqlite3 "$DB" "SELECT COUNT(*) FROM TransactionMonth;")"
+          echo "BankAccountSnapshot: $(sqlite3 "$DB" "SELECT COUNT(*) FROM BankAccountSnapshot;")"
 
           echo ""
           echo "=== GARAGEM ALLOCATIONS ==="
-          sqlite3 "$DB" "SELECT tm.id, tm.transactionId, tm.month, tm.amount FROM TransactionMonth tm JOIN 'Transaction' t ON tm.transactionId = t.id JOIN Unit u ON t.unitId = u.id WHERE u.code = 'Garagem' ORDER BY tm.month;"
+          sqlite3 "$DB" "SELECT tm.month, tm.amount FROM TransactionMonth tm JOIN [Transaction] t ON tm.transactionId = t.id JOIN Unit u ON t.unitId = u.id WHERE u.code = 'Garagem' ORDER BY tm.month;"
 
           echo ""
-          echo "=== TRANSACTIONS WITHOUT ALLOCATIONS ==="
-          sqlite3 "$DB" "SELECT COUNT(*) as unallocated FROM 'Transaction' t WHERE NOT EXISTS (SELECT 1 FROM TransactionMonth tm WHERE tm.transactionId = t.id);"
+          echo "=== YEAR DISTRIBUTION ==="
+          sqlite3 "$DB" "SELECT strftime('%Y', datetime(date/1000, 'unixepoch')) as yr, COUNT(*) FROM [Transaction] GROUP BY yr ORDER BY yr;"
 
           echo ""
-          echo "=== SAMPLE TRANSACTIONS (first 20) ==="
-          sqlite3 "$DB" "SELECT t.id, t.date, t.amount, t.description, u.code FROM 'Transaction' t LEFT JOIN Unit u ON t.unitId = u.id ORDER BY t.date LIMIT 20;"
-
-          echo ""
-          echo "=== ANNUAL REPORT API TEST (check for errors) ==="
-          # Try hitting the API from inside the container
-          docker exec condominio-app-1 wget -q -O - "http://localhost:3000/api/reports/annual-report?year=2025" 2>&1 | head -200 || echo "API CALL FAILED"
+          echo "=== TABLE COUNTS ==="
+          for t in Unit Owner Transaction TransactionMonth FeeHistory ExtraCharge Creditor DescriptionMapping Document BankAccount BankAccountSnapshot; do
+            COUNT=$(sqlite3 "$DB" "SELECT COUNT(*) FROM '$t';" 2>/dev/null || echo "TABLE NOT FOUND")
+            echo "  $t: $COUNT"
+          done

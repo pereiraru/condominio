@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { prisma } from '@/lib/prisma';
 import { authOptions } from '@/lib/auth';
-import iconv from 'iconv-lite';
 
 export async function POST(request: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -16,8 +15,9 @@ export async function POST(request: NextRequest) {
     if (!file) return NextResponse.json({ error: 'No file uploaded' }, { status: 400 });
 
     const buffer = Buffer.from(await file.arrayBuffer());
-    // Use ISO-8859-1 or Windows-1252 for Portuguese bank files
-    const content = iconv.decode(buffer, 'win1252');
+    // Use Windows-1252 for Portuguese bank files (TextDecoder is built-in, no external deps)
+    const decoder = new TextDecoder('windows-1252');
+    const content = decoder.decode(buffer);
     const lines = content.split(/\r?\n/).filter(line => line.trim() !== '');
 
     if (lines.length < 2) return NextResponse.json({ error: 'Empty file' }, { status: 400 });
@@ -45,11 +45,12 @@ export async function POST(request: NextRequest) {
         const [dateMov, , desc, importance, , balanceStr] = parts;
         description = desc;
         const dateParts = dateMov.split('/');
-        
+
         if (dateParts.length < 3) continue;
-        
-        const d = parseInt(dateParts[0]);
-        const m = parseInt(dateParts[1]);
+
+        // Bank extract uses M/D/YY format (American)
+        const m = parseInt(dateParts[0]);
+        const d = parseInt(dateParts[1]);
         let y = parseInt(dateParts[2]);
         
         // Handle 2-digit vs 4-digit years safely
