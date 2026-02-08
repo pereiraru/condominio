@@ -35,3 +35,23 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
 
   return NextResponse.json(snapshot, { status: 201 });
 }
+
+export async function DELETE(request: NextRequest) {
+  const session = await getServerSession(authOptions);
+  if (!session || session.user.role !== 'admin') {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
+  }
+
+  const { searchParams } = new URL(request.url);
+  const snapshotId = searchParams.get('snapshotId');
+
+  if (!snapshotId) {
+    return NextResponse.json({ error: 'Missing snapshot ID' }, { status: 400 });
+  }
+
+  await prisma.bankAccountSnapshot.delete({
+    where: { id: snapshotId }
+  });
+
+  return NextResponse.json({ success: true });
+}

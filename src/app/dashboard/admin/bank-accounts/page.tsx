@@ -90,6 +90,22 @@ export default function BankAccountsPage() {
     }
   }
 
+  async function handleDeleteSnapshot(accountId: string, snapshotId: string) {
+    if (!confirm('Tem certeza que deseja eliminar este registo de saldo?')) return;
+    try {
+      const res = await fetch(`/api/bank-accounts/${accountId}/snapshots?snapshotId=${snapshotId}`, {
+        method: 'DELETE',
+      });
+      if (res.ok) {
+        fetchAccounts();
+      } else {
+        alert('Erro ao eliminar registo');
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  }
+
   return (
     <div className="flex min-h-screen bg-gray-50">
       <Sidebar />
@@ -127,6 +143,7 @@ export default function BankAccountsPage() {
                         <th className="pb-2 font-medium">Data</th>
                         <th className="pb-2 font-medium">Saldo</th>
                         <th className="pb-2 font-medium">Notas</th>
+                        <th className="pb-2 font-medium text-right">Ações</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-50">
@@ -135,10 +152,19 @@ export default function BankAccountsPage() {
                           <td className="py-3 text-gray-600">{new Date(snapshot.date).toLocaleDateString('pt-PT')}</td>
                           <td className="py-3 font-bold text-gray-900">{snapshot.balance.toFixed(2)}€</td>
                           <td className="py-3 text-gray-500 italic">{snapshot.description || '-'}</td>
+                          <td className="py-3 text-right">
+                            <button 
+                              className="text-red-500 hover:text-red-700 transition-colors p-1"
+                              onClick={() => handleDeleteSnapshot(account.id, snapshot.id)}
+                              title="Eliminar registo"
+                            >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h14" /></svg>
+                            </button>
+                          </td>
                         </tr>
                       ))}
                       {(!account.snapshots || account.snapshots.length === 0) && (
-                        <tr><td colSpan={3} className="py-4 text-center text-gray-400">Sem registos de saldo</td></tr>
+                        <tr><td colSpan={4} className="py-4 text-center text-gray-400">Sem registos de saldo</td></tr>
                       )}
                     </tbody>
                   </table>
