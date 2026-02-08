@@ -48,6 +48,7 @@ export async function POST(request: NextRequest) {
       const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
 
       // Get dates from cellDates (handles timezone correctly)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const dataWithDates = XLSX.utils.sheet_to_json<Record<string, any>>(firstSheet);
       // Get formatted strings for amounts/balances (avoids cents vs euros issues)
       const dataFormatted = XLSX.utils.sheet_to_json<Record<string, string>>(firstSheet, { raw: false });
