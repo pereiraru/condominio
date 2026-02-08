@@ -659,47 +659,88 @@ export async function GET(request: NextRequest) {
       })
       .filter(c => c.unitTotal > 0.01);
 
-    // Build paid expenses from transactions (grouped by creditor) for Section 4
-    // This supplements/replaces supplier invoices when those don't exist
+    // Build paid expenses from month allocations (grouped by creditor) for Section 4
+    // Uses allocated amounts per month instead of raw transaction values
     const paidExpensesByCreditor: Record<string, {
       category: string;
       categoryLabel: string;
-      transactions: { date: string; description: string; amount: number }[];
+      months: { month: string; monthLabel: string; amount: number }[];
       categoryTotal: number;
     }> = {};
 
-    for (const tx of currentYearExpenseTransactions) {
-      const creditor = creditors.find((c) => c.id === tx.creditorId);
-      const category = creditor?.category || tx.category || 'other';
+    // Get expense allocations for the year (negative amounts = expenses)
+    const expenseAllocations = yearAllocations.filter(
+      (a) => a.transaction.amount < 0 && a.transaction.creditorId
+    );
 
-      // Skip unassigned duplicates (same logic as above)
-      if (!tx.creditorId && !tx.category) {
-        const dateKey = tx.date.toISOString().split('T')[0];
-        if (assignedExpenseKeys.has(`${dateKey}|${tx.amount}`)) {
-          continue;
-        }
-      }
+    for (const alloc of expenseAllocations) {
+      const creditor = creditors.find((c) => c.id === alloc.transaction.creditorId);
+      if (!creditor) continue;
+      const category = creditor.category || 'other';
 
-      // Skip savings transfers — shown separately
+      // Skip savings transfers
       if (category === 'savings') continue;
 
-      const label = creditor?.name || tx.category || 'Outros';
-      const key = creditor?.id || tx.category || 'outros';
+      const label = creditor.name;
+      const key = creditor.id;
 
       if (!paidExpensesByCreditor[key]) {
-        paidExpensesByCreditor[key] = { category, categoryLabel: label, transactions: [], categoryTotal: 0 };
+        paidExpensesByCreditor[key] = { category, categoryLabel: label, months: [], categoryTotal: 0 };
       }
-      paidExpensesByCreditor[key].transactions.push({
-        date: tx.date.toISOString().split('T')[0],
-        description: tx.description,
-        amount: Math.abs(tx.amount),
-      });
+
+      // Find or create month entry
+      let monthEntry = paidExpensesByCreditor[key].months.find(m => m.month === alloc.month);
+      if (!monthEntry) {
+        const mIdx = parseInt(alloc.month.split('-')[1]) - 1;
+        const mYear = alloc.month.split('-')[0];
+        const monthLabel = mIdx >= 0 && mIdx < 12
+          ? `${['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'][mIdx]} ${mYear}`
+          : alloc.month;
+        monthEntry = { month: alloc.month, monthLabel, amount: 0 };
+        paidExpensesByCreditor[key].months.push(monthEntry);
+      }
+      monthEntry.amount += Math.abs(alloc.amount);
+      paidExpensesByCreditor[key].categoryTotal += Math.abs(alloc.amount);
+    }
+
+    // Also include expenses without creditorId (unassigned) that are not duplicates
+    for (const tx of currentYearExpenseTransactions) {
+      if (tx.creditorId) continue; // Already handled via allocations
+      const category = tx.category || 'other';
+      if (category === 'savings') continue;
+
+      // Skip unassigned duplicates
+      if (!tx.category) {
+        const dateKey = tx.date.toISOString().split('T')[0];
+        if (assignedExpenseKeys.has(`${dateKey}|${tx.amount}`)) continue;
+      }
+
+      const label = tx.category || 'Outros';
+      const key = tx.category || 'outros';
+
+      if (!paidExpensesByCreditor[key]) {
+        paidExpensesByCreditor[key] = { category, categoryLabel: label, months: [], categoryTotal: 0 };
+      }
+
+      // Group by transaction month
+      const txMonth = tx.date.toISOString().substring(0, 7);
+      let monthEntry = paidExpensesByCreditor[key].months.find(m => m.month === txMonth);
+      if (!monthEntry) {
+        const mIdx = parseInt(txMonth.split('-')[1]) - 1;
+        const mYear = txMonth.split('-')[0];
+        const monthLabel = mIdx >= 0 && mIdx < 12
+          ? `${['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'][mIdx]} ${mYear}`
+          : txMonth;
+        monthEntry = { month: txMonth, monthLabel, amount: 0 };
+        paidExpensesByCreditor[key].months.push(monthEntry);
+      }
+      monthEntry.amount += Math.abs(tx.amount);
       paidExpensesByCreditor[key].categoryTotal += Math.abs(tx.amount);
     }
 
-    // Sort transactions within each group by date
+    // Sort months within each group
     for (const group of Object.values(paidExpensesByCreditor)) {
-      group.transactions.sort((a, b) => a.date.localeCompare(b.date));
+      group.months.sort((a, b) => a.month.localeCompare(b.month));
     }
 
     const paidExpenseGroups = Object.values(paidExpensesByCreditor).sort((a, b) =>
@@ -886,13 +927,12 @@ export async function GET(request: NextRequest) {
       // Section 3
       creditNotes,
 
-      // Section 4: Paid expenses from transactions (by creditor)
+      // Section 4: Paid expenses by creditor (monthly allocations)
       paidExpenses: paidExpenseGroups.map((g) => ({
         category: g.category,
         categoryLabel: g.categoryLabel,
-        transactions: g.transactions,
+        months: g.months,
         categoryTotal: g.categoryTotal,
-        transactionCount: g.transactions.length,
       })),
       totalPaidExpenses,
 
