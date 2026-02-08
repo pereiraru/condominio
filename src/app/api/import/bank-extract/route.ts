@@ -5,10 +5,10 @@ import { authOptions } from '@/lib/auth';
 import * as XLSX from 'xlsx';
 
 interface BankRow {
-  dateMov: any;
+  dateMov: string | Date;
   description: string;
-  importance: any;
-  balanceStr: any;
+  importance: string | number;
+  balanceStr: string | number;
 }
 
 export async function POST(request: NextRequest) {
@@ -44,13 +44,13 @@ export async function POST(request: NextRequest) {
     } else {
       const workbook = XLSX.read(buffer, { type: 'buffer', cellDates: true });
       const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-      const excelData = XLSX.utils.sheet_to_json<Record<string, any>>(firstSheet);
+      const excelData = XLSX.utils.sheet_to_json<Record<string, string | number | Date>>(firstSheet);
       
       rows = excelData.map(r => ({
-        dateMov: r['DATA MOVIMENTO'] || r['Data Movimento'] || r['Data'],
+        dateMov: (r['DATA MOVIMENTO'] || r['Data Movimento'] || r['Data']) as string | Date,
         description: (r['DESCRIÇÃO'] || r['Descrição'] || r['Descricao'] || '').toString(),
-        importance: r['IMPORTÂNCIA'] || r['Importância'] || r['Valor'],
-        balanceStr: r['SALDO CONTABILÍSTICO'] || r['Saldo Contabilístico'] || r['Saldo']
+        importance: (r['IMPORTÂNCIA'] || r['Importância'] || r['Valor']) as string | number,
+        balanceStr: (r['SALDO CONTABILÍSTICO'] || r['Saldo Contabilístico'] || r['Saldo']) as string | number
       }));
     }
 
@@ -67,7 +67,7 @@ export async function POST(request: NextRequest) {
     const errors: string[] = [];
 
     for (const row of rows) {
-      const description = row.description?.trim() || '';
+      const description = row.description.trim();
       try {
         if (!row.dateMov || row.importance === undefined) continue;
 
@@ -78,6 +78,7 @@ export async function POST(request: NextRequest) {
         } else {
           const dateParts = row.dateMov.toString().split(/[\/\-]/);
           if (dateParts.length < 3) continue;
+          // American format M/D/YY from bank file
           const m = parseInt(dateParts[0]);
           const d = parseInt(dateParts[1]);
           let y = parseInt(dateParts[2]);
@@ -85,7 +86,7 @@ export async function POST(request: NextRequest) {
           date = new Date(y, m - 1, d, 12, 0, 0);
         }
         
-        const parseAmount = (val: any): number => {
+        const parseAmount = (val: string | number): number => {
           if (typeof val === 'number') return val;
           if (!val) return 0;
           const cleaned = val.toString().replace(/"/g, '').replace(/\./g, '').replace(',', '.');
