@@ -19,6 +19,13 @@ jobs:
           echo "path=$DB_PATH" >> $GITHUB_OUTPUT
           echo "Database path: $DB_PATH"
 
+      - name: Apply Date Fixes
+        run: |
+          DB="${{ steps.setup.outputs.path }}"
+          echo "Applying year fixes from SQL script..."
+          sqlite3 "$DB" < scripts/fix-prod-years.sql
+          echo "Fixes applied."
+
       - name: "Diagnose: Full prod DB state"
         run: |
           DB="${{ steps.setup.outputs.path }}"
