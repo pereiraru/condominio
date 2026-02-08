@@ -482,12 +482,13 @@ export async function GET(request: NextRequest) {
       target[cat].categoryTotalPaid += invoice.amountPaid;
     }
 
-    const paidInvoices = Object.values(paidInvoicesByCategory).sort((a, b) =>
-      a.categoryLabel.localeCompare(b.categoryLabel)
-    );
-    const unpaidInvoices = Object.values(unpaidInvoicesByCategory).sort((a, b) =>
-      a.categoryLabel.localeCompare(b.categoryLabel)
-    );
+    const paidInvoices = Object.values(paidInvoicesByCategory)
+      .filter((c) => c.categoryTotalPaid > 0.01)
+      .sort((a, b) => a.categoryLabel.localeCompare(b.categoryLabel));
+
+    const unpaidInvoices = Object.values(unpaidInvoicesByCategory)
+      .filter((c) => (c.categoryTotal - c.categoryTotalPaid) > 0.01)
+      .sort((a, b) => a.categoryLabel.localeCompare(b.categoryLabel));
 
     // =========================================
     // SECTION 6: Valores por Liquidar por Fração (Detailed)
