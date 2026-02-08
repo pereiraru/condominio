@@ -60,7 +60,6 @@ export async function GET(request: NextRequest) {
           snapshots: {
             where: {
               date: {
-                gte: new Date(`${year}-12-01`),
                 lte: new Date(`${year}-12-31T23:59:59`),
               },
             },
@@ -287,6 +286,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Expenses by creditor (excluding savings transfers)
+    // Prefer transactions with creditorId; skip unassigned duplicates from bank extract imports
     const expensesByCreditor: Record<string, { label: string; category: string; amount: number }> = {};
     let totalReforcoPoupanca = 0;
 
@@ -297,10 +297,29 @@ export async function GET(request: NextRequest) {
       }
     });
 
+    // Build a lookup of assigned transactions (with creditorId or category) by date+amount
+    // to detect unassigned duplicates from bank extract imports
+    const assignedExpenseKeys = new Set<string>();
+    for (const tx of currentYearExpenseTransactions) {
+      if (tx.creditorId || tx.category) {
+        // Round date to day for matching (some imports have noon offset)
+        const dateKey = tx.date.toISOString().split('T')[0];
+        assignedExpenseKeys.add(`${dateKey}|${tx.amount}`);
+      }
+    }
+
     for (const tx of currentYearExpenseTransactions) {
       const creditor = creditors.find((c) => c.id === tx.creditorId);
       const category = creditor?.category || tx.category || 'other';
-      
+
+      // Skip unassigned transactions that have a matching assigned duplicate
+      if (!tx.creditorId && !tx.category) {
+        const dateKey = tx.date.toISOString().split('T')[0];
+        if (assignedExpenseKeys.has(`${dateKey}|${tx.amount}`)) {
+          continue; // Skip this duplicate
+        }
+      }
+
       if (category === 'savings') {
         totalReforcoPoupanca += Math.abs(tx.amount);
         continue; // Don't count as standard expense
@@ -352,12 +371,16 @@ export async function GET(request: NextRequest) {
         balance += totalReforcoPoupanca;
       }
 
+      // Format snapshot date for display
+      const snapshotDate = snapshot ? snapshot.date.toISOString().split('T')[0] : null;
+
       return {
         id: account.id,
         name: account.name,
         accountType: account.accountType,
         balance,
         description: snapshot?.description ?? null,
+        snapshotDate,
       };
     });
     const totalBankBalance = contasBancarias.reduce((sum, c) => sum + c.balance, 0);
