@@ -252,7 +252,7 @@ export async function GET(request: NextRequest) {
         receitas: { orcamentoExercicio: totalBaseFeeExpected, quotasExtra: Object.values(extraChargeBreakdown), subTotalExercicio: totalBaseFeeExpected + totalExtraChargesExpected, receitasAnosAnteriores, receitasDesteExercicio, totalReceitas },
         despesas: { categories: despesasCategories, totalDespesasOperacionais, totalDespesas: totalDespesasGeral, totalReforcoPoupanca },
         saldoExercicio, saldoTransitar: saldoInicialTransitar, contasBancarias, totalBankBalance, saldoFinalDisponivel,
-        despesasPorLiquidar: finalUnpaid.reduce((sum: number, c: ReportCategoryGroup) => sum + (c.categoryTotal - c.categoryTotalPaid), 0),
+        despesasPorLiquidar: finalUnpaid.reduce((sum, c) => sum + (c.categoryTotal - c.categoryTotalPaid), 0),
         quotasPorLiquidar: { total: unitDebtData.reduce((sum, u) => sum + u.saldo, 0) }
       },
       paidInvoices: finalPaid, unpaidInvoices: finalUnpaid,
