@@ -4,14 +4,68 @@ import { prisma } from '@/lib/prisma';
 import { authOptions } from '@/lib/auth';
 import { getFeeForMonth, FeeHistoryRecord } from '@/lib/feeHistory';
 
-// Normalize a name for fuzzy matching: remove accents, uppercase, collapse spaces
+// Normalize a name for fuzzy matching: remove accents, garbled chars, uppercase, collapse spaces
 function normalizeName(name: string): string {
   return name
     .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '') // remove accents
+    .replace(/[\u0300-\u036f]/g, '') // remove combining diacritical marks
+    .replace(/[^\w\s.\-]/g, '')      // remove garbled CP1252 chars (¸¶¿ø etc.), keep dots/hyphens
     .toUpperCase()
     .replace(/\s+/g, ' ')
     .trim();
+}
+
+// Check if two words are similar (handles garbled encoding, truncation)
+function wordSimilar(a: string, b: string): boolean {
+  if (a === b) return true;
+  // Prefix match (handles truncation like "SIL" for "SILVA")
+  if (a.startsWith(b) || b.startsWith(a)) return true;
+  // Substring containment (handles garbled chars removing middle letters)
+  const shorter = a.length <= b.length ? a : b;
+  const longer = a.length <= b.length ? b : a;
+  if (shorter.length >= 3 && longer.includes(shorter)) return true;
+  // Subsequence check: all chars of shorter appear in order in longer
+  // Handles cases like "CONCEIO" matching "CONCEICAO" (missing chars from garbled encoding)
+  if (shorter.length >= 3) {
+    let j = 0;
+    for (let i = 0; i < longer.length && j < shorter.length; i++) {
+      if (longer[i] === shorter[j]) j++;
+    }
+    if (j === shorter.length && shorter.length >= longer.length * 0.6) return true;
+  }
+  return false;
+}
+
+// Check if two names match using word overlap (handles truncation, garbled chars, middle-name differences)
+function namesMatch(bankName: string, ownerPattern: string): boolean {
+  // Direct prefix match
+  if (bankName.startsWith(ownerPattern) || ownerPattern.startsWith(bankName)) {
+    const minLen = Math.min(bankName.length, ownerPattern.length);
+    if (minLen >= 3) return true;
+  }
+
+  const bankWords = bankName.split(' ').filter(w => w.length >= 2);
+  const ownerWords = ownerPattern.split(' ').filter(w => w.length >= 2);
+
+  if (bankWords.length < 2 || ownerWords.length < 2) return false;
+
+  // First word must be similar (not exact — handles garbled first names like LUS→LUIS)
+  if (!wordSimilar(bankWords[0], ownerWords[0])) return false;
+
+  // Count matching words beyond the first name
+  const shorter = bankWords.length <= ownerWords.length ? bankWords : ownerWords;
+  const longer = bankWords.length <= ownerWords.length ? ownerWords : bankWords;
+
+  let wordMatches = 0;
+  for (const word of shorter.slice(1)) {
+    if (longer.some(w => wordSimilar(word, w))) {
+      wordMatches++;
+    }
+  }
+
+  // Need at least 2 matching words for 3+ word names, 1 for 2-word names
+  const threshold = shorter.length <= 2 ? 1 : 2;
+  return wordMatches >= threshold;
 }
 
 export async function POST() {
@@ -152,12 +206,9 @@ export async function POST() {
         const sortedPatterns = [...ownerPatterns].sort((a, b) => b.pattern.length - a.pattern.length);
 
         for (const op of sortedPatterns) {
-          if (nameFromDesc.startsWith(op.pattern) || op.pattern.startsWith(nameFromDesc)) {
-            const minLen = Math.min(nameFromDesc.length, op.pattern.length);
-            if (minLen >= 3) {
-              matchedUnitId = op.unitId;
-              break;
-            }
+          if (namesMatch(nameFromDesc, op.pattern)) {
+            matchedUnitId = op.unitId;
+            break;
           }
         }
       }
@@ -238,7 +289,8 @@ export async function POST() {
 
       // Handle savings transfers
       if (matchedCategory === 'savings') {
-        if (tx.category !== 'savings') {
+        const needsUpdate = tx.category !== 'savings' || (!tx.creditorId && matchedCreditorId);
+        if (needsUpdate) {
           await prisma.transaction.update({
             where: { id: tx.id },
             data: {
