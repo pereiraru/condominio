@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Sidebar from '@/components/Sidebar';
 import MonthCalendar from '@/components/MonthCalendar';
-import { Transaction, MonthPaymentStatus } from '@/lib/types';
+import { MonthPaymentStatus } from '@/lib/types';
 
 interface MonthlyData {
   month: string;
@@ -128,36 +128,10 @@ export default function ReportsPage() {
   const fetchMonthlyData = async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/transactions?limit=1000');
+      const res = await fetch('/api/reports/monthly-summary');
       if (res.ok) {
-        const { transactions } = await res.json();
-        const monthMap = new Map<string, { income: number; expenses: number }>();
-
-        for (const tx of transactions as Transaction[]) {
-          const date = new Date(tx.date);
-          const month = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-
-          if (!monthMap.has(month)) {
-            monthMap.set(month, { income: 0, expenses: 0 });
-          }
-
-          const data = monthMap.get(month)!;
-          if (tx.amount > 0) {
-            data.income += tx.amount;
-          } else {
-            data.expenses += Math.abs(tx.amount);
-          }
-        }
-
-        const data: MonthlyData[] = Array.from(monthMap.entries())
-          .map(([month, { income, expenses }]) => ({
-            month,
-            income,
-            expenses,
-            balance: income - expenses,
-          }));
-
-        setMonthlyData(data);
+        const { data } = await res.json();
+        setMonthlyData(data as MonthlyData[]);
       }
     } catch (error) {
       console.error('Error fetching data:', error);

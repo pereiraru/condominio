@@ -65,7 +65,15 @@ function TransactionsContent() {
 
     const fileInputRef = useRef<HTMLInputElement>(null);
 
-  
+    const [autoAssigning, setAutoAssigning] = useState(false);
+    const [autoAssignResult, setAutoAssignResult] = useState<{
+      success: boolean;
+      assigned: number;
+      allocated: number;
+      totalUnassigned: number;
+    } | null>(null);
+
+
 
   const [filter, setFilter] = useState({
 
@@ -659,6 +667,23 @@ function TransactionsContent() {
 
 
 
+  async function handleAutoAssign() {
+    setAutoAssigning(true);
+    setAutoAssignResult(null);
+    try {
+      const res = await fetch('/api/transactions/auto-assign', { method: 'POST' });
+      if (res.ok) {
+        const data = await res.json();
+        setAutoAssignResult(data);
+        fetchTransactions();
+      }
+    } catch (error) {
+      console.error('Error auto-assigning:', error);
+    } finally {
+      setAutoAssigning(false);
+    }
+  }
+
   async function handleImportExtrato(e: React.ChangeEvent<HTMLInputElement>) {
 
     const file = e.target.files?.[0];
@@ -1085,6 +1110,17 @@ function TransactionsContent() {
 
             </button>
 
+            <button
+              className="btn-secondary flex items-center gap-2"
+              onClick={handleAutoAssign}
+              disabled={autoAssigning}
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+              </svg>
+              {autoAssigning ? 'A atribuir...' : 'Auto-Atribuir'}
+            </button>
+
             <button className="btn-primary" onClick={() => setShowModal(true)}>+ Nova Transação</button>
 
           </div>
@@ -1092,6 +1128,17 @@ function TransactionsContent() {
         </div>
 
 
+
+        {autoAssignResult && (
+          <div className="mb-6 p-4 rounded-xl flex items-center justify-between bg-blue-50 text-blue-800 border border-blue-100">
+            <span className="text-sm font-medium">
+              Auto-atribuição concluída: {autoAssignResult.assigned} transações atribuídas, {autoAssignResult.allocated} alocações criadas (de {autoAssignResult.totalUnassigned} não atribuídas)
+            </span>
+            <button onClick={() => setAutoAssignResult(null)} className="text-current opacity-50 hover:opacity-100">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12" /></svg>
+            </button>
+          </div>
+        )}
 
         {importResult && (
 
