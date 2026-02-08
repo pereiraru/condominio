@@ -60,7 +60,6 @@ export async function GET(request: NextRequest) {
           snapshots: {
             where: {
               date: {
-                gte: new Date(`${year}-12-01`),
                 lte: new Date(`${year}-12-31T23:59:59`),
               },
             },
@@ -357,6 +356,7 @@ export async function GET(request: NextRequest) {
         name: account.name,
         accountType: account.accountType,
         balance,
+        date: snapshot?.date ?? null,
         description: snapshot?.description ?? null,
       };
     });

@@ -19,7 +19,7 @@ interface Section1Props {
     saldoExercicio: number;
     saldoTransitar: number;
     saldoFinalDisponivel: number;
-    contasBancarias: { name: string; accountType: string; balance: number; description: string | null }[];
+    contasBancarias: { name: string; accountType: string; balance: number; date?: string | null; description: string | null }[];
     totalBankBalance: number;
     despesasPorLiquidar: number;
     quotasPorLiquidar: { total: number };
@@ -152,8 +152,15 @@ export default function Section1Balancete({ data, year }: Section1Props) {
             <tbody>
               {data.contasBancarias.map((conta, i) => (
                 <tr key={i}>
-                  <td className="py-1">{conta.name}</td>
-                  <td className="text-right">{fmt(conta.balance)}</td>
+                  <td className="py-1">
+                    <div>{conta.name}</div>
+                    {conta.date && (
+                      <div className="text-[10px] text-gray-400 italic">
+                        Atualizado em {new Date(conta.date).toLocaleDateString('pt-PT')}
+                      </div>
+                    )}
+                  </td>
+                  <td className="text-right align-top pt-1">{fmt(conta.balance)}</td>
                 </tr>
               ))}
               <tr className="border-t font-bold">
