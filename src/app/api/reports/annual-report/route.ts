@@ -709,26 +709,16 @@ export async function GET(request: NextRequest) {
 
     // =========================================
     // Despesas por Liquidar (Unpaid Creditor Expenses)
-    // For each recurring creditor: compare expected monthly vs allocated
-    // Fixed creditors (Otis, Luar): use known monthly amount
-    // Variable creditors (Endesa, Desp. Bancárias): use average of actual payments
+    // Only for fixed/contract creditors (isFixed=true AND amountDue > 0)
+    // e.g. Otis Elevadores, Luar Limpeza
+    // Variable expenses (Endesa, bank fees) are NOT included — they have no expected value
     // =========================================
 
     const monthNames = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
       'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
 
-    // Identify recurring creditors: those that have expense transactions this year
-    const recurringCreditorIds = new Set<string>();
-    for (const tx of currentYearExpenseTransactions) {
-      if (tx.creditorId) {
-        const creditor = creditors.find(c => c.id === tx.creditorId);
-        const category = creditor?.category || tx.category || 'other';
-        // Skip savings and one-off categories
-        if (category !== 'savings' && category !== 'other') {
-          recurringCreditorIds.add(tx.creditorId);
-        }
-      }
-    }
+    // Only fixed creditors with a known monthly amount
+    const fixedCreditorsForUnpaid = creditors.filter(c => c.isFixed && c.amountDue && c.amountDue > 0);
 
     const unpaidExpenseGroups: {
       creditorName: string;
@@ -739,62 +729,15 @@ export async function GET(request: NextRequest) {
       totalUnpaid: number;
     }[] = [];
 
-    for (const creditorId of Array.from(recurringCreditorIds)) {
-      const creditor = creditors.find(c => c.id === creditorId);
-      if (!creditor) continue;
-
-      // Get all payments for this creditor this year (skip duplicates)
-      const creditorPayments = currentYearExpenseTransactions.filter(tx => {
-        if (tx.creditorId !== creditorId) return false;
-        // Skip unassigned duplicates
-        if (!tx.creditorId && !tx.category) {
-          const dateKey = tx.date.toISOString().split('T')[0];
-          if (assignedExpenseKeys.has(`${dateKey}|${tx.amount}`)) return false;
-        }
-        return true;
-      });
-
-      const totalPaidToCreditor = creditorPayments.reduce((sum, tx) => sum + Math.abs(tx.amount), 0);
-      const paymentCount = creditorPayments.length;
-
-      // Determine expected monthly amount
-      let expectedMonthly: number;
-      let isAverage = false;
-
-      if (creditor.isFixed && creditor.amountDue && creditor.amountDue > 0) {
-        // Fixed contract: use amountDue
-        expectedMonthly = creditor.amountDue;
-      } else {
-        // Check if there's a consistent allocation pattern
-        const monthlyAllocTotals: number[] = [];
-        for (let m = 1; m <= 12; m++) {
-          const monthStr = `${year}-${m.toString().padStart(2, '0')}`;
-          const monthTotal = yearAllocations
-            .filter(a => a.transaction.creditorId === creditorId && a.month === monthStr)
-            .reduce((sum, a) => sum + Math.abs(a.amount), 0);
-          if (monthTotal > 0) monthlyAllocTotals.push(monthTotal);
-        }
-
-        if (monthlyAllocTotals.length >= 3) {
-          // Enough data: use average of allocated months
-          expectedMonthly = Math.round((monthlyAllocTotals.reduce((s, v) => s + v, 0) / monthlyAllocTotals.length) * 100) / 100;
-          isAverage = true;
-        } else if (paymentCount >= 3) {
-          // Fallback: average of payments
-          expectedMonthly = Math.round((totalPaidToCreditor / paymentCount) * 100) / 100;
-          isAverage = true;
-        } else {
-          // Too few payments — not a recurring expense, skip
-          continue;
-        }
-      }
+    for (const creditor of fixedCreditorsForUnpaid) {
+      const expectedMonthly = creditor.amountDue!;
 
       // Check each month for allocation shortfall
       const unpaidMonths: typeof unpaidExpenseGroups[0]['unpaidMonths'] = [];
       for (let m = 1; m <= 12; m++) {
         const monthStr = `${year}-${m.toString().padStart(2, '0')}`;
         const allocated = yearAllocations
-          .filter(a => a.transaction.creditorId === creditorId && a.month === monthStr)
+          .filter(a => a.transaction.creditorId === creditor.id && a.month === monthStr)
           .reduce((sum, a) => sum + Math.abs(a.amount), 0);
 
         const debt = expectedMonthly - allocated;
@@ -814,9 +757,9 @@ export async function GET(request: NextRequest) {
           creditorName: creditor.name,
           category: creditor.category || 'other',
           expectedMonthly,
-          isAverage,
+          isAverage: false,
           unpaidMonths,
-          totalUnpaid: unpaidMonths.reduce((sum, m) => sum + m.debt, 0),
+          totalUnpaid: unpaidMonths.reduce((sum, um) => sum + um.debt, 0),
         });
       }
     }
