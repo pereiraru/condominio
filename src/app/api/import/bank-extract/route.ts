@@ -125,6 +125,13 @@ export async function POST(request: NextRequest) {
         bankAccount = await prisma.bankAccount.findFirst({ where: { accountType: 'current' } });
       }
 
+      // If still not found, create it automatically
+      if (!bankAccount) {
+        bankAccount = await prisma.bankAccount.create({
+          data: { name: 'Montepio (DO)', accountType: 'current' }
+        });
+      }
+
       if (bankAccount) {
         const snapshot = await prisma.bankAccountSnapshot.findFirst({
           where: { bankAccountId: bankAccount.id, date: latestDate }
@@ -146,6 +153,19 @@ export async function POST(request: NextRequest) {
           });
         }
       }
+    }
+
+    if (importedCount > 0) {
+        // Ensure Savings account exists for the dynamic balance logic to work
+        const hasSavings = await prisma.transaction.findFirst({ where: { category: 'savings' } });
+        if (hasSavings) {
+            const savExists = await prisma.bankAccount.findFirst({ where: { accountType: 'savings' } });
+            if (!savExists) {
+                await prisma.bankAccount.create({
+                    data: { name: 'Montepio Poupança', accountType: 'savings' }
+                });
+            }
+        }
     }
 
     return NextResponse.json({
