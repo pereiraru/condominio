@@ -4,6 +4,27 @@ import { prisma } from '@/lib/prisma';
 import { authOptions } from '@/lib/auth';
 import { getTotalFeeForMonth, FeeHistoryRecord, ExtraChargeRecord } from '@/lib/feeHistory';
 
+interface VirtualInvoice {
+  id?: string;
+  date: string | Date;
+  description: string;
+  amountDue: number;
+  amountPaid: number;
+  supplier: string;
+  invoiceNumber: string;
+  entryNumber: string;
+  creditor?: { name: string; category: string };
+}
+
+interface ReportCategoryGroup {
+  category: string;
+  categoryLabel: string;
+  invoices: VirtualInvoice[];
+  categoryTotal: number;
+  categoryTotalPaid: number;
+  documentCount: number;
+}
+
 export async function GET(request: NextRequest) {
   const session = await getServerSession(authOptions);
 
@@ -82,7 +103,6 @@ export async function GET(request: NextRequest) {
     };
 
     const incomeAllocations = yearAllocations.filter((a) => a.transaction.amount > 0);
-    
     const openingSnapshots = await prisma.bankAccountSnapshot.findMany({
       where: { date: { gte: new Date(`${year - 1}-12-01`), lte: new Date(`${year}-01-05`) } },
       orderBy: { date: 'desc' },
@@ -147,7 +167,7 @@ export async function GET(request: NextRequest) {
       const snapshot = account.snapshots[0];
       let balance = snapshot?.balance ?? 0;
       if (account.accountType === 'savings' && snapshot && new Date(snapshot.date) < new Date(`${year}-01-10`)) balance += totalReforcoPoupanca;
-      return { id: account.id, name: account.name, accountType: account.accountType, balance, date: snapshot?.date ?? null, description: snapshot?.description ?? null };
+      return { id: account.id, name: account.name, accountType: account.accountType, balance, date: snapshot?.date?.toISOString() ?? null, description: snapshot?.description ?? null };
     });
     const totalBankBalance = contasBancarias.reduce((sum, c) => sum + c.balance, 0);
 
@@ -175,15 +195,23 @@ export async function GET(request: NextRequest) {
       return { code: 'FORN', description: creditor.category, ownerName: creditor.name, items, unitTotal: items.reduce((sum, i) => sum + i.amount, 0) };
     }).filter(c => c.unitTotal > 0.01);
 
-    const paidInvoicesByCategory: Record<string, any> = {};
-    const unpaidInvoicesByCategory: Record<string, any> = {};
+    const paidInvoicesByCategory: Record<string, ReportCategoryGroup> = {};
+    const unpaidInvoicesByCategory: Record<string, ReportCategoryGroup> = {};
 
     if (supplierInvoices.length > 0) {
       for (const inv of supplierInvoices) {
         const cat = inv.category;
         const target = inv.isPaid ? paidInvoicesByCategory : unpaidInvoicesByCategory;
         if (!target[cat]) target[cat] = { category: cat, categoryLabel: inv.creditor?.name || cat, invoices: [], categoryTotal: 0, categoryTotalPaid: 0, documentCount: 0 };
-        target[cat].invoices.push(inv);
+        target[cat].invoices.push({
+          date: inv.date,
+          description: inv.description,
+          amountDue: inv.amountDue,
+          amountPaid: inv.amountPaid,
+          supplier: inv.creditor?.name || '',
+          invoiceNumber: inv.invoiceNumber || '-',
+          entryNumber: inv.entryNumber || '-'
+        });
         target[cat].categoryTotal += inv.amountDue;
         target[cat].categoryTotalPaid += inv.amountPaid;
         target[cat].documentCount++;
@@ -195,7 +223,7 @@ export async function GET(request: NextRequest) {
         if (category === 'savings') continue;
         const label = creditor?.name || tx.category || 'Outros';
         if (!paidInvoicesByCategory[category]) paidInvoicesByCategory[category] = { category, categoryLabel: label, invoices: [], categoryTotal: 0, categoryTotalPaid: 0, documentCount: 0 };
-        paidInvoicesByCategory[category].invoices.push({ id: tx.id, date: tx.date, description: tx.description, amountDue: Math.abs(tx.amount), amountPaid: Math.abs(tx.amount), supplier: label, invoiceNumber: '-', entryNumber: '-' });
+        paidInvoicesByCategory[category].invoices.push({ date: tx.date, description: tx.description, amountDue: Math.abs(tx.amount), amountPaid: Math.abs(tx.amount), supplier: label, invoiceNumber: '-', entryNumber: '-' });
         paidInvoicesByCategory[category].categoryTotal += Math.abs(tx.amount);
         paidInvoicesByCategory[category].categoryTotalPaid += Math.abs(tx.amount);
         paidInvoicesByCategory[category].documentCount++;
@@ -212,8 +240,8 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const finalPaid = Object.values(paidInvoicesByCategory).filter((c: any) => c.categoryTotalPaid > 0.01).sort((a:any, b:any) => a.categoryLabel.localeCompare(b.categoryLabel));
-    const finalUnpaid = Object.values(unpaidInvoicesByCategory).filter((c: any) => (c.categoryTotal - c.categoryTotalPaid) > 0.01).sort((a:any, b:any) => a.categoryLabel.localeCompare(b.categoryLabel));
+    const finalPaid = Object.values(paidInvoicesByCategory).filter(c => c.categoryTotalPaid > 0.01).sort((a,b) => a.categoryLabel.localeCompare(b.categoryLabel));
+    const finalUnpaid = Object.values(unpaidInvoicesByCategory).filter(c => (c.categoryTotal - c.categoryTotalPaid) > 0.01).sort((a,b) => a.categoryLabel.localeCompare(b.categoryLabel));
 
     const totalReceitas = unitDebtData.reduce((sum, u) => sum + u.recebido, 0) + receitasAnosAnteriores;
     const saldoExercicio = totalReceitas - totalDespesasGeral;
@@ -225,7 +253,7 @@ export async function GET(request: NextRequest) {
         receitas: { orcamentoExercicio: totalBaseFeeExpected, quotasExtra: Object.values(extraChargeBreakdown), subTotalExercicio: totalBaseFeeExpected + totalExtraChargesExpected, receitasAnosAnteriores, receitasDesteExercicio, totalReceitas },
         despesas: { categories: despesasCategories, totalDespesasOperacionais, totalDespesas: totalDespesasGeral, totalReforcoPoupanca },
         saldoExercicio, saldoTransitar: saldoInicialTransitar, contasBancarias, totalBankBalance, saldoFinalDisponivel,
-        despesasPorLiquidar: finalUnpaid.reduce((sum: number, c: any) => sum + (c.categoryTotal - c.categoryTotalPaid), 0),
+        despesasPorLiquidar: finalUnpaid.reduce((sum, c) => sum + (c.categoryTotal - c.categoryTotalPaid), 0),
         quotasPorLiquidar: { total: unitDebtData.reduce((sum, u) => sum + u.saldo, 0) }
       },
       paidInvoices: finalPaid, unpaidInvoices: finalUnpaid,
