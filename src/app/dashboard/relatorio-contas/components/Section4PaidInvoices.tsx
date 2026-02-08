@@ -20,8 +20,51 @@ interface Section4Props {
   year: number;
 }
 
+const monthNames = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+  'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+
 function fmt(value: number): string {
   return value.toLocaleString('pt-PT', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function groupByMonth(transactions: PaidTransaction[], year: number): { monthLabel: string; total: number }[] {
+  const monthTotals: Record<string, number> = {};
+
+  for (const tx of transactions) {
+    // Extract month from date (YYYY-MM-DD)
+    const parts = tx.date.split('-');
+    const monthKey = `${parts[0]}-${parts[1]}`;
+    monthTotals[monthKey] = (monthTotals[monthKey] || 0) + tx.amount;
+  }
+
+  // Build sorted list of months with values
+  const result: { monthLabel: string; total: number }[] = [];
+  for (let m = 1; m <= 12; m++) {
+    const monthStr = `${year}-${m.toString().padStart(2, '0')}`;
+    if (monthTotals[monthStr] && monthTotals[monthStr] > 0.01) {
+      result.push({
+        monthLabel: `${monthNames[m - 1]} ${year}`,
+        total: monthTotals[monthStr],
+      });
+    }
+  }
+
+  // Also include any months from other years (e.g. carried-over transactions)
+  const otherMonths = Object.keys(monthTotals)
+    .filter(k => !k.startsWith(`${year}-`))
+    .sort();
+  for (const mk of otherMonths) {
+    const [y, mStr] = mk.split('-');
+    const mIdx = parseInt(mStr) - 1;
+    if (mIdx >= 0 && mIdx < 12) {
+      result.unshift({
+        monthLabel: `${monthNames[mIdx]} ${y}`,
+        total: monthTotals[mk],
+      });
+    }
+  }
+
+  return result;
 }
 
 export default function Section4PaidInvoices({ data, totalPaid, year }: Section4Props) {
@@ -38,47 +81,51 @@ export default function Section4PaidInvoices({ data, totalPaid, year }: Section4
   return (
     <div className="report-section report-section-break mb-8">
       <h2 className="text-lg font-bold mb-1 uppercase">Despesas Pagas</h2>
-      <p className="text-sm text-gray-600 mb-4">Período: 01-01-{year} a 31-12-{year}</p>
+      <p className="text-sm text-gray-600 mb-6">Período: 01-01-{year} a 31-12-{year}</p>
 
-      <div className="space-y-6">
-        {data.map((group, idx) => (
-          <div key={idx} className="bg-white">
-            <div className="flex justify-between items-center border-b border-gray-800 pb-1 mb-2">
-              <h3 className="font-bold text-sm text-gray-900 uppercase">
-                {group.categoryLabel} ({group.transactionCount} mov.)
-              </h3>
-              <span className="text-[10px] font-bold bg-gray-50 px-2 py-0.5 rounded border border-gray-200">
-                Total: {fmt(group.categoryTotal)}€
-              </span>
-            </div>
+      {data.map((group, idx) => {
+        const monthlyData = groupByMonth(group.transactions, year);
 
-            <table className="w-full text-[11px] border-collapse">
+        return (
+          <div key={idx} className="mb-6">
+            <h3 className="text-sm font-bold text-gray-800 mb-2">{group.categoryLabel}</h3>
+
+            <table className="w-full text-xs border border-gray-200">
               <thead>
-                <tr className="text-left text-gray-500 font-bold uppercase border-b border-gray-100 bg-gray-50/30">
-                  <th className="py-1 pl-2 w-24">Data</th>
-                  <th className="py-1">Descrição</th>
-                  <th className="py-1 text-right w-24 pr-2">Valor</th>
+                <tr className="bg-gray-50">
+                  <th className="border border-gray-200 px-3 py-1.5 text-left font-semibold text-gray-600">Mês</th>
+                  <th className="border border-gray-200 px-3 py-1.5 text-right font-semibold text-gray-600">Valor Pago</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
-                {group.transactions.map((tx, i) => (
-                  <tr key={i} className="hover:bg-gray-50/50 transition-colors">
-                    <td className="py-1 pl-2 whitespace-nowrap">
-                      {new Date(tx.date + 'T00:00:00').toLocaleDateString('pt-PT')}
-                    </td>
-                    <td className="py-1 text-gray-600 italic line-clamp-1">{tx.description}</td>
-                    <td className="py-1 text-right font-medium pr-2">{fmt(tx.amount)}€</td>
+              <tbody>
+                {monthlyData.map((m, mIdx) => (
+                  <tr key={mIdx} className="hover:bg-gray-50/50">
+                    <td className="border border-gray-200 px-3 py-1.5 text-gray-700">{m.monthLabel}</td>
+                    <td className="border border-gray-200 px-3 py-1.5 text-right text-gray-800">{fmt(m.total)}€</td>
                   </tr>
                 ))}
               </tbody>
+              <tfoot>
+                <tr className="bg-gray-100 font-bold">
+                  <td className="border border-gray-200 px-3 py-1.5 text-gray-800">
+                    Subtotal — {group.categoryLabel}
+                  </td>
+                  <td className="border border-gray-200 px-3 py-1.5 text-right text-gray-900">
+                    {fmt(group.categoryTotal)}€
+                  </td>
+                </tr>
+              </tfoot>
             </table>
           </div>
-        ))}
-      </div>
+        );
+      })}
 
-      <div className="mt-6 pt-2 border-t-2 border-gray-800 flex justify-between items-center bg-gray-50 px-4 py-2 rounded-lg border border-gray-200">
-        <span className="font-bold text-xs uppercase text-gray-600">Total de Despesas Pagas</span>
-        <span className="text-lg font-black text-gray-900">{fmt(totalPaid)}€</span>
+      {/* Grand Total */}
+      <div className="mt-4 border-t-2 border-gray-800 pt-2">
+        <div className="flex justify-between items-center">
+          <span className="text-sm font-bold text-gray-800 uppercase">Total de Despesas Pagas</span>
+          <span className="text-lg font-black text-gray-900">{fmt(totalPaid)}€</span>
+        </div>
       </div>
     </div>
   );
