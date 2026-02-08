@@ -113,8 +113,8 @@ export default function RelatorioContasPage() {
             />
 
             <Section5UnpaidInvoices
-              data={data.unpaidInvoices}
-              totalUnpaid={data.totalUnpaidInvoices}
+              data={data.unpaidExpenses}
+              totalUnpaid={data.totalUnpaidExpenses}
               year={data.year}
             />
 

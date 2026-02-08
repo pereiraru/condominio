@@ -707,9 +707,125 @@ export async function GET(request: NextRequest) {
     );
     const totalPaidExpenses = paidExpenseGroups.reduce((sum, g) => sum + g.categoryTotal, 0);
 
+    // =========================================
+    // Despesas por Liquidar (Unpaid Creditor Expenses)
+    // For each recurring creditor: compare expected monthly vs allocated
+    // Fixed creditors (Otis, Luar): use known monthly amount
+    // Variable creditors (Endesa, Desp. Bancárias): use average of actual payments
+    // =========================================
+
+    const monthNames = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+      'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+
+    // Identify recurring creditors: those that have expense transactions this year
+    const recurringCreditorIds = new Set<string>();
+    for (const tx of currentYearExpenseTransactions) {
+      if (tx.creditorId) {
+        const creditor = creditors.find(c => c.id === tx.creditorId);
+        const category = creditor?.category || tx.category || 'other';
+        // Skip savings and one-off categories
+        if (category !== 'savings' && category !== 'other') {
+          recurringCreditorIds.add(tx.creditorId);
+        }
+      }
+    }
+
+    const unpaidExpenseGroups: {
+      creditorName: string;
+      category: string;
+      expectedMonthly: number;
+      isAverage: boolean;
+      unpaidMonths: { month: string; monthLabel: string; expected: number; paid: number; debt: number }[];
+      totalUnpaid: number;
+    }[] = [];
+
+    for (const creditorId of Array.from(recurringCreditorIds)) {
+      const creditor = creditors.find(c => c.id === creditorId);
+      if (!creditor) continue;
+
+      // Get all payments for this creditor this year (skip duplicates)
+      const creditorPayments = currentYearExpenseTransactions.filter(tx => {
+        if (tx.creditorId !== creditorId) return false;
+        // Skip unassigned duplicates
+        if (!tx.creditorId && !tx.category) {
+          const dateKey = tx.date.toISOString().split('T')[0];
+          if (assignedExpenseKeys.has(`${dateKey}|${tx.amount}`)) return false;
+        }
+        return true;
+      });
+
+      const totalPaidToCreditor = creditorPayments.reduce((sum, tx) => sum + Math.abs(tx.amount), 0);
+      const paymentCount = creditorPayments.length;
+
+      // Determine expected monthly amount
+      let expectedMonthly: number;
+      let isAverage = false;
+
+      if (creditor.isFixed && creditor.amountDue && creditor.amountDue > 0) {
+        // Fixed contract: use amountDue
+        expectedMonthly = creditor.amountDue;
+      } else {
+        // Check if there's a consistent allocation pattern
+        const monthlyAllocTotals: number[] = [];
+        for (let m = 1; m <= 12; m++) {
+          const monthStr = `${year}-${m.toString().padStart(2, '0')}`;
+          const monthTotal = yearAllocations
+            .filter(a => a.transaction.creditorId === creditorId && a.month === monthStr)
+            .reduce((sum, a) => sum + Math.abs(a.amount), 0);
+          if (monthTotal > 0) monthlyAllocTotals.push(monthTotal);
+        }
+
+        if (monthlyAllocTotals.length >= 3) {
+          // Enough data: use average of allocated months
+          expectedMonthly = Math.round((monthlyAllocTotals.reduce((s, v) => s + v, 0) / monthlyAllocTotals.length) * 100) / 100;
+          isAverage = true;
+        } else if (paymentCount >= 3) {
+          // Fallback: average of payments
+          expectedMonthly = Math.round((totalPaidToCreditor / paymentCount) * 100) / 100;
+          isAverage = true;
+        } else {
+          // Too few payments — not a recurring expense, skip
+          continue;
+        }
+      }
+
+      // Check each month for allocation shortfall
+      const unpaidMonths: typeof unpaidExpenseGroups[0]['unpaidMonths'] = [];
+      for (let m = 1; m <= 12; m++) {
+        const monthStr = `${year}-${m.toString().padStart(2, '0')}`;
+        const allocated = yearAllocations
+          .filter(a => a.transaction.creditorId === creditorId && a.month === monthStr)
+          .reduce((sum, a) => sum + Math.abs(a.amount), 0);
+
+        const debt = expectedMonthly - allocated;
+        if (debt > 0.01) {
+          unpaidMonths.push({
+            month: monthStr,
+            monthLabel: `${monthNames[m - 1]} ${year}`,
+            expected: expectedMonthly,
+            paid: allocated,
+            debt,
+          });
+        }
+      }
+
+      if (unpaidMonths.length > 0) {
+        unpaidExpenseGroups.push({
+          creditorName: creditor.name,
+          category: creditor.category || 'other',
+          expectedMonthly,
+          isAverage,
+          unpaidMonths,
+          totalUnpaid: unpaidMonths.reduce((sum, m) => sum + m.debt, 0),
+        });
+      }
+    }
+
+    unpaidExpenseGroups.sort((a, b) => a.creditorName.localeCompare(b.creditorName));
+    const totalUnpaidExpenses = unpaidExpenseGroups.reduce((sum, g) => sum + g.totalUnpaid, 0);
+
     const totalPaidInvoicesAmount = paidInvoices.reduce((sum, c) => sum + c.categoryTotalPaid, 0);
     const totalUnpaidInvoicesAmount = unpaidInvoices.reduce((sum, c) => sum + c.categoryTotal - c.categoryTotalPaid, 0);
-    const totalUnpaidFixedExpenses = creditorDebts.reduce((sum, c) => sum + c.unitTotal, 0);
 
     const detailedDebtGrandTotal = detailedDebtUnits.reduce((sum, u) => sum + u.unitTotal, 0) + creditorDebts.reduce((sum, c) => sum + c.unitTotal, 0);
     const combinedDetailedDebt = [...detailedDebtUnits, ...creditorDebts];
@@ -795,7 +911,7 @@ export async function GET(request: NextRequest) {
         contasBancarias,
         totalBankBalance,
         saldoFinalDisponivel,
-        despesasPorLiquidar: totalUnpaidInvoicesAmount + totalUnpaidFixedExpenses,
+        despesasPorLiquidar: totalUnpaidExpenses,
         quotasPorLiquidar: {
           total: debtTotals.saldo,
         },
@@ -839,7 +955,11 @@ export async function GET(request: NextRequest) {
       })),
       totalPaidInvoices: totalPaidInvoicesAmount,
 
-      // Section 5
+      // Section 5: Unpaid creditor expenses (expected vs allocated)
+      unpaidExpenses: unpaidExpenseGroups,
+      totalUnpaidExpenses,
+
+      // Section 5 (legacy): Unpaid supplier invoices
       unpaidInvoices: unpaidInvoices.map((c) => ({
         category: c.category,
         categoryLabel: c.categoryLabel,
