@@ -72,6 +72,7 @@ function TransactionsContent() {
       allocated: number;
       totalUnassigned: number;
     } | null>(null);
+    const [unassignedCount, setUnassignedCount] = useState<number>(0);
 
 
 
@@ -146,6 +147,8 @@ function TransactionsContent() {
     fetchCreditors();
 
     fetchMappings();
+
+    fetchUnassignedCount();
 
   }, []);
 
@@ -355,6 +358,18 @@ function TransactionsContent() {
 
     }
 
+  };
+
+  const fetchUnassignedCount = async () => {
+    try {
+      const res = await fetch('/api/transactions?unassigned=true&limit=1&offset=0');
+      if (res.ok) {
+        const data = await res.json();
+        setUnassignedCount(data.total || 0);
+      }
+    } catch (error) {
+      console.error('Error fetching unassigned count:', error);
+    }
   };
 
 
@@ -675,6 +690,12 @@ function TransactionsContent() {
       if (res.ok) {
         const data = await res.json();
         setAutoAssignResult(data);
+        fetchUnassignedCount();
+        // Auto-switch to show remaining unassigned transactions
+        if (data.assigned > 0) {
+          setFilter(f => ({ ...f, entityFilter: 'unassigned' }));
+          setCurrentPage(1);
+        }
         fetchTransactions();
       }
     } catch (error) {
@@ -1174,7 +1195,7 @@ function TransactionsContent() {
               <label className="label">Fração/Credor</label>
               <select value={filter.entityFilter} onChange={(e) => setFilter({ ...filter, entityFilter: e.target.value })} className="input">
                 <option value="">Todos</option>
-                <option value="unassigned">Sem atribuição</option>
+                <option value="unassigned">Sem atribuição{unassignedCount > 0 ? ` (${unassignedCount})` : ''}</option>
                 <optgroup label="Frações">
                   {units.map((u) => <option key={u.id} value={`unit:${u.id}`}>{u.code}</option>)}
                 </optgroup>
@@ -1217,7 +1238,7 @@ function TransactionsContent() {
             )}
           </div>
           {selectedTx && (
-            <TransactionEditPanel transaction={selectedTx} units={units} creditors={creditors} onSave={() => { closePanel(); fetchTransactions(); }} onDelete={() => { closePanel(); fetchTransactions(); }} onClose={closePanel} />
+            <TransactionEditPanel transaction={selectedTx} units={units} creditors={creditors} onSave={() => { closePanel(); fetchTransactions(); fetchUnassignedCount(); }} onDelete={() => { closePanel(); fetchTransactions(); fetchUnassignedCount(); }} onClose={closePanel} />
           )}
         </div>
 
