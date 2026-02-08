@@ -37,8 +37,8 @@ jobs:
       - name: Apply fixes
         run: |
           DB="${{ steps.setup.outputs.path }}"
-          echo "Applying fixes from SQL script..."
-          sqlite3 "$DB" < scripts/fix-prod-years.sql
+          echo "Applying fixes from SQL script v2..."
+          sqlite3 "$DB" < scripts/fix-prod-v2.sql
           echo "Fixes applied."
 
       - name: "Post-fix: Verify"
