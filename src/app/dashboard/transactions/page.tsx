@@ -71,6 +71,7 @@ function TransactionsContent() {
       assigned: number;
       allocated: number;
       totalUnassigned: number;
+      needsManualAllocation?: number;
     } | null>(null);
     const [unassignedCount, setUnassignedCount] = useState<number>(0);
 
@@ -1151,13 +1152,18 @@ function TransactionsContent() {
 
 
         {autoAssignResult && (
-          <div className="mb-6 p-4 rounded-xl flex items-center justify-between bg-blue-50 text-blue-800 border border-blue-100">
-            <span className="text-sm font-medium">
-              Auto-atribuição concluída: {autoAssignResult.assigned} transações atribuídas, {autoAssignResult.allocated} alocações criadas (de {autoAssignResult.totalUnassigned} não atribuídas)
-            </span>
-            <button onClick={() => setAutoAssignResult(null)} className="text-current opacity-50 hover:opacity-100">
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12" /></svg>
-            </button>
+          <div className="mb-6 p-4 rounded-xl bg-blue-50 text-blue-800 border border-blue-100">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium">
+                Auto-atribuição concluída: {autoAssignResult.assigned} transações atribuídas, {autoAssignResult.allocated} alocações criadas
+                {autoAssignResult.needsManualAllocation && autoAssignResult.needsManualAllocation > 0 && (
+                  <span className="text-amber-700"> — {autoAssignResult.needsManualAllocation} precisam de alocação manual</span>
+                )}
+              </span>
+              <button onClick={() => setAutoAssignResult(null)} className="text-current opacity-50 hover:opacity-100">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </div>
           </div>
         )}
 

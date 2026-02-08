@@ -2,8 +2,9 @@ import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { prisma } from '@/lib/prisma';
 import { authOptions } from '@/lib/auth';
+import { getFeeForMonth, FeeHistoryRecord } from '@/lib/feeHistory';
 
-// Normalize a name for fuzzy matching: remove accents, lowercase, strip prefixes
+// Normalize a name for fuzzy matching: remove accents, uppercase, collapse spaces
 function normalizeName(name: string): string {
   return name
     .normalize('NFD')
@@ -27,26 +28,50 @@ export async function POST() {
       creditorByName[c.name] = c.id;
     }
 
+    // Get all units with fee history for expected fee calculation
+    const units = await prisma.unit.findMany({
+      include: { feeHistory: true },
+    });
+    const unitById: Record<string, typeof units[0]> = {};
+    for (const u of units) {
+      unitById[u.id] = u;
+    }
+
     // Get all owners (current and past) to match income transactions
     const owners = await prisma.owner.findMany({
       include: { unit: true },
     });
 
-    // Build owner name patterns: map normalized name fragments to unitId
-    // We use the first 3+ words of the name for matching against bank descriptions
+    // Build owner name patterns: map normalized name to unitId
     const ownerPatterns: { pattern: string; unitId: string; ownerName: string; unitCode: string }[] = [];
     for (const owner of owners) {
       if (!owner.unit) continue;
       const normalized = normalizeName(owner.name);
-      // Use full normalized name
       ownerPatterns.push({
         pattern: normalized,
         unitId: owner.unitId,
         ownerName: owner.name,
         unitCode: owner.unit.code,
       });
-      // Also add individual significant words (3+ chars) for partial matching
-      // Bank descriptions often truncate names
+    }
+
+    // Get all existing month allocations for income (to know which months are already paid)
+    const existingAllocations = await prisma.transactionMonth.findMany({
+      where: {
+        transaction: { amount: { gt: 0 } },
+        month: { not: 'PREV-DEBT' },
+      },
+      include: {
+        transaction: { select: { unitId: true } },
+      },
+    });
+
+    // Build a set of paid month keys: "unitId|YYYY-MM" -> total paid
+    const paidMonthTotals: Record<string, number> = {};
+    for (const alloc of existingAllocations) {
+      if (!alloc.transaction.unitId) continue;
+      const key = `${alloc.transaction.unitId}|${alloc.month}`;
+      paidMonthTotals[key] = (paidMonthTotals[key] || 0) + alloc.amount;
     }
 
     // Get any existing description mappings
@@ -90,7 +115,8 @@ export async function POST() {
     let allocatedCount = 0;
     let skippedSavings = 0;
     let ownerMatchCount = 0;
-    const details: { description: string; assignedTo: string; month: string }[] = [];
+    let needsManualAllocation = 0;
+    const details: { description: string; assignedTo: string; month: string; status: string }[] = [];
 
     for (const tx of unassigned) {
       const descUpper = tx.description.toUpperCase();
@@ -122,23 +148,14 @@ export async function POST() {
           .replace(/^TR-/, '')
           .trim();
 
-        // Try to match against owner names
         // Sort patterns by length descending to match longest (most specific) first
         const sortedPatterns = [...ownerPatterns].sort((a, b) => b.pattern.length - a.pattern.length);
 
         for (const op of sortedPatterns) {
-          // Check if the bank description name starts with the owner name
-          // (bank descriptions often truncate long names)
           if (nameFromDesc.startsWith(op.pattern) || op.pattern.startsWith(nameFromDesc)) {
-            // Ensure a minimum match quality (at least 3 characters matching)
             const minLen = Math.min(nameFromDesc.length, op.pattern.length);
             if (minLen >= 3) {
               matchedUnitId = op.unitId;
-              details.push({
-                description: tx.description.substring(0, 40),
-                assignedTo: `${op.unitCode} (${op.ownerName})`,
-                month: tx.date.toISOString().substring(0, 7),
-              });
               break;
             }
           }
@@ -161,6 +178,17 @@ export async function POST() {
 
       // Apply unit match (income from owner)
       if (matchedUnitId) {
+        const unit = unitById[matchedUnitId];
+        const txMonth = tx.date.toISOString().substring(0, 7);
+        const unitCode = unit?.code || '?';
+        const ownerMatch = ownerPatterns.find(op => op.unitId === matchedUnitId);
+        const ownerName = ownerMatch?.ownerName || '';
+
+        // Get expected fee for this month
+        const feeHistory = (unit?.feeHistory || []) as FeeHistoryRecord[];
+        const expectedFee = getFeeForMonth(feeHistory, txMonth, unit?.monthlyFee || 0);
+
+        // Assign to unit
         await prisma.transaction.update({
           where: { id: tx.id },
           data: { unitId: matchedUnitId, type: 'payment' },
@@ -168,13 +196,40 @@ export async function POST() {
         assignedCount++;
         ownerMatchCount++;
 
-        // Create allocation if none exists
+        // Only auto-allocate if:
+        // 1. No existing allocation
+        // 2. Amount matches expected fee (within 0.01€ tolerance)
+        // 3. That month is not already fully paid
         if (tx.monthAllocations.length === 0) {
-          const txMonth = tx.date.toISOString().substring(0, 7);
-          await prisma.transactionMonth.create({
-            data: { transactionId: tx.id, month: txMonth, amount: tx.amount },
-          });
-          allocatedCount++;
+          const amountMatchesFee = Math.abs(tx.amount - expectedFee) < 0.01;
+          const paidKey = `${matchedUnitId}|${txMonth}`;
+          const alreadyPaid = (paidMonthTotals[paidKey] || 0) >= expectedFee - 0.01;
+
+          if (amountMatchesFee && !alreadyPaid) {
+            // Amount matches expected fee → auto-allocate to this month
+            await prisma.transactionMonth.create({
+              data: { transactionId: tx.id, month: txMonth, amount: tx.amount },
+            });
+            allocatedCount++;
+            // Update our tracking so subsequent transactions for same unit/month know it's paid
+            paidMonthTotals[paidKey] = (paidMonthTotals[paidKey] || 0) + tx.amount;
+
+            details.push({
+              description: tx.description.substring(0, 40),
+              assignedTo: `${unitCode} (${ownerName})`,
+              month: txMonth,
+              status: 'auto-alocado',
+            });
+          } else {
+            // Amount doesn't match expected fee → needs manual allocation
+            needsManualAllocation++;
+            details.push({
+              description: tx.description.substring(0, 40),
+              assignedTo: `${unitCode} (${ownerName})`,
+              month: txMonth,
+              status: amountMatchesFee ? 'mês já pago' : `valor ≠ esperado (${expectedFee}€)`,
+            });
+          }
         }
         continue;
       }
@@ -227,6 +282,7 @@ export async function POST() {
           description: tx.description.substring(0, 40),
           assignedTo: creditor?.name || 'Unknown',
           month: txMonth,
+          status: 'auto-alocado',
         });
       }
     }
@@ -238,6 +294,7 @@ export async function POST() {
       allocated: allocatedCount,
       skippedSavings,
       ownerMatches: ownerMatchCount,
+      needsManualAllocation,
       details: details.slice(0, 50),
     });
   } catch (error) {
