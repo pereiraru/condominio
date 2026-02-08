@@ -730,22 +730,35 @@ export async function GET(request: NextRequest) {
     }[] = [];
 
     for (const creditor of fixedCreditorsForUnpaid) {
-      const expectedMonthly = creditor.amountDue!;
+      // Use fee history to get the correct expected amount per month
+      // (respects contract changes, e.g. Otis went from 219 to 110.68 in Dec 2025)
+      const creditorFeeHistory = creditor.feeHistory as FeeHistoryRecord[];
 
       // Check each month for allocation shortfall
       const unpaidMonths: typeof unpaidExpenseGroups[0]['unpaidMonths'] = [];
       for (let m = 1; m <= 12; m++) {
         const monthStr = `${year}-${m.toString().padStart(2, '0')}`;
+
+        // Get expected amount from fee history, falling back to amountDue
+        const feeData = getTotalFeeForMonth(
+          creditorFeeHistory,
+          [],
+          monthStr,
+          creditor.amountDue || 0,
+          creditor.id
+        );
+        const expectedForMonth = feeData.total;
+
         const allocated = yearAllocations
           .filter(a => a.transaction.creditorId === creditor.id && a.month === monthStr)
           .reduce((sum, a) => sum + Math.abs(a.amount), 0);
 
-        const debt = expectedMonthly - allocated;
+        const debt = expectedForMonth - allocated;
         if (debt > 0.01) {
           unpaidMonths.push({
             month: monthStr,
             monthLabel: `${monthNames[m - 1]} ${year}`,
-            expected: expectedMonthly,
+            expected: expectedForMonth,
             paid: allocated,
             debt,
           });
@@ -753,10 +766,14 @@ export async function GET(request: NextRequest) {
       }
 
       if (unpaidMonths.length > 0) {
+        // Use current month's expected as the display value
+        const currentMonthStr = `${year}-${new Date().getMonth() < 12 ? (new Date().getMonth() + 1).toString().padStart(2, '0') : '12'}`;
+        const currentFee = getTotalFeeForMonth(creditorFeeHistory, [], currentMonthStr, creditor.amountDue || 0, creditor.id);
+
         unpaidExpenseGroups.push({
           creditorName: creditor.name,
           category: creditor.category || 'other',
-          expectedMonthly,
+          expectedMonthly: currentFee.total,
           isAverage: false,
           unpaidMonths,
           totalUnpaid: unpaidMonths.reduce((sum, um) => sum + um.debt, 0),
