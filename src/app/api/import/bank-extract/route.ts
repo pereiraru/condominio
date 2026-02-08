@@ -4,6 +4,13 @@ import { prisma } from '@/lib/prisma';
 import { authOptions } from '@/lib/auth';
 import * as XLSX from 'xlsx';
 
+interface BankRow {
+  dateMov: any;
+  description: string;
+  importance: any;
+  balanceStr: any;
+}
+
 export async function POST(request: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session || session.user.role !== 'admin') {
@@ -16,10 +23,9 @@ export async function POST(request: NextRequest) {
     if (!file) return NextResponse.json({ error: 'No file uploaded' }, { status: 400 });
 
     const buffer = Buffer.from(await file.arrayBuffer());
-    let rows: any[] = [];
+    let rows: BankRow[] = [];
 
     if (file.name.toLowerCase().endsWith('.txt')) {
-      // Logic for tab-separated TXT
       const decoder = new TextDecoder('windows-1252');
       const content = decoder.decode(buffer);
       const lines = content.split(/\r?\n/).filter(line => line.trim() !== '');
@@ -30,21 +36,19 @@ export async function POST(request: NextRequest) {
         const parts = line.split('\t');
         return {
           dateMov: parts[0],
-          description: parts[2],
+          description: parts[2] || '',
           importance: parts[3],
           balanceStr: parts[5]
         };
       });
     } else {
-      // Logic for Excel / CSV
       const workbook = XLSX.read(buffer, { type: 'buffer', cellDates: true });
       const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-      const excelData = XLSX.utils.sheet_to_json<any>(firstSheet);
+      const excelData = XLSX.utils.sheet_to_json<Record<string, any>>(firstSheet);
       
       rows = excelData.map(r => ({
-        // Try to map different possible column names
         dateMov: r['DATA MOVIMENTO'] || r['Data Movimento'] || r['Data'],
-        description: r['DESCRIÇÃO'] || r['Descrição'] || r['Descricao'],
+        description: (r['DESCRIÇÃO'] || r['Descrição'] || r['Descricao'] || '').toString(),
         importance: r['IMPORTÂNCIA'] || r['Importância'] || r['Valor'],
         balanceStr: r['SALDO CONTABILÍSTICO'] || r['Saldo Contabilístico'] || r['Saldo']
       }));
@@ -52,7 +56,6 @@ export async function POST(request: NextRequest) {
 
     if (rows.length === 0) return NextResponse.json({ error: 'Nenhum dado encontrado no ficheiro' }, { status: 400 });
     
-    // 1. Get mappings for auto-assignment
     const mappings = await prisma.descriptionMapping.findMany();
 
     let importedCount = 0;
@@ -64,9 +67,9 @@ export async function POST(request: NextRequest) {
     const errors: string[] = [];
 
     for (const row of rows) {
-      let description = row.description?.toString() || '';
+      const description = row.description?.trim() || '';
       try {
-        if (!row.dateMov || !row.importance) continue;
+        if (!row.dateMov || row.importance === undefined) continue;
 
         let date: Date;
         if (row.dateMov instanceof Date) {
@@ -82,8 +85,9 @@ export async function POST(request: NextRequest) {
           date = new Date(y, m - 1, d, 12, 0, 0);
         }
         
-        const parseAmount = (val: any) => {
+        const parseAmount = (val: any): number => {
           if (typeof val === 'number') return val;
+          if (!val) return 0;
           const cleaned = val.toString().replace(/"/g, '').replace(/\./g, '').replace(',', '.');
           return parseFloat(cleaned);
         };
@@ -97,12 +101,12 @@ export async function POST(request: NextRequest) {
         }
 
         let existing = await prisma.transaction.findFirst({
-          where: { date, amount, description: description.trim(), balance: currentBalance }
+          where: { date, amount, description, balance: currentBalance }
         });
 
         if (!existing) {
           existing = await prisma.transaction.findFirst({
-            where: { date, amount, description: description.trim() }
+            where: { date, amount, description }
           });
 
           if (existing && !existing.balance && !isNaN(currentBalance)) {
@@ -124,11 +128,10 @@ export async function POST(request: NextRequest) {
         let unitId: string | null = null;
         let creditorId: string | null = null;
         let category: string | null = null;
-        let type: string = amount > 0 ? 'payment' : 'expense';
+        const type: string = amount > 0 ? 'payment' : 'expense';
 
         if (description.includes('POUPANÇA') || description.includes('027-15.010650-1')) {
           category = 'savings';
-          type = 'transfer';
           autoAssignedCount++;
         } else {
           const mapping = mappings.find(m => description.toUpperCase().includes(m.pattern.toUpperCase()));
@@ -142,7 +145,7 @@ export async function POST(request: NextRequest) {
         await prisma.transaction.create({
           data: {
             date,
-            description: description.trim(),
+            description,
             amount,
             balance: isNaN(currentBalance) ? null : currentBalance,
             type,
@@ -154,20 +157,17 @@ export async function POST(request: NextRequest) {
 
         importedCount++;
       } catch (err) {
-        errors.push(`Erro na linha: ${description.substring(0, 20)}... - ${String(err)}`);
+        errors.push(`Erro: ${description.substring(0, 20)}... - ${String(err)}`);
       }
     }
 
-    // 4. Update Bank Balance Snapshot
     if (latestDate && !isNaN(latestBalance)) {
       let bankAccount = await prisma.bankAccount.findFirst({
         where: { name: { contains: 'Montepio' }, accountType: 'current' }
       });
-
       if (!bankAccount) {
         bankAccount = await prisma.bankAccount.findFirst({ where: { accountType: 'current' } });
       }
-
       if (!bankAccount) {
         bankAccount = await prisma.bankAccount.create({
           data: { name: 'Montepio (DO)', accountType: 'current' }
@@ -178,7 +178,6 @@ export async function POST(request: NextRequest) {
         const snapshot = await prisma.bankAccountSnapshot.findFirst({
           where: { bankAccountId: bankAccount.id, date: latestDate }
         });
-
         if (snapshot) {
           await prisma.bankAccountSnapshot.update({
             where: { id: snapshot.id },
@@ -197,7 +196,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    if (importedCount > 0) {
+    if (importedCount > 0 || updatedCount > 0) {
         const hasSavings = await prisma.transaction.findFirst({ where: { category: 'savings' } });
         if (hasSavings) {
             const savExists = await prisma.bankAccount.findFirst({ where: { accountType: 'savings' } });
