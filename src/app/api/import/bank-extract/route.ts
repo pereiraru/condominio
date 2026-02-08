@@ -64,8 +64,9 @@ export async function POST(request: NextRequest) {
         latestBalance = currentBalance;
       }
 
-      // 2. Deduplication check
-      const existing = await prisma.transaction.findFirst({
+      // 2. Robust Deduplication check
+      // First, try a strict match including balance
+      let existing = await prisma.transaction.findFirst({
         where: {
           date,
           amount,
@@ -73,6 +74,26 @@ export async function POST(request: NextRequest) {
           balance: currentBalance,
         }
       });
+
+      // If not found, try a match without balance (to catch items imported via other means)
+      if (!existing) {
+        existing = await prisma.transaction.findFirst({
+          where: {
+            date,
+            amount,
+            description: description.trim(),
+          }
+        });
+
+        // If we found it now, it means we have the transaction but without the balance
+        // Let's update it to "repair" the record
+        if (existing && !existing.balance && !isNaN(currentBalance)) {
+          await prisma.transaction.update({
+            where: { id: existing.id },
+            data: { balance: currentBalance }
+          });
+        }
+      }
 
       if (existing) {
         duplicateCount++;
