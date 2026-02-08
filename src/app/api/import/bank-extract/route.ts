@@ -50,8 +50,13 @@ export async function POST(request: NextRequest) {
         
         const d = parseInt(dateParts[0]);
         const m = parseInt(dateParts[1]);
-        const y = parseInt(dateParts[2]);
-        const date = new Date(2000 + y, m - 1, d);
+        let y = parseInt(dateParts[2]);
+        
+        // Handle 2-digit vs 4-digit years safely
+        if (y < 100) y += 2000;
+        
+        // Use noon to avoid TZ shift bugs
+        const date = new Date(y, m - 1, d, 12, 0, 0);
         
         const parseAmount = (s: string) => {
           const cleaned = s.replace(/"/g, '').replace(/\./g, '').replace(',', '.');
