@@ -53,5 +53,58 @@ export async function DELETE(request: NextRequest) {
     where: { id: snapshotId }
   });
 
-  return NextResponse.json({ success: true });
-}
+    return NextResponse.json({ success: true });
+
+  }
+
+  
+
+  export async function PATCH(request: NextRequest) {
+
+    const session = await getServerSession(authOptions);
+
+    if (!session || session.user.role !== 'admin') {
+
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
+
+    }
+
+  
+
+    const body = await request.json();
+
+    const { id, date, balance, description } = body;
+
+  
+
+    if (!id) {
+
+      return NextResponse.json({ error: 'Missing snapshot ID' }, { status: 400 });
+
+    }
+
+  
+
+    const snapshot = await prisma.bankAccountSnapshot.update({
+
+      where: { id },
+
+      data: {
+
+        date: new Date(date),
+
+        balance: parseFloat(balance),
+
+        description: description || null,
+
+      },
+
+    });
+
+  
+
+    return NextResponse.json(snapshot);
+
+  }
+
+  
