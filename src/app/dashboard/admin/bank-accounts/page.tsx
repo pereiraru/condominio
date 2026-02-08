@@ -21,7 +21,6 @@ export default function BankAccountsPage() {
   const [showAccountModal, setShowAccountModal] = useState(false);
   const [showSnapshotModal, setShowSnapshotModal] = useState(false);
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
-  const [editingSnapshotId, setEditingSnapshotId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
   const [accountForm, setAccountAccountForm] = useState({
@@ -73,53 +72,21 @@ export default function BankAccountsPage() {
     if (!selectedAccountId) return;
     setSaving(true);
     try {
-      const method = editingSnapshotId ? 'PATCH' : 'POST';
-      const body = {
-        ...snapshotForm,
-        id: editingSnapshotId,
-        balance: parseFloat(snapshotForm.balance),
-      };
-
       const res = await fetch(`/api/bank-accounts/${selectedAccountId}/snapshots`, {
-        method,
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
+        body: JSON.stringify({
+          ...snapshotForm,
+          balance: parseFloat(snapshotForm.balance),
+        }),
       });
       if (res.ok) {
         setShowSnapshotModal(false);
-        setEditingSnapshotId(null);
         setSnapshotForm({ date: new Date().toISOString().split('T')[0], balance: '', description: '' });
         fetchAccounts();
       }
     } finally {
       setSaving(false);
-    }
-  }
-
-  function openEditModal(accountId: string, snapshot: { id: string; date: string; balance: number; description: string | null }) {
-    setSelectedAccountId(accountId);
-    setEditingSnapshotId(snapshot.id);
-    setSnapshotForm({
-      date: new Date(snapshot.date).toISOString().split('T')[0],
-      balance: snapshot.balance.toString(),
-      description: snapshot.description || '',
-    });
-    setShowSnapshotModal(true);
-  }
-
-  async function handleDeleteSnapshot(accountId: string, snapshotId: string) {
-    if (!confirm('Tem certeza que deseja eliminar este registo de saldo?')) return;
-    try {
-      const res = await fetch(`/api/bank-accounts/${accountId}/snapshots?snapshotId=${snapshotId}`, {
-        method: 'DELETE',
-      });
-      if (res.ok) {
-        fetchAccounts();
-      } else {
-        alert('Erro ao eliminar registo');
-      }
-    } catch (e) {
-      console.error(e);
     }
   }
 
@@ -160,7 +127,6 @@ export default function BankAccountsPage() {
                         <th className="pb-2 font-medium">Data</th>
                         <th className="pb-2 font-medium">Saldo</th>
                         <th className="pb-2 font-medium">Notas</th>
-                        <th className="pb-2 font-medium text-right">Ações</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-50">
@@ -169,26 +135,10 @@ export default function BankAccountsPage() {
                           <td className="py-3 text-gray-600">{new Date(snapshot.date).toLocaleDateString('pt-PT')}</td>
                           <td className="py-3 font-bold text-gray-900">{snapshot.balance.toFixed(2)}€</td>
                           <td className="py-3 text-gray-500 italic">{snapshot.description || '-'}</td>
-                          <td className="py-3 text-right flex justify-end gap-2">
-                            <button 
-                              className="text-primary-500 hover:text-primary-700 transition-colors p-1"
-                              onClick={() => openEditModal(account.id, snapshot)}
-                              title="Editar registo"
-                            >
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.036 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
-                            </button>
-                            <button 
-                              className="text-red-500 hover:text-red-700 transition-colors p-1"
-                              onClick={() => handleDeleteSnapshot(account.id, snapshot.id)}
-                              title="Eliminar registo"
-                            >
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h14" /></svg>
-                            </button>
-                          </td>
                         </tr>
                       ))}
                       {(!account.snapshots || account.snapshots.length === 0) && (
-                        <tr><td colSpan={4} className="py-4 text-center text-gray-400">Sem registos de saldo</td></tr>
+                        <tr><td colSpan={3} className="py-4 text-center text-gray-400">Sem registos de saldo</td></tr>
                       )}
                     </tbody>
                   </table>
@@ -233,7 +183,7 @@ export default function BankAccountsPage() {
         {showSnapshotModal && (
           <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
             <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-2xl">
-              <h2 className="text-xl font-bold mb-4">{editingSnapshotId ? 'Editar Saldo de Fecho' : 'Registar Saldo de Fecho'}</h2>
+              <h2 className="text-xl font-bold mb-4">Registar Saldo de Fecho</h2>
               <form onSubmit={handleSnapshotSubmit} className="space-y-4">
                 <div>
                   <label className="label">Data de Referência</label>
@@ -248,8 +198,8 @@ export default function BankAccountsPage() {
                   <input type="text" className="input" value={snapshotForm.description} onChange={e => setSnapshotForm({...snapshotForm, description: e.target.value})} placeholder="Ex: Saldo a 31 de Dezembro" />
                 </div>
                 <div className="flex gap-2 justify-end pt-4">
-                  <button type="button" className="btn-secondary" onClick={() => { setShowSnapshotModal(false); setEditingSnapshotId(null); }}>Cancelar</button>
-                  <button type="submit" className="btn-primary" disabled={saving}>{editingSnapshotId ? 'Guardar' : 'Registar'}</button>
+                  <button type="button" className="btn-secondary" onClick={() => setShowSnapshotModal(false)}>Cancelar</button>
+                  <button type="submit" className="btn-primary" disabled={saving}>Registar</button>
                 </div>
               </form>
             </div>
