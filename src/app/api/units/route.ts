@@ -28,6 +28,8 @@ export async function GET() {
         transactions: {
           where: { type: 'payment' },
           select: {
+            id: true,
+            amount: true,
             monthAllocations: { select: { month: true, amount: true } },
           },
         },
@@ -42,6 +44,20 @@ export async function GET() {
 
       // Flatten all month allocations for this unit
       const allAllocations = unit.transactions.flatMap((t) => t.monthAllocations);
+
+      // Calculate unallocated payments (income transactions with no month allocations)
+      const unallocatedTxs = unit.transactions.filter(
+        (t) => t.amount > 0 && t.monthAllocations.length === 0
+      );
+      const unallocatedPayments = {
+        count: unallocatedTxs.length,
+        total: unallocatedTxs.reduce((sum, t) => sum + t.amount, 0),
+      };
+
+      // Derive minYear from earliest fee history record
+      const minYear = unit.feeHistory.length > 0
+        ? parseInt((unit.feeHistory[0] as FeeHistoryRecord).effectiveFrom.split('-')[0])
+        : currentYear;
 
       // Calculate expected YTD (current year, up to current month)
       let expectedYTD = 0;
@@ -69,16 +85,16 @@ export async function GET() {
         .filter(a => parseInt(a.month.split('-')[1]) < currentMonth)
         .reduce((sum, a) => sum + a.amount, 0);
 
-      // Calculate past years debt
+      // Calculate past years debt (only from minYear onwards)
       const pastYears = new Set<number>();
       allAllocations.forEach((a) => {
         const year = parseInt(a.month.split('-')[0]);
-        if (year < currentYear) pastYears.add(year);
+        if (year < currentYear && year >= minYear) pastYears.add(year);
       });
 
       // Also add years covered by feeHistory (covers years with no payments)
       unit.feeHistory.forEach((fh) => {
-        const startYear = parseInt(fh.effectiveFrom.split('-')[0]);
+        const startYear = Math.max(parseInt(fh.effectiveFrom.split('-')[0]), minYear);
         const endYear = fh.effectiveTo
           ? parseInt(fh.effectiveTo.split('-')[0])
           : currentYear - 1;
@@ -87,9 +103,9 @@ export async function GET() {
         }
       });
 
-      // Also add years covered by extra charges
+      // Also add years covered by extra charges (from minYear onwards)
       unitExtraCharges.forEach((ec) => {
-        const ecStartYear = parseInt(ec.effectiveFrom.split('-')[0]);
+        const ecStartYear = Math.max(parseInt(ec.effectiveFrom.split('-')[0]), minYear);
         const ecEndYear = ec.effectiveTo
           ? parseInt(ec.effectiveTo.split('-')[0])
           : currentYear - 1;
@@ -139,6 +155,7 @@ export async function GET() {
         totalPaid: paidYTD,
         totalOwed,
         pastDebt,
+        unallocatedPayments,
       };
     });
 

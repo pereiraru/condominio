@@ -70,24 +70,29 @@ export async function GET(
       ? regularAllocations.filter((a) => isMonthInOwnerPeriod(a.month, ownerStartMonth, ownerEndMonth))
       : regularAllocations;
 
+    // Derive minYear from earliest fee history record
+    const minYear = unit.feeHistory.length > 0
+      ? parseInt((unit.feeHistory[0] as FeeHistoryRecord).effectiveFrom.split('-')[0])
+      : currentYear;
+
     // Determine start year from owner period or allocations
     let startYear: number | null = null;
     if (ownerStartMonth) {
-      startYear = parseInt(ownerStartMonth.split('-')[0]);
+      startYear = Math.max(parseInt(ownerStartMonth.split('-')[0]), minYear);
     }
 
-    // Get all unique years from allocations (past years only)
+    // Get all unique years from allocations (past years only, from minYear onwards)
     const years = new Set<number>();
     filteredAllocations.forEach((a) => {
       const year = parseInt(a.month.split('-')[0]);
-      if (year < currentYear) {
+      if (year < currentYear && year >= minYear) {
         years.add(year);
       }
     });
 
     // Also add years covered by feeHistory (covers years with no payments)
     unit.feeHistory.forEach((fh) => {
-      const fhStartYear = parseInt(fh.effectiveFrom.split('-')[0]);
+      const fhStartYear = Math.max(parseInt(fh.effectiveFrom.split('-')[0]), minYear);
       const fhEndYear = fh.effectiveTo
         ? parseInt(fh.effectiveTo.split('-')[0])
         : currentYear - 1;

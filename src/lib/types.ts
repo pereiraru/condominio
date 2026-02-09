@@ -32,6 +32,7 @@ export interface Unit {
   totalPaid?: number;
   totalOwed?: number;
   pastDebt?: number;
+  unallocatedPayments?: { count: number; total: number };
 }
 
 export interface Creditor {

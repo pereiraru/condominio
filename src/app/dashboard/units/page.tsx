@@ -325,24 +325,39 @@ export default function UnitsPage() {
                           </div>
                         </div>
 
-                        <div className="mt-auto px-5 py-3 border-t flex justify-between items-center bg-gray-50/30">
-                          <div className="flex flex-col">
-                            <span className="text-[10px] text-gray-400 font-bold uppercase">Estado Financeiro</span>
-                            <span className={`text-xs font-bold ${hasPastDebt ? 'text-red-600' : 'text-green-600'}`}>
-                              {totalOwed > 0.01 ? `${totalOwed.toFixed(2)}€ em falta` : 'Regularizado'}
-                            </span>
+                        <div className="mt-auto px-5 py-3 border-t bg-gray-50/30 space-y-1.5">
+                          <div className="flex justify-between items-center">
+                            <div className="flex flex-col">
+                              <span className="text-[10px] text-gray-400 font-bold uppercase">Estado Financeiro</span>
+                              <span className={`text-xs font-bold ${hasPastDebt ? 'text-red-600' : 'text-green-600'}`}>
+                                {totalOwed > 0.01 ? `${totalOwed.toFixed(2)}€ em falta` : 'Regularizado'}
+                              </span>
+                            </div>
+                            <div className={`w-8 h-8 rounded-full flex items-center justify-center ${hasPastDebt ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'}`}>
+                              {hasPastDebt ? (
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                              ) : (
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                </svg>
+                              )}
+                            </div>
                           </div>
-                          <div className={`w-8 h-8 rounded-full flex items-center justify-center ${hasPastDebt ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'}`}>
-                            {hasPastDebt ? (
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          {(unit.unallocatedPayments?.count ?? 0) > 0 && (
+                            <div className="flex items-center gap-1.5 text-amber-600">
+                              <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4.5c-.77-.833-2.694-.833-3.464 0L3.34 16.5c-.77.833.192 2.5 1.732 2.5z" />
                               </svg>
-                            ) : (
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                              </svg>
-                            )}
-                          </div>
+                              <span className="text-[10px] font-bold uppercase">
+                                {unit.unallocatedPayments!.count === 1
+                                  ? `1 pagamento sem alocação — ${unit.unallocatedPayments!.total.toFixed(2)}€`
+                                  : `${unit.unallocatedPayments!.count} pagamentos sem alocação — ${unit.unallocatedPayments!.total.toFixed(2)}€`
+                                }
+                              </span>
+                            </div>
+                          )}
                         </div>
                       </div>
                     );
