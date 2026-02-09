@@ -82,9 +82,9 @@ export async function POST() {
       creditorByName[c.name] = c.id;
     }
 
-    // Get all units with fee history for expected fee calculation
+    // Get all units with fee history and owners for expected fee calculation
     const units = await prisma.unit.findMany({
-      include: { feeHistory: true },
+      include: { feeHistory: true, owners: { orderBy: { startMonth: 'asc' } } },
     });
     const unitById: Record<string, typeof units[0]> = {};
     for (const u of units) {
@@ -247,10 +247,7 @@ export async function POST() {
         assignedCount++;
         ownerMatchCount++;
 
-        // Only auto-allocate if:
-        // 1. No existing allocation
-        // 2. Amount matches expected fee (within 0.01€ tolerance)
-        // 3. That month is not already fully paid
+        // Only auto-allocate if no existing allocation
         if (tx.monthAllocations.length === 0) {
           const amountMatchesFee = Math.abs(tx.amount - expectedFee) < 0.01;
           const paidKey = `${matchedUnitId}|${txMonth}`;
@@ -262,7 +259,6 @@ export async function POST() {
               data: { transactionId: tx.id, month: txMonth, amount: tx.amount },
             });
             allocatedCount++;
-            // Update our tracking so subsequent transactions for same unit/month know it's paid
             paidMonthTotals[paidKey] = (paidMonthTotals[paidKey] || 0) + tx.amount;
 
             details.push({
@@ -271,8 +267,64 @@ export async function POST() {
               month: txMonth,
               status: 'auto-alocado',
             });
+          } else if (tx.amount > expectedFee + 0.01) {
+            // Lump-sum payment (e.g. yearly) → fill months sequentially until money runs out
+            // Find the earliest unpaid month for this unit (from fee history start or owner start)
+            const owner = unit?.owners?.[0];
+            const ownerStart = owner?.startMonth || (feeHistory.length > 0 ? feeHistory[0].effectiveFrom : `${new Date().getFullYear()}-01`);
+            const startYear = parseInt(ownerStart.split('-')[0]);
+            const startM = parseInt(ownerStart.split('-')[1]);
+            const curYear = new Date().getFullYear();
+
+            let remaining = tx.amount;
+            let allocatedMonths = 0;
+            let firstMonth = '';
+            let lastMonth = '';
+
+            // Iterate months from owner/fee start up to end of next year
+            for (let y = startYear; y <= curYear + 1 && remaining > 0.01; y++) {
+              const mStart = (y === startYear) ? startM : 1;
+              for (let m = mStart; m <= 12 && remaining > 0.01; m++) {
+                const mStr = `${y}-${m.toString().padStart(2, '0')}`;
+                const mKey = `${matchedUnitId}|${mStr}`;
+                const mFee = getFeeForMonth(feeHistory, mStr, unit?.monthlyFee || 0);
+                const mPaid = paidMonthTotals[mKey] || 0;
+
+                if (mPaid >= mFee - 0.01) continue; // already paid
+
+                const needed = mFee - mPaid;
+                const allocAmount = Math.round(Math.min(needed, remaining) * 100) / 100;
+
+                await prisma.transactionMonth.create({
+                  data: { transactionId: tx.id, month: mStr, amount: allocAmount },
+                });
+                paidMonthTotals[mKey] = (paidMonthTotals[mKey] || 0) + allocAmount;
+                remaining = Math.round((remaining - allocAmount) * 100) / 100;
+                allocatedMonths++;
+                if (!firstMonth) firstMonth = mStr;
+                lastMonth = mStr;
+              }
+            }
+
+            if (allocatedMonths > 0) {
+              allocatedCount++;
+              details.push({
+                description: tx.description.substring(0, 40),
+                assignedTo: `${unitCode} (${ownerName})`,
+                month: `${firstMonth}→${lastMonth}`,
+                status: `${allocatedMonths} meses alocados`,
+              });
+            } else {
+              needsManualAllocation++;
+              details.push({
+                description: tx.description.substring(0, 40),
+                assignedTo: `${unitCode} (${ownerName})`,
+                month: txMonth,
+                status: 'sem meses em falta',
+              });
+            }
           } else {
-            // Amount doesn't match expected fee → needs manual allocation
+            // Amount doesn't match and is less than expected → needs manual allocation
             needsManualAllocation++;
             details.push({
               description: tx.description.substring(0, 40),
