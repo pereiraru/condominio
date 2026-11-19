@@ -37,6 +37,7 @@ export default function CreditorDiscrepanciesPanel({
 }: CreditorDiscrepanciesPanelProps) {
   const [items, setItems] = useState<DiscrepancyItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [expanded, setExpanded] = useState(false);
   const [showResolved, setShowResolved] = useState(false);
   const [updatingKey, setUpdatingKey] = useState<string | null>(null);
 
@@ -89,66 +90,70 @@ export default function CreditorDiscrepanciesPanel({
   return (
     <div className="mb-8 space-y-3">
       {unresolved.length > 0 && (
-        <div className="rounded-2xl border border-amber-200 bg-amber-50/70 p-5 shadow-sm">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
+        <div className="rounded-2xl border border-amber-200 bg-amber-50/70 px-5 py-3.5 shadow-sm">
+          <button
+            type="button"
+            onClick={() => setExpanded((v) => !v)}
+            className="flex w-full items-center justify-between gap-3 text-left"
+          >
             <div className="flex items-center gap-2.5">
-              <span className="flex h-7 w-7 items-center justify-center rounded-full bg-amber-500 text-white text-sm font-black">
+              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-amber-500 text-white text-xs font-black">
                 !
               </span>
-              <div>
-                <h2 className="text-base font-bold text-amber-950">
-                  Verificações Pendentes ({unresolved.length})
-                </h2>
-                <p className="text-xs text-amber-800/80">
-                  Divergências detetadas entre faturas, valores acordados e extrato bancário.
-                </p>
-              </div>
+              <span className="text-sm font-bold text-amber-950">
+                Verificações Pendentes ({unresolved.length})
+              </span>
             </div>
-          </div>
+            <span className="shrink-0 rounded-lg border border-amber-300 bg-white px-3 py-1 text-xs font-bold text-amber-900 hover:bg-amber-100/60 transition-colors">
+              {expanded ? '▲ Fechar' : '▼ Expandir'}
+            </span>
+          </button>
 
-          <div className="space-y-2.5">
-            {unresolved.map((item) => {
-              const badge = TYPE_BADGE[item.type] || TYPE_BADGE.unreconciled_invoice;
-              return (
-                <div
-                  key={item.discrepancyKey}
-                  className="flex flex-col md:flex-row md:items-center justify-between gap-3 rounded-xl bg-white p-4 border border-amber-200/80 shadow-sm"
-                >
-                  <div className="space-y-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${badge.cls}`}>
-                        {badge.label}
-                      </span>
-                      {showCreditorLink && (
-                        <Link
-                          href={`/dashboard/creditors/${item.creditorId}`}
-                          className="text-xs font-bold text-primary-600 hover:underline"
-                        >
-                          {item.creditorName}
-                        </Link>
-                      )}
-                      <span className="text-sm font-bold text-gray-900">{item.title}</span>
-                    </div>
-                    <p className="text-xs text-gray-600">{item.description}</p>
-                    <p className="text-xs text-blue-700 font-medium">
-                      Solução sugerida: {item.suggestedFix}
-                    </p>
-                  </div>
-
-                  <button
-                    type="button"
-                    disabled={updatingKey === item.discrepancyKey}
-                    onClick={() => toggleResolve(item)}
-                    className="shrink-0 inline-flex items-center gap-1.5 rounded-lg border border-green-300 bg-green-50 px-3 py-1.5 text-xs font-bold text-green-800 hover:bg-green-100 transition-colors disabled:opacity-50"
-                    title="Confirmar que foi verificada/corrigida"
+          {expanded && (
+            <div className="mt-4 space-y-2.5">
+              {unresolved.map((item) => {
+                const badge = TYPE_BADGE[item.type] || TYPE_BADGE.unreconciled_invoice;
+                return (
+                  <div
+                    key={item.discrepancyKey}
+                    className="flex flex-col md:flex-row md:items-center justify-between gap-3 rounded-xl bg-white p-4 border border-amber-200/80 shadow-sm"
                   >
-                    <span>✓</span>
-                    <span>{updatingKey === item.discrepancyKey ? 'A guardar...' : 'Confirmar corrigida'}</span>
-                  </button>
-                </div>
-              );
-            })}
-          </div>
+                    <div className="space-y-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${badge.cls}`}>
+                          {badge.label}
+                        </span>
+                        {showCreditorLink && (
+                          <Link
+                            href={`/dashboard/creditors/${item.creditorId}`}
+                            className="text-xs font-bold text-primary-600 hover:underline"
+                          >
+                            {item.creditorName}
+                          </Link>
+                        )}
+                        <span className="text-sm font-bold text-gray-900">{item.title}</span>
+                      </div>
+                      <p className="text-xs text-gray-600">{item.description}</p>
+                      <p className="text-xs text-blue-700 font-medium">
+                        Solução sugerida: {item.suggestedFix}
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      disabled={updatingKey === item.discrepancyKey}
+                      onClick={() => toggleResolve(item)}
+                      className="shrink-0 inline-flex items-center gap-1.5 rounded-lg border border-green-300 bg-green-50 px-3 py-1.5 text-xs font-bold text-green-800 hover:bg-green-100 transition-colors disabled:opacity-50"
+                      title="Confirmar que foi verificada/corrigida"
+                    >
+                      <span>✓</span>
+                      <span>{updatingKey === item.discrepancyKey ? 'A guardar...' : 'Confirmar corrigida'}</span>
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
 
