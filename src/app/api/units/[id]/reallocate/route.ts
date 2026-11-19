@@ -34,11 +34,17 @@ export async function POST(
     const feeHistory = unit.feeHistory as FeeHistoryRecord[];
     const currentYear = new Date().getFullYear();
 
-    // Preserve transactions that are strictly allocated to PREV-DEBT
-    const regularTxs = unit.transactions.filter(
-      (tx) => !tx.monthAllocations.some((a) => a.month === 'PREV-DEBT')
-    );
-    const regularTxIds = regularTxs.map((t) => t.id);
+    // Separate pure PREV-DEBT transactions from transactions with remaining quota capacity
+    const allocatableTxs = unit.transactions
+      .map((tx) => {
+        const prevDebtPaid = tx.monthAllocations
+          .filter((a) => a.month === 'PREV-DEBT')
+          .reduce((sum, a) => sum + a.amount, 0);
+        const allocatableAmount = Math.round((tx.amount - prevDebtPaid) * 100) / 100;
+        return { tx, allocatableAmount };
+      })
+      .filter((item) => item.allocatableAmount > 0.005);
+    const regularTxIds = allocatableTxs.map((item) => item.tx.id);
 
     const startMonth =
       feeHistory.length > 0 ? feeHistory[0].effectiveFrom : '2024-01';
@@ -65,7 +71,7 @@ export async function POST(
       const paidInMonth: Record<string, number> = {};
       let monthIdx = 0;
 
-      for (const tx of regularTxs) {
+      for (const { tx, allocatableAmount } of allocatableTxs) {
         const txMonth = tx.date.toISOString().slice(0, 7);
         const expectedTxMonth = getFeeForMonth(feeHistory, txMonth, unit.monthlyFee);
 
@@ -77,20 +83,20 @@ export async function POST(
               getFeeForMonth(feeHistory, m, unit.monthlyFee) - 0.01
         );
 
-        // If prior months are full and tx is a monthly surplus payment (e.g. RCE 50€ vs 45€) on an unpaid txMonth, keep it on txMonth
-        if (!priorHasGap && tx.amount > expectedTxMonth + 0.01 && (paidInMonth[txMonth] || 0) < 0.01) {
+        // If prior months are full and tx has surplus on an unpaid txMonth, keep it on txMonth
+        if (!priorHasGap && allocatableAmount > expectedTxMonth + 0.01 && (paidInMonth[txMonth] || 0) < 0.01) {
           await txPrisma.transactionMonth.create({
             data: {
               transactionId: tx.id,
               month: txMonth,
-              amount: Math.round(tx.amount * 100) / 100,
+              amount: allocatableAmount,
             },
           });
-          paidInMonth[txMonth] = (paidInMonth[txMonth] || 0) + tx.amount;
+          paidInMonth[txMonth] = (paidInMonth[txMonth] || 0) + allocatableAmount;
           continue;
         }
 
-        let rem = Math.round(tx.amount * 100) / 100;
+        let rem = allocatableAmount;
         while (rem > 0.005 && monthIdx < months.length) {
           const m = months[monthIdx];
           const cap = getFeeForMonth(feeHistory, m, unit.monthlyFee);
@@ -119,7 +125,7 @@ export async function POST(
 
     return NextResponse.json({
       success: true,
-      reallocatedTransactions: regularTxs.length,
+      reallocatedTransactions: allocatableTxs.length,
     });
   } catch (error) {
     console.error('Error reallocating unit transactions:', error);

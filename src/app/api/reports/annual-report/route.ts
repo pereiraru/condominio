@@ -44,7 +44,20 @@ export async function GET(request: NextRequest) {
       }),
       prisma.extraCharge.findMany(),
       prisma.transactionMonth.findMany({
-        where: { month: { gte: `${year}-01`, lte: `${year}-12` } },
+        where: {
+          OR: [
+            { month: { gte: `${year}-01`, lte: `${year}-12` } },
+            {
+              month: 'PREV-DEBT',
+              transaction: {
+                date: {
+                  gte: new Date(`${year}-01-01`),
+                  lte: new Date(`${year}-12-31T23:59:59`),
+                },
+              },
+            },
+          ],
+        },
         include: {
           transaction: {
             select: { id: true, unitId: true, creditorId: true, amount: true, date: true, description: true, type: true, category: true },
@@ -53,7 +66,17 @@ export async function GET(request: NextRequest) {
         },
       }),
       prisma.transactionMonth.findMany({
-        where: { month: { lt: `${year}-01` } },
+        where: {
+          OR: [
+            { month: { lt: `${year}-01` } },
+            {
+              month: 'PREV-DEBT',
+              transaction: {
+                date: { lt: new Date(`${year}-01-01`) },
+              },
+            },
+          ],
+        },
         include: {
           transaction: { select: { unitId: true, creditorId: true, amount: true } },
         },
@@ -279,7 +302,7 @@ export async function GET(request: NextRequest) {
     let receitasAnosAnteriores = 0;
     for (const tx of currentYearIncomeTransactions) {
       for (const alloc of tx.monthAllocations) {
-        if (alloc.month < `${year}-01`) {
+        if (alloc.month < `${year}-01` || alloc.month === 'PREV-DEBT') {
           receitasAnosAnteriores += alloc.amount;
         }
       }
@@ -543,10 +566,15 @@ export async function GET(request: NextRequest) {
           unit.owners
         );
 
-        if (debtInfo.previousDebtRemaining > 0.01) {
+        const prevDebtPaidInYear = incomeAllocations
+          .filter((a) => a.transaction.unitId === unit.id && a.month === 'PREV-DEBT')
+          .reduce((sum, a) => sum + a.amount, 0);
+        const remainingPrevDebt = Math.max(0, debtInfo.previousDebtRemaining - prevDebtPaidInYear);
+
+        if (remainingPrevDebt > 0.01) {
           items.push({
             description: 'Dívida Anterior a 2024 (Pré-Digital)',
-            amount: debtInfo.previousDebtRemaining,
+            amount: remainingPrevDebt,
           });
         }
 
