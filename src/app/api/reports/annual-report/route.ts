@@ -318,9 +318,7 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Expenses by creditor (excluding savings transfers)
-    // Prefer transactions with creditorId; skip unassigned duplicates from bank extract imports
-    const expensesByCreditor: Record<string, { label: string; category: string; amount: number }> = {};
+    // Expenses by creditor (using month allocations for the year + extra supplier invoices without linked transaction, excluding savings transfers)
     let totalReforcoPoupanca = 0;
 
     const currentYearExpenseTransactions = await prisma.transaction.findMany({
@@ -335,41 +333,137 @@ export async function GET(request: NextRequest) {
     const assignedExpenseKeys = new Set<string>();
     for (const tx of currentYearExpenseTransactions) {
       if (tx.creditorId || tx.category) {
-        // Round date to day for matching (some imports have noon offset)
         const dateKey = tx.date.toISOString().split('T')[0];
         assignedExpenseKeys.add(`${dateKey}|${tx.amount}`);
       }
-    }
-
-    for (const tx of currentYearExpenseTransactions) {
       const creditor = creditors.find((c) => c.id === tx.creditorId);
       const category = creditor?.category || tx.category || 'other';
-
-      // Skip unassigned transactions that have a matching assigned duplicate
-      if (!tx.creditorId && !tx.category) {
-        const dateKey = tx.date.toISOString().split('T')[0];
-        if (assignedExpenseKeys.has(`${dateKey}|${tx.amount}`)) {
-          continue; // Skip this duplicate
-        }
-      }
-
       if (category === 'savings') {
         totalReforcoPoupanca += Math.abs(tx.amount);
-        continue; // Don't count as standard expense
       }
-
-      const label = creditor?.name || tx.category || 'Outros';
-
-      if (!expensesByCreditor[label]) {
-        expensesByCreditor[label] = { label, category, amount: 0 };
-      }
-      expensesByCreditor[label].amount += Math.abs(tx.amount);
     }
 
-    const despesasCategories = Object.values(expensesByCreditor).sort((a, b) =>
-      a.label.localeCompare(b.label)
+    const monthNames = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+      'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+
+    const paidExpensesByCreditor: Record<string, {
+      category: string;
+      categoryLabel: string;
+      months: { month: string; monthLabel: string; amount: number }[];
+      categoryTotal: number;
+    }> = {};
+
+    const addPaidExpenseEntry = (
+      key: string,
+      category: string,
+      categoryLabel: string,
+      monthKey: string,
+      monthLabel: string,
+      amount: number,
+      mergeByMonth: boolean
+    ) => {
+      if (!paidExpensesByCreditor[key]) {
+        paidExpensesByCreditor[key] = { category, categoryLabel, months: [], categoryTotal: 0 };
+      }
+      const roundedAmt = Math.round(amount * 100) / 100;
+      let monthEntry = mergeByMonth
+        ? paidExpensesByCreditor[key].months.find((m) => m.month === monthKey)
+        : undefined;
+      if (!monthEntry) {
+        monthEntry = { month: monthKey, monthLabel, amount: 0 };
+        paidExpensesByCreditor[key].months.push(monthEntry);
+      }
+      monthEntry.amount = Math.round((monthEntry.amount + roundedAmt) * 100) / 100;
+      paidExpensesByCreditor[key].categoryTotal =
+        Math.round((paidExpensesByCreditor[key].categoryTotal + roundedAmt) * 100) / 100;
+    };
+
+    const formatMonthLabel = (yyyyMm: string) => {
+      const [mYear, mNum] = yyyyMm.split('-');
+      const mIdx = parseInt(mNum, 10) - 1;
+      return mIdx >= 0 && mIdx < 12 ? `${monthNames[mIdx]} ${mYear}` : yyyyMm;
+    };
+
+    // 1. Monthly expense allocations for this year (negative transactions with creditorId)
+    for (const alloc of yearAllocations) {
+      if (alloc.transaction.amount >= 0 || !alloc.transaction.creditorId) continue;
+      const creditor = creditors.find((c) => c.id === alloc.transaction.creditorId);
+      if (!creditor) continue;
+      const category = creditor.category || 'other';
+      if (category === 'savings') continue;
+
+      addPaidExpenseEntry(
+        creditor.id,
+        category,
+        creditor.name,
+        alloc.month,
+        formatMonthLabel(alloc.month),
+        Math.abs(alloc.amount),
+        true
+      );
+    }
+
+    // 2. Extra expenses from SupplierInvoices without a linked bank transaction
+    //    (e.g. fixed-contract extras like "Limpeza de vidros" for Luar Limpeza, or manually settled invoices)
+    for (const inv of supplierInvoices) {
+      if (inv.transactionId) continue;
+      const creditor = inv.creditorId ? creditors.find((c) => c.id === inv.creditorId) : undefined;
+      if (!creditor?.isFixed && !inv.isPaid) continue;
+
+      const category = creditor?.category || inv.category || 'other';
+      if (category === 'savings') continue;
+
+      const invMonth = inv.date.toISOString().substring(0, 7);
+      addPaidExpenseEntry(
+        creditor?.id || inv.creditorId || inv.category || 'outros',
+        category,
+        creditor?.name || inv.creditor?.name || inv.category || 'Outros',
+        `${invMonth}-extra-${inv.id}`,
+        `${inv.description} (${inv.date.toISOString().slice(0, 10)})`,
+        inv.amountDue,
+        false
+      );
+    }
+
+    // 3. Expenses without creditorId (unassigned) that are not bank extract duplicates
+    for (const tx of currentYearExpenseTransactions) {
+      if (tx.creditorId) continue;
+      const category = tx.category || 'other';
+      if (category === 'savings') continue;
+
+      if (!tx.category) {
+        const dateKey = tx.date.toISOString().split('T')[0];
+        if (assignedExpenseKeys.has(`${dateKey}|${tx.amount}`)) continue;
+      }
+
+      const txMonth = tx.date.toISOString().substring(0, 7);
+      addPaidExpenseEntry(
+        tx.category || 'outros',
+        category,
+        tx.category || 'Outros',
+        txMonth,
+        formatMonthLabel(txMonth),
+        Math.abs(tx.amount),
+        true
+      );
+    }
+
+    for (const group of Object.values(paidExpensesByCreditor)) {
+      group.months.sort((a, b) => a.month.localeCompare(b.month));
+    }
+
+    const paidExpenseGroups = Object.values(paidExpensesByCreditor).sort((a, b) =>
+      a.categoryLabel.localeCompare(b.categoryLabel)
     );
-    const totalDespesasOperacionais = despesasCategories.reduce((sum, c) => sum + c.amount, 0);
+    const totalPaidExpenses = Math.round(paidExpenseGroups.reduce((sum, g) => sum + g.categoryTotal, 0) * 100) / 100;
+
+    // Derive Balancete expense categories directly from paidExpenseGroups so Section 1 and Section 4 match 100%
+    const despesasCategories = paidExpenseGroups.map((g) => ({
+      label: g.categoryLabel,
+      category: g.category,
+      amount: g.categoryTotal,
+    }));
+    const totalDespesasOperacionais = totalPaidExpenses;
     const totalDespesasGeral = totalDespesasOperacionais + totalReforcoPoupanca;
 
     // Calculate total expected for fixed creditors this year
@@ -732,104 +826,12 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Build paid expenses from month allocations (grouped by creditor) for Section 4
-    // Uses allocated amounts per month instead of raw transaction values
-    const paidExpensesByCreditor: Record<string, {
-      category: string;
-      categoryLabel: string;
-      months: { month: string; monthLabel: string; amount: number }[];
-      categoryTotal: number;
-    }> = {};
-
-    // Get expense allocations for the year (negative amounts = expenses)
-    const expenseAllocations = yearAllocations.filter(
-      (a) => a.transaction.amount < 0 && a.transaction.creditorId
-    );
-
-    for (const alloc of expenseAllocations) {
-      const creditor = creditors.find((c) => c.id === alloc.transaction.creditorId);
-      if (!creditor) continue;
-      const category = creditor.category || 'other';
-
-      // Skip savings transfers
-      if (category === 'savings') continue;
-
-      const label = creditor.name;
-      const key = creditor.id;
-
-      if (!paidExpensesByCreditor[key]) {
-        paidExpensesByCreditor[key] = { category, categoryLabel: label, months: [], categoryTotal: 0 };
-      }
-
-      // Find or create month entry
-      let monthEntry = paidExpensesByCreditor[key].months.find(m => m.month === alloc.month);
-      if (!monthEntry) {
-        const mIdx = parseInt(alloc.month.split('-')[1]) - 1;
-        const mYear = alloc.month.split('-')[0];
-        const monthLabel = mIdx >= 0 && mIdx < 12
-          ? `${['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'][mIdx]} ${mYear}`
-          : alloc.month;
-        monthEntry = { month: alloc.month, monthLabel, amount: 0 };
-        paidExpensesByCreditor[key].months.push(monthEntry);
-      }
-      monthEntry.amount += Math.abs(alloc.amount);
-      paidExpensesByCreditor[key].categoryTotal += Math.abs(alloc.amount);
-    }
-
-    // Also include expenses without creditorId (unassigned) that are not duplicates
-    for (const tx of currentYearExpenseTransactions) {
-      if (tx.creditorId) continue; // Already handled via allocations
-      const category = tx.category || 'other';
-      if (category === 'savings') continue;
-
-      // Skip unassigned duplicates
-      if (!tx.category) {
-        const dateKey = tx.date.toISOString().split('T')[0];
-        if (assignedExpenseKeys.has(`${dateKey}|${tx.amount}`)) continue;
-      }
-
-      const label = tx.category || 'Outros';
-      const key = tx.category || 'outros';
-
-      if (!paidExpensesByCreditor[key]) {
-        paidExpensesByCreditor[key] = { category, categoryLabel: label, months: [], categoryTotal: 0 };
-      }
-
-      // Group by transaction month
-      const txMonth = tx.date.toISOString().substring(0, 7);
-      let monthEntry = paidExpensesByCreditor[key].months.find(m => m.month === txMonth);
-      if (!monthEntry) {
-        const mIdx = parseInt(txMonth.split('-')[1]) - 1;
-        const mYear = txMonth.split('-')[0];
-        const monthLabel = mIdx >= 0 && mIdx < 12
-          ? `${['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'][mIdx]} ${mYear}`
-          : txMonth;
-        monthEntry = { month: txMonth, monthLabel, amount: 0 };
-        paidExpensesByCreditor[key].months.push(monthEntry);
-      }
-      monthEntry.amount += Math.abs(tx.amount);
-      paidExpensesByCreditor[key].categoryTotal += Math.abs(tx.amount);
-    }
-
-    // Sort months within each group
-    for (const group of Object.values(paidExpensesByCreditor)) {
-      group.months.sort((a, b) => a.month.localeCompare(b.month));
-    }
-
-    const paidExpenseGroups = Object.values(paidExpensesByCreditor).sort((a, b) =>
-      a.categoryLabel.localeCompare(b.categoryLabel)
-    );
-    const totalPaidExpenses = paidExpenseGroups.reduce((sum, g) => sum + g.categoryTotal, 0);
-
     // =========================================
     // Despesas por Liquidar (Unpaid Creditor Expenses)
     // Only for fixed/contract creditors (isFixed=true AND amountDue > 0)
     // e.g. Otis Elevadores, Luar Limpeza
     // Variable expenses (Endesa, bank fees) are NOT included — they have no expected value
     // =========================================
-
-    const monthNames = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
-      'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
 
     // Only fixed creditors with a known monthly amount
     const fixedCreditorsForUnpaid = creditors.filter(c => c.isFixed && c.amountDue && c.amountDue > 0);
