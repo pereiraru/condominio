@@ -257,7 +257,16 @@ export async function GET(request: NextRequest) {
         latestOpeningByAccount[s.bankAccountId] = s.balance;
       }
     });
-    const saldoInicialTransitar = Object.values(latestOpeningByAccount).reduce((sum, b) => sum + b, 0);
+    const saldoInicialTransitar =
+      Math.round(Object.values(latestOpeningByAccount).reduce((sum, b) => sum + b, 0) * 100) / 100;
+    const saldosTransitarContas = bankAccounts
+      .map((acc) => ({
+        id: acc.id,
+        name: acc.name,
+        accountType: acc.accountType,
+        balance: latestOpeningByAccount[acc.id] ?? 0,
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name));
 
     // Calculate total expected revenue and breakdown
     let totalBaseFeeExpected = 0;
@@ -320,6 +329,7 @@ export async function GET(request: NextRequest) {
 
     // Expenses by creditor (using month allocations for the year + extra supplier invoices without linked transaction, excluding savings transfers)
     let totalReforcoPoupanca = 0;
+    let actualBankOperationalExpenses = 0;
 
     const currentYearExpenseTransactions = await prisma.transaction.findMany({
       where: {
@@ -336,10 +346,19 @@ export async function GET(request: NextRequest) {
         const dateKey = tx.date.toISOString().split('T')[0];
         assignedExpenseKeys.add(`${dateKey}|${tx.amount}`);
       }
+    }
+
+    for (const tx of currentYearExpenseTransactions) {
+      if (!tx.creditorId && !tx.category) {
+        const dateKey = tx.date.toISOString().split('T')[0];
+        if (assignedExpenseKeys.has(`${dateKey}|${tx.amount}`)) continue;
+      }
       const creditor = creditors.find((c) => c.id === tx.creditorId);
       const category = creditor?.category || tx.category || 'other';
       if (category === 'savings') {
         totalReforcoPoupanca += Math.abs(tx.amount);
+      } else {
+        actualBankOperationalExpenses += Math.abs(tx.amount);
       }
     }
 
@@ -482,9 +501,13 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Saldo final
-    const saldoExercicio = (receitasAnosAnteriores + receitasDesteExercicio) - totalDespesasGeral;
-    const saldoFinalDisponivel = saldoInicialTransitar + saldoExercicio;
+    // Saldo final (adds back internal savings transfer and inter-period cash timing adjustment so it reconciles 100% with bank balances)
+    const saldoExercicio =
+      Math.round(((receitasAnosAnteriores + receitasDesteExercicio) - totalDespesasGeral) * 100) / 100;
+    const ajusteCaixaExercicio =
+      Math.round((totalDespesasOperacionais - actualBankOperationalExpenses) * 100) / 100;
+    const saldoFinalDisponivel =
+      Math.round((saldoInicialTransitar + saldoExercicio + totalReforcoPoupanca + ajusteCaixaExercicio) * 100) / 100;
 
     // Bank account balances (Calculating current balance from snapshot + reinforcements)
     const contasBancarias = bankAccounts.map((account) => {
@@ -505,12 +528,13 @@ export async function GET(request: NextRequest) {
         id: account.id,
         name: account.name,
         accountType: account.accountType,
+        openingBalance: latestOpeningByAccount[account.id] ?? 0,
         balance,
         description: snapshot?.description ?? null,
         snapshotDate,
       };
     });
-    const totalBankBalance = contasBancarias.reduce((sum, c) => sum + c.balance, 0);
+    const totalBankBalance = Math.round(contasBancarias.reduce((sum, c) => sum + c.balance, 0) * 100) / 100;
 
     // =========================================
     // SECTION 2: Valores em Débito por Fração
@@ -1018,6 +1042,8 @@ export async function GET(request: NextRequest) {
         },
         saldoExercicio,
         saldoTransitar: saldoInicialTransitar,
+        saldosTransitarContas,
+        ajusteCaixaExercicio,
         contasBancarias,
         totalBankBalance,
         saldoFinalDisponivel,

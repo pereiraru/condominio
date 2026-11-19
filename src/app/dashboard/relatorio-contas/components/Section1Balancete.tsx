@@ -18,8 +18,10 @@ interface Section1Props {
     };
     saldoExercicio: number;
     saldoTransitar: number;
+    saldosTransitarContas?: { id?: string; name: string; accountType: string; balance: number }[];
+    ajusteCaixaExercicio?: number;
     saldoFinalDisponivel: number;
-    contasBancarias: { name: string; accountType: string; balance: number; description: string | null; snapshotDate?: string | null }[];
+    contasBancarias: { name: string; accountType: string; openingBalance?: number; balance: number; description: string | null; snapshotDate?: string | null }[];
     totalBankBalance: number;
     despesasPorLiquidar: number;
     quotasPorLiquidar: { total: number };
@@ -138,6 +140,28 @@ export default function Section1Balancete({ data, year }: Section1Props) {
                 <td className="py-1 italic text-gray-600">Saldo que transitou de {year - 1}</td>
                 <td className="text-right">{fmt(data.saldoTransitar)}</td>
               </tr>
+              {data.saldosTransitarContas && data.saldosTransitarContas.length > 0 && (
+                data.saldosTransitarContas.map((c, idx) => (
+                  <tr key={idx} className="text-[11px] text-gray-500">
+                    <td className="pl-4 py-0.5">↳ {c.name} ({year - 1})</td>
+                    <td className="text-right">{fmt(c.balance)}</td>
+                  </tr>
+                ))
+              )}
+              {data.despesas.totalReforcoPoupanca != null && data.despesas.totalReforcoPoupanca > 0 && (
+                <tr className="text-blue-800">
+                  <td className="py-1 italic">Reforço Fundo de Reserva (Poupança)</td>
+                  <td className="text-right font-semibold">+{fmt(data.despesas.totalReforcoPoupanca)}</td>
+                </tr>
+              )}
+              {data.ajusteCaixaExercicio != null && Math.abs(data.ajusteCaixaExercicio) >= 0.01 && (
+                <tr className="text-gray-500 text-xs">
+                  <td className="py-1 italic">Ajuste de Caixa entre Exercícios (ATM / antecipações / pendentes)</td>
+                  <td className="text-right">
+                    {data.ajusteCaixaExercicio > 0 ? '+' : ''}{fmt(data.ajusteCaixaExercicio)}
+                  </td>
+                </tr>
+              )}
               <tr className="border-t-2 border-gray-800 font-bold bg-gray-50">
                 <td className="py-2">SALDO FINAL DISPONÍVEL</td>
                 <td className="text-right text-base">{fmt(data.saldoFinalDisponivel)}</td>
@@ -154,6 +178,11 @@ export default function Section1Balancete({ data, year }: Section1Props) {
                 <tr key={i}>
                   <td className="py-1">
                     <div>{conta.name}</div>
+                    {conta.openingBalance != null && (
+                      <div className="text-[10px] text-gray-500">
+                        Transitou de {year - 1}: {fmt(conta.openingBalance)}
+                      </div>
+                    )}
                     {conta.snapshotDate && (
                       <div className="text-[10px] text-gray-400 italic">
                         Saldo a {new Date(conta.snapshotDate + 'T00:00:00').toLocaleDateString('pt-PT', { day: '2-digit', month: 'long', year: 'numeric' })}
