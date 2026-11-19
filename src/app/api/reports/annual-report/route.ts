@@ -690,8 +690,12 @@ export async function GET(request: NextRequest) {
         const remainingPrevDebt = Math.max(0, debtInfo.previousDebtRemaining - prevDebtPaidInYear);
 
         if (remainingPrevDebt > 0.01) {
+          const prevDebtDescriptions: Record<string, string> = {
+            '6D': 'Dívida Anterior a 2024 (Quotas antigas + extras: pintura do prédio e vídeo-porteiro/campainhas)',
+            'RCE': 'Dívida Anterior a 2024 (Quotas antigas + extras do prédio: pintura 2018 e reparação portão)',
+          };
           items.push({
-            description: 'Dívida Anterior a 2024 (Pré-Digital)',
+            description: prevDebtDescriptions[unit.code] || 'Dívida Anterior a 2024 (Pré-Digital)',
             amount: remainingPrevDebt,
           });
         }

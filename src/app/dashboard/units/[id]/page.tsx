@@ -871,6 +871,13 @@ export default function UnitDetailV2Page() {
                     </div>
                     
                     <div className="space-y-4">
+                      {(unit.code === '6D' || unit.code === 'RCE') && (
+                        <p className="text-xs text-orange-900 bg-orange-100/70 border border-orange-200 rounded-xl px-3 py-2 leading-relaxed">
+                          {unit.code === '6D'
+                            ? 'Origem: quotas antigas em atraso (2009–2023) e quotas extraordinárias do prédio (pintura 2018 e vídeo-porteiro/campainhas), já deduzidos 722,90€ recuperados via advogado.'
+                            : 'Origem: quotas antigas em atraso (2008–2023) e despesas extraordinárias do prédio (pintura 2018 e reparação portão; vídeo-porteiro/campainhas regularizado em 2023), abatida em 5€/mês desde jun/2024.'}
+                        </p>
+                      )}
                       <div className="grid grid-cols-2 gap-4">
                         <div className="p-3 bg-white rounded-xl border border-orange-100">
                           <p className="text-[10px] font-bold text-gray-400 uppercase mb-1">Dívida Inicial</p>
