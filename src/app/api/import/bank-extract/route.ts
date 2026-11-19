@@ -11,6 +11,40 @@ interface BankRow {
   balanceStr: string;
 }
 
+function cleanDescription(s: string): string {
+  return s
+    .trim()
+    .replace(/\s+/g, ' ')
+    .replace(/SOLU[¸∏][¶∂]O E\.CONDOM[¿ø]NIO/g, 'SOLUÇÃO E.CONDOMÍNIO')
+    .replace(/EMISS[¶]O EXTR\. CONTA/g, 'EMISSÃO EXTR. CONTA')
+    .replace(/LU[¿]S ANT[ø]NIO/g, 'LUÍS ANTÓNIO')
+    .replace(/CONCEI[¸∏][¶∂]O/g, 'CONCEIÇÃO');
+}
+
+function parseCsvLine(line: string, delimiter: string): string[] {
+  const result: string[] = [];
+  let current = '';
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (ch === '"') {
+      if (inQuotes && line[i + 1] === '"') {
+        current += '"';
+        i++;
+      } else {
+        inQuotes = !inQuotes;
+      }
+    } else if (ch === delimiter && !inQuotes) {
+      result.push(current);
+      current = '';
+    } else {
+      current += ch;
+    }
+  }
+  result.push(current);
+  return result;
+}
+
 export async function POST(request: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session || session.user.role !== 'admin') {
@@ -35,6 +69,24 @@ export async function POST(request: NextRequest) {
       const dataLines = lines.slice(1);
       rows = dataLines.map(line => {
         const parts = line.split('\t');
+        return {
+          dateMov: parts[0] || '',
+          description: parts[2] || '',
+          importance: parts[3] || '',
+          balanceStr: parts[5] || ''
+        };
+      });
+    } else if (file.name.toLowerCase().endsWith('.csv')) {
+      // CSV: Windows-1252 encoded, comma or semicolon separated
+      const decoder = new TextDecoder('windows-1252');
+      const content = decoder.decode(buffer);
+      const lines = content.split(/\r?\n/).filter(line => line.trim() !== '');
+      if (lines.length < 2) return NextResponse.json({ error: 'Empty file' }, { status: 400 });
+
+      const delimiter = lines[0].includes(';') && !lines[0].includes('","') ? ';' : ',';
+      const dataLines = lines.slice(1);
+      rows = dataLines.map(line => {
+        const parts = parseCsvLine(line, delimiter);
         return {
           dateMov: parts[0] || '',
           description: parts[2] || '',
@@ -76,6 +128,7 @@ export async function POST(request: NextRequest) {
     if (rows.length === 0) return NextResponse.json({ error: 'Nenhum dado encontrado no ficheiro' }, { status: 400 });
 
     const mappings = await prisma.descriptionMapping.findMany();
+    const savingsCreditor = await prisma.creditor.findFirst({ where: { category: 'savings' } });
 
     let importedCount = 0;
     let duplicateCount = 0;
@@ -84,6 +137,7 @@ export async function POST(request: NextRequest) {
     let latestBalance = 0;
     let latestDate: Date | null = null;
     const monthlyLatest: Record<string, { date: Date; balance: number }> = {};
+    const newSavingsByMonth: Record<string, { date: Date; amount: number }> = {};
     const errors: string[] = [];
 
     // Parse Portuguese number format: "1.223,18" → 1223.18
@@ -97,19 +151,25 @@ export async function POST(request: NextRequest) {
     const stripNonAscii = (s: string) => s.replace(/[^\x20-\x7E]/g, '').trim();
 
     for (const row of rows) {
-      const description = row.description.trim();
+      const description = cleanDescription(row.description);
       try {
         if (!row.dateMov || !row.importance) continue;
 
-        // Parse date: M/D/YY format (American, from bank export)
-        const dateParts = row.dateMov.split(/[\/\-]/);
+        // Parse date: supports YYYY-MM-DD (CSV) or M/D/YY (XLS/TXT)
+        const dateParts = row.dateMov.trim().split(/[\/\-]/);
         if (dateParts.length < 3) continue;
-        const m = parseInt(dateParts[0]);
-        const d = parseInt(dateParts[1]);
-        let y = parseInt(dateParts[2]);
-        if (y < 100) y += 2000;
-        // Use noon to avoid timezone shift
-        const date = new Date(y, m - 1, d, 12, 0, 0);
+        let y: number, m: number, d: number;
+        if (dateParts[0].length === 4) {
+          y = parseInt(dateParts[0]);
+          m = parseInt(dateParts[1]);
+          d = parseInt(dateParts[2]);
+        } else {
+          m = parseInt(dateParts[0]);
+          d = parseInt(dateParts[1]);
+          y = parseInt(dateParts[2]);
+          if (y < 100) y += 2000;
+        }
+        const date = new Date(Date.UTC(y, m - 1, d, 0, 0, 0));
 
         if (isNaN(date.getTime()) || m < 1 || m > 12 || d < 1 || d > 31) {
           errors.push(`Data inválida: ${row.dateMov}`);
@@ -121,28 +181,31 @@ export async function POST(request: NextRequest) {
 
         if (isNaN(amount) || amount === 0) continue;
 
+        const ym = `${y}-${m.toString().padStart(2, '0')}`;
         if (!latestDate || date >= latestDate) {
           latestDate = date;
           latestBalance = currentBalance;
         }
         if (!isNaN(currentBalance)) {
-          const ym = `${y}-${m.toString().padStart(2, '0')}`;
           if (!monthlyLatest[ym] || date >= monthlyLatest[ym].date) {
             monthlyLatest[ym] = { date, balance: currentBalance };
           }
         }
 
-        // Duplicate detection: try exact match first, then fuzzy (encoding-safe)
+        const dayStart = new Date(Date.UTC(y, m - 1, d, 0, 0, 0));
+        const dayEnd = new Date(Date.UTC(y, m - 1, d, 23, 59, 59, 999));
+
+        // Duplicate detection: try exact match on day first, then fuzzy (encoding-safe)
         let existing = await prisma.transaction.findFirst({
-          where: { date, amount, description }
+          where: { date: { gte: dayStart, lte: dayEnd }, amount, description }
         });
 
         if (!existing) {
-          // Fuzzy match: same date + amount, matching ASCII description prefix
+          // Fuzzy match: same calendar day + amount, matching ASCII description prefix
           // Handles encoding differences (CONCEIÇÃO vs CONCEI¸¶O)
           const descAscii = stripNonAscii(description).substring(0, 20);
           const candidates = await prisma.transaction.findMany({
-            where: { date, amount }
+            where: { date: { gte: dayStart, lte: dayEnd }, amount }
           });
           if (candidates.length > 0) {
             existing = candidates.find(c =>
@@ -173,6 +236,7 @@ export async function POST(request: NextRequest) {
         if (description.includes('POUPANÇA') || description.includes('027-15.010650-1')) {
           category = 'savings';
           type = 'transfer';
+          creditorId = savingsCreditor?.id || null;
           autoAssignedCount++;
         } else {
           const mapping = mappings.find(m => description.toUpperCase().includes(m.pattern.toUpperCase()));
@@ -183,7 +247,7 @@ export async function POST(request: NextRequest) {
           }
         }
 
-        await prisma.transaction.create({
+        const createdTx = await prisma.transaction.create({
           data: {
             date,
             description,
@@ -195,6 +259,17 @@ export async function POST(request: NextRequest) {
             creditorId,
           }
         });
+
+        if (category === 'savings') {
+          await prisma.transactionMonth.create({
+            data: { transactionId: createdTx.id, month: ym, amount }
+          });
+          if (!newSavingsByMonth[ym]) {
+            newSavingsByMonth[ym] = { date, amount: 0 };
+          }
+          newSavingsByMonth[ym].amount += Math.abs(amount);
+          if (date > newSavingsByMonth[ym].date) newSavingsByMonth[ym].date = date;
+        }
 
         importedCount++;
       } catch (err) {
@@ -250,15 +325,46 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Ensure savings bank account exists if savings transactions found
+    // Ensure savings bank account exists & sync monthly snapshots for new savings transfers
     if (importedCount > 0 || updatedCount > 0) {
       const hasSavings = await prisma.transaction.findFirst({ where: { category: 'savings' } });
       if (hasSavings) {
-        const savExists = await prisma.bankAccount.findFirst({ where: { accountType: 'savings' } });
-        if (!savExists) {
-          await prisma.bankAccount.create({
+        let savAccount = await prisma.bankAccount.findFirst({ where: { accountType: 'savings' } });
+        if (!savAccount) {
+          savAccount = await prisma.bankAccount.create({
             data: { name: 'Montepio Poupança', accountType: 'savings' }
           });
+        }
+        const savMonths = Object.keys(newSavingsByMonth).sort();
+        for (const ym of savMonths) {
+          const { date: sDate, amount: added } = newSavingsByMonth[ym];
+          const [yy, mm] = ym.split('-').map(Number);
+          const monthStart = new Date(Date.UTC(yy, mm - 1, 1));
+          const monthEnd = new Date(Date.UTC(yy, mm, 0, 23, 59, 59, 999));
+          const existingSnap = await prisma.bankAccountSnapshot.findFirst({
+            where: { bankAccountId: savAccount.id, date: { gte: monthStart, lte: monthEnd } },
+            orderBy: { date: 'desc' },
+          });
+          if (existingSnap) {
+            await prisma.bankAccountSnapshot.update({
+              where: { id: existingSnap.id },
+              data: { balance: Math.round((existingSnap.balance + added) * 100) / 100 }
+            });
+          } else {
+            const prevSnap = await prisma.bankAccountSnapshot.findFirst({
+              where: { bankAccountId: savAccount.id, date: { lt: monthStart } },
+              orderBy: { date: 'desc' },
+            });
+            const newBal = Math.round(((prevSnap?.balance || 0) + added) * 100) / 100;
+            await prisma.bankAccountSnapshot.create({
+              data: {
+                bankAccountId: savAccount.id,
+                date: sDate,
+                balance: newBal,
+                description: `Saldo mensal ${ym}`,
+              }
+            });
+          }
         }
       }
     }

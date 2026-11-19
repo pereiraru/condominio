@@ -97,7 +97,14 @@ export async function POST() {
     });
 
     // Build owner name patterns: map normalized name to unitId
-    const ownerPatterns: { pattern: string; unitId: string; ownerName: string; unitCode: string }[] = [];
+    const ownerPatterns: {
+      pattern: string;
+      unitId: string;
+      ownerName: string;
+      unitCode: string;
+      startMonth: string | null;
+      endMonth: string | null;
+    }[] = [];
     for (const owner of owners) {
       if (!owner.unit) continue;
       const normalized = normalizeName(owner.name);
@@ -106,6 +113,8 @@ export async function POST() {
         unitId: owner.unitId,
         ownerName: owner.name,
         unitCode: owner.unit.code,
+        startMonth: owner.startMonth,
+        endMonth: owner.endMonth,
       });
     }
 
@@ -181,6 +190,7 @@ export async function POST() {
       let matchedCategory: string | null = null;
       let matchedType: string | null = null;
       let matchedUnitId: string | null = null;
+      let matchedOwnerPattern: typeof ownerPatterns[number] | null = null;
 
       for (const bp of builtInPatterns) {
         if (descUpper.includes(bp.pattern.toUpperCase())) {
@@ -208,6 +218,7 @@ export async function POST() {
         for (const op of sortedPatterns) {
           if (namesMatch(nameFromDesc, op.pattern)) {
             matchedUnitId = op.unitId;
+            matchedOwnerPattern = op;
             break;
           }
         }
@@ -267,30 +278,33 @@ export async function POST() {
               month: txMonth,
               status: 'auto-alocado',
             });
-          } else if (tx.amount > expectedFee + 0.01) {
-            // Lump-sum payment (e.g. yearly) → fill months sequentially until money runs out
-            // Find the earliest unpaid month for this unit (from fee history start or owner start)
-            const owner = unit?.owners?.[0];
-            const ownerStart = owner?.startMonth || (feeHistory.length > 0 ? feeHistory[0].effectiveFrom : `${new Date().getFullYear()}-01`);
+          } else {
+            // Sequential allocation respecting owner period startMonth (or current owner startMonth)
+            const currentOwner = unit?.owners?.find((o) => !o.endMonth);
+            const ownerStart =
+              matchedOwnerPattern?.startMonth ||
+              currentOwner?.startMonth ||
+              (feeHistory.length > 0 ? feeHistory[0].effectiveFrom : '2024-01');
             const startYear = parseInt(ownerStart.split('-')[0]);
             const startM = parseInt(ownerStart.split('-')[1]);
             const curYear = new Date().getFullYear();
+            const ownerEnd = matchedOwnerPattern?.endMonth || null;
 
             let remaining = tx.amount;
             let allocatedMonths = 0;
             let firstMonth = '';
             let lastMonth = '';
 
-            // Iterate months from owner/fee start up to end of next year
             for (let y = startYear; y <= curYear + 1 && remaining > 0.01; y++) {
-              const mStart = (y === startYear) ? startM : 1;
+              const mStart = y === startYear ? startM : 1;
               for (let m = mStart; m <= 12 && remaining > 0.01; m++) {
                 const mStr = `${y}-${m.toString().padStart(2, '0')}`;
+                if (ownerEnd && mStr > ownerEnd) continue;
                 const mKey = `${matchedUnitId}|${mStr}`;
                 const mFee = getFeeForMonth(feeHistory, mStr, unit?.monthlyFee || 0);
                 const mPaid = paidMonthTotals[mKey] || 0;
 
-                if (mPaid >= mFee - 0.01) continue; // already paid
+                if (mPaid >= mFee - 0.01) continue;
 
                 const needed = mFee - mPaid;
                 const allocAmount = Math.round(Math.min(needed, remaining) * 100) / 100;
@@ -311,8 +325,8 @@ export async function POST() {
               details.push({
                 description: tx.description.substring(0, 40),
                 assignedTo: `${unitCode} (${ownerName})`,
-                month: `${firstMonth}→${lastMonth}`,
-                status: `${allocatedMonths} meses alocados`,
+                month: allocatedMonths === 1 ? firstMonth : `${firstMonth}→${lastMonth}`,
+                status: allocatedMonths === 1 ? 'auto-alocado' : `${allocatedMonths} meses alocados`,
               });
             } else {
               needsManualAllocation++;
@@ -323,15 +337,6 @@ export async function POST() {
                 status: 'sem meses em falta',
               });
             }
-          } else {
-            // Amount doesn't match and is less than expected → needs manual allocation
-            needsManualAllocation++;
-            details.push({
-              description: tx.description.substring(0, 40),
-              assignedTo: `${unitCode} (${ownerName})`,
-              month: txMonth,
-              status: amountMatchesFee ? 'mês já pago' : `valor ≠ esperado (${expectedFee}€)`,
-            });
           }
         }
         continue;
@@ -353,6 +358,16 @@ export async function POST() {
           });
           skippedSavings++;
           assignedCount++;
+        }
+        if (tx.monthAllocations.length === 0) {
+          const txMonth = tx.date.toISOString().substring(0, 7);
+          await prisma.transactionMonth.create({
+            data: {
+              transactionId: tx.id,
+              month: txMonth,
+              amount: tx.amount,
+            },
+          });
         }
         continue;
       }

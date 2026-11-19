@@ -203,6 +203,21 @@ export default function UnitDetailV2Page() {
     } finally { setRecalculating(false); }
   }
 
+  async function handleReallocate() {
+    if (!confirm('Reorganizar sequencialmente todas as alocações desta fração a partir de 2024?')) return;
+    setRecalculating(true);
+    try {
+      const res = await fetch(`/api/units/${id}/reallocate`, { method: 'POST' });
+      if (res.ok) {
+        await handleRecalculate();
+      } else {
+        alert('Erro ao realocar pagamentos');
+      }
+    } finally {
+      setRecalculating(false);
+    }
+  }
+
   async function fetchUnit() {
     try {
       const res = await fetch(`/api/units/${id}`);
@@ -605,16 +620,28 @@ export default function UnitDetailV2Page() {
                     <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Dívida Total</p>
                     <p className="text-xl font-black text-red-700">{totalDebt.toFixed(2)}€</p>
                   </div>
-                  <button 
-                    onClick={handleRecalculate}
-                    disabled={recalculating}
-                    className="mt-2 text-[9px] font-bold text-primary-600 hover:text-primary-800 flex items-center gap-1 uppercase tracking-widest"
-                  >
-                    <svg className={`w-3 h-3 ${recalculating ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                    </svg>
-                    Atualizar
-                  </button>
+                  <div className="flex flex-wrap items-center gap-3 mt-2">
+                    <button 
+                      onClick={handleRecalculate}
+                      disabled={recalculating}
+                      className="text-[9px] font-bold text-primary-600 hover:text-primary-800 flex items-center gap-1 uppercase tracking-widest"
+                    >
+                      <svg className={`w-3 h-3 ${recalculating ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                      </svg>
+                      Atualizar
+                    </button>
+                    {isAdmin && (
+                      <button
+                        onClick={handleReallocate}
+                        disabled={recalculating}
+                        className="text-[9px] font-bold text-amber-700 hover:text-amber-900 uppercase tracking-widest"
+                        title="Realocar pagamentos cronologicamente pelos meses em dívida"
+                      >
+                        Realocar
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
 
