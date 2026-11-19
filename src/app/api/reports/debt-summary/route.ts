@@ -28,13 +28,18 @@ export async function GET(request: NextRequest) {
 
     const allExtraCharges = await prisma.extraCharge.findMany();
 
-    // Get all TransactionMonth allocations from 2024 onwards
+    // Get all TransactionMonth allocations (including PREV-DEBT)
     const allocations = await prisma.transactionMonth.findMany({
       where: {
-        month: {
-          gte: `2024-01`,
-          lte: `${endYear}-12`,
-        },
+        OR: [
+          { month: 'PREV-DEBT' },
+          {
+            month: {
+              gte: `2024-01`,
+              lte: `${endYear}-12`,
+            },
+          },
+        ],
       },
       include: {
         transaction: {
@@ -80,12 +85,16 @@ export async function GET(request: NextRequest) {
       const yearlyData: Record<string | number, { expected: number; paid: number; debt: number }> = {};
 
       // 1. Handle "Anterior 2024" column
-      // This is based on Unit.previousBalance and Owner.previousDebt
+      // This is based on Unit.previousBalance and Owner.previousDebt minus PREV-DEBT allocations
       const manualPrevDebt = unit.owners.reduce((sum, o) => sum + o.previousDebt, 0) - unit.previousBalance;
+      const prevDebtPaid = unitAllocations
+        .filter((a) => a.month === 'PREV-DEBT')
+        .reduce((sum, a) => sum + a.amount, 0);
+      const prevNet = manualPrevDebt - prevDebtPaid;
       yearlyData['Anterior 2024'] = {
         expected: manualPrevDebt > 0 ? manualPrevDebt : 0,
-        paid: manualPrevDebt < 0 ? Math.abs(manualPrevDebt) : 0,
-        debt: manualPrevDebt > 0 ? manualPrevDebt : 0
+        paid: prevDebtPaid + (manualPrevDebt < 0 ? Math.abs(manualPrevDebt) : 0),
+        debt: prevNet > 0 ? prevNet : 0
       };
 
       // 2. Handle 2024+ years
@@ -123,9 +132,9 @@ export async function GET(request: NextRequest) {
       }
 
       const yearlyValues = Object.values(yearlyData);
-      const totalDebt = yearlyValues.reduce((sum, y) => sum + y.debt, 0);
       const totalPaid = yearlyValues.reduce((sum, y) => sum + y.paid, 0);
       const totalExpected = yearlyValues.reduce((sum, y) => sum + y.expected, 0);
+      const totalDebt = Math.max(0, totalExpected - totalPaid);
 
       const currentOwner = unit.owners?.find((o) => o.endMonth === null);
       const ownerName = currentOwner?.name || unit.owners?.[0]?.name || unit.code;

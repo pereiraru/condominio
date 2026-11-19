@@ -83,6 +83,7 @@ export async function POST(request: NextRequest) {
     let autoAssignedCount = 0;
     let latestBalance = 0;
     let latestDate: Date | null = null;
+    const monthlyLatest: Record<string, { date: Date; balance: number }> = {};
     const errors: string[] = [];
 
     // Parse Portuguese number format: "1.223,18" → 1223.18
@@ -123,6 +124,12 @@ export async function POST(request: NextRequest) {
         if (!latestDate || date >= latestDate) {
           latestDate = date;
           latestBalance = currentBalance;
+        }
+        if (!isNaN(currentBalance)) {
+          const ym = `${y}-${m.toString().padStart(2, '0')}`;
+          if (!monthlyLatest[ym] || date >= monthlyLatest[ym].date) {
+            monthlyLatest[ym] = { date, balance: currentBalance };
+          }
         }
 
         // Duplicate detection: try exact match first, then fuzzy (encoding-safe)
@@ -195,8 +202,9 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Update bank account snapshot with latest balance
-    if (latestDate && !isNaN(latestBalance)) {
+    // Update bank account monthly snapshots
+    const monthKeys = Object.keys(monthlyLatest).sort();
+    if (monthKeys.length > 0) {
       let bankAccount = await prisma.bankAccount.findFirst({
         where: { name: { contains: 'Montepio' }, accountType: 'current' }
       });
@@ -210,23 +218,34 @@ export async function POST(request: NextRequest) {
       }
 
       if (bankAccount) {
-        const snapshot = await prisma.bankAccountSnapshot.findFirst({
-          where: { bankAccountId: bankAccount.id, date: latestDate }
-        });
-        if (snapshot) {
-          await prisma.bankAccountSnapshot.update({
-            where: { id: snapshot.id },
-            data: { balance: latestBalance, description: 'Importado do Extrato' }
-          });
-        } else {
-          await prisma.bankAccountSnapshot.create({
-            data: {
+        for (const ym of monthKeys) {
+          const { date: mDate, balance: mBalance } = monthlyLatest[ym];
+          const [yy, mm] = ym.split('-').map(Number);
+          const monthStart = new Date(Date.UTC(yy, mm - 1, 1));
+          const monthEnd = new Date(Date.UTC(yy, mm, 0, 23, 59, 59, 999));
+
+          const snapshot = await prisma.bankAccountSnapshot.findFirst({
+            where: {
               bankAccountId: bankAccount.id,
-              date: latestDate,
-              balance: latestBalance,
-              description: 'Importado do Extrato'
-            }
+              date: { gte: monthStart, lte: monthEnd },
+            },
+            orderBy: { date: 'desc' },
           });
+          if (snapshot) {
+            await prisma.bankAccountSnapshot.update({
+              where: { id: snapshot.id },
+              data: { date: mDate, balance: mBalance, description: `Saldo final de ${ym}` }
+            });
+          } else {
+            await prisma.bankAccountSnapshot.create({
+              data: {
+                bankAccountId: bankAccount.id,
+                date: mDate,
+                balance: mBalance,
+                description: `Saldo final de ${ym}`
+              }
+            });
+          }
         }
       }
     }

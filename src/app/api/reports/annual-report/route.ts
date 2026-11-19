@@ -22,6 +22,9 @@ export async function GET(request: NextRequest) {
     const year = parseInt(
       request.nextUrl.searchParams.get('year') ?? new Date().getFullYear().toString()
     );
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const maxElapsedMonth = year < currentYear ? 12 : year === currentYear ? now.getMonth() + 1 : 0;
 
     // --- Fetch all required data ---
 
@@ -132,6 +135,7 @@ export async function GET(request: NextRequest) {
       });
 
       let accumulatedDebt = 0;
+      let netPastDiff = 0;
       if (pastYears.size > 0) {
         const sortedYears = Array.from(pastYears).sort((a, b) => a - b);
 
@@ -148,11 +152,17 @@ export async function GET(request: NextRequest) {
               .reduce((sum, a) => sum + a.amount, 0);
           }
 
+          netPastDiff += expectedForYear - paidForYear;
           accumulatedDebt = Math.max(0, accumulatedDebt + expectedForYear - paidForYear);
         }
       }
 
-      return { pastYearsDebt: accumulatedDebt, previousDebtRemaining };
+      const adjustedPreviousDebtRemaining =
+        netPastDiff < 0
+          ? Math.max(0, previousDebtRemaining + netPastDiff)
+          : previousDebtRemaining;
+
+      return { pastYearsDebt: accumulatedDebt, previousDebtRemaining: adjustedPreviousDebtRemaining };
     };
 
     // --- Helper: calculate past years debt for a fixed creditor ---
@@ -624,8 +634,9 @@ export async function GET(request: NextRequest) {
           });
         }
 
-        // 2. Current Year unpaid
-        for (let m = 1; m <= 12; m++) {
+        // 2. Current Year unpaid (elapsed months only)
+        const fixedShortfallMonths = new Set<string>();
+        for (let m = 1; m <= maxElapsedMonth; m++) {
           const monthStr = `${year}-${m.toString().padStart(2, '0')}`;
           const expected = getTotalFeeForMonth(
             creditor.feeHistory as FeeHistoryRecord[],
@@ -640,11 +651,24 @@ export async function GET(request: NextRequest) {
             .reduce((sum, a) => sum + Math.abs(a.amount), 0);
 
           if (expected - paidResult > 0.01) {
+            fixedShortfallMonths.add(monthStr);
             const monthNames = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
               'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
             items.push({
               description: `${monthNames[m - 1]} ${year}`,
               amount: expected - paidResult
+            });
+          }
+        }
+
+        // 3. Unpaid supplier invoices for this fixed creditor (avoid double-counting shortfall month)
+        for (const inv of supplierInvoices.filter((i) => !i.isPaid && i.creditorId === creditor.id)) {
+          const invMonth = inv.date.toISOString().slice(0, 7);
+          const remaining = Math.max(0, inv.amountDue - inv.amountPaid);
+          if (remaining > 0.01 && !fixedShortfallMonths.has(invMonth)) {
+            items.push({
+              description: `${inv.description} (${inv.date.toISOString().slice(0, 10)})`,
+              amount: remaining,
             });
           }
         }
@@ -658,6 +682,27 @@ export async function GET(request: NextRequest) {
         };
       })
       .filter(c => c.unitTotal > 0.01);
+
+    // Also include non-fixed creditors that have unpaid SupplierInvoices (e.g. Endesa)
+    const fixedCreditorIds = new Set(creditors.filter((c) => c.isFixed).map((c) => c.id));
+    for (const creditor of creditors.filter((c) => !fixedCreditorIds.has(c.id))) {
+      const unpaidForCreditor = supplierInvoices.filter((i) => !i.isPaid && i.creditorId === creditor.id);
+      const items = unpaidForCreditor
+        .map((inv) => ({
+          description: `${inv.description} (${inv.date.toISOString().slice(0, 10)})`,
+          amount: Math.max(0, inv.amountDue - inv.amountPaid),
+        }))
+        .filter((i) => i.amount > 0.01);
+      if (items.length > 0) {
+        creditorDebts.push({
+          code: 'FORN',
+          description: creditor.category,
+          ownerName: creditor.name,
+          items,
+          unitTotal: items.reduce((sum, i) => sum + i.amount, 0),
+        });
+      }
+    }
 
     // Build paid expenses from month allocations (grouped by creditor) for Section 4
     // Uses allocated amounts per month instead of raw transaction values
@@ -775,9 +820,9 @@ export async function GET(request: NextRequest) {
       // (respects contract changes, e.g. Otis went from 219 to 110.68 in Dec 2025)
       const creditorFeeHistory = creditor.feeHistory as FeeHistoryRecord[];
 
-      // Check each month for allocation shortfall
+      // Check each elapsed month for allocation shortfall
       const unpaidMonths: typeof unpaidExpenseGroups[0]['unpaidMonths'] = [];
-      for (let m = 1; m <= 12; m++) {
+      for (let m = 1; m <= maxElapsedMonth; m++) {
         const monthStr = `${year}-${m.toString().padStart(2, '0')}`;
 
         // Get expected amount from fee history, falling back to amountDue
@@ -820,6 +865,40 @@ export async function GET(request: NextRequest) {
           totalUnpaid: unpaidMonths.reduce((sum, um) => sum + um.debt, 0),
         });
       }
+    }
+
+    // Include unpaid SupplierInvoices (both fixed-creditor extras like Limpeza de vidros and variable creditors like Endesa)
+    for (const inv of supplierInvoices.filter((i) => !i.isPaid)) {
+      const remaining = Math.max(0, inv.amountDue - inv.amountPaid);
+      if (remaining <= 0.01) continue;
+      const cname = inv.creditor?.name || inv.category;
+      const invMonth = inv.date.toISOString().slice(0, 7);
+      const mIdx = parseInt(invMonth.split('-')[1], 10) - 1;
+      const mLabel = `${inv.description} (${inv.date.toISOString().slice(0, 10)})`;
+
+      let group = unpaidExpenseGroups.find((g) => g.creditorName === cname);
+      const alreadyHasShortfallForMonth = group?.unpaidMonths.some((um) => um.month === invMonth);
+      if (alreadyHasShortfallForMonth) continue;
+
+      if (!group) {
+        group = {
+          creditorName: cname,
+          category: inv.category || 'other',
+          expectedMonthly: remaining,
+          isAverage: false,
+          unpaidMonths: [],
+          totalUnpaid: 0,
+        };
+        unpaidExpenseGroups.push(group);
+      }
+      group.unpaidMonths.push({
+        month: invMonth,
+        monthLabel: mIdx >= 0 && mIdx < 12 ? `${mLabel}` : invMonth,
+        expected: inv.amountDue,
+        paid: inv.amountPaid,
+        debt: remaining,
+      });
+      group.totalUnpaid += remaining;
     }
 
     unpaidExpenseGroups.sort((a, b) => a.creditorName.localeCompare(b.creditorName));

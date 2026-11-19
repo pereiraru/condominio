@@ -189,15 +189,30 @@ export default function BankAccountsPage() {
                       <tr className="text-left text-gray-400 border-b border-gray-100">
                         <th className="pb-2 font-medium">Data</th>
                         <th className="pb-2 font-medium">Saldo</th>
+                        <th className="pb-2 font-medium">Variação</th>
                         <th className="pb-2 font-medium">Notas</th>
                         <th className="pb-2 font-medium text-right">Ações</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-50">
-                      {account.snapshots?.map(snapshot => (
+                      {account.snapshots?.map((snapshot, idx) => {
+                        const prev = account.snapshots[idx + 1];
+                        const delta = prev ? Math.round((snapshot.balance - prev.balance) * 100) / 100 : null;
+                        return (
                         <tr key={snapshot.id} className="group hover:bg-gray-50/50">
                           <td className="py-3 text-gray-600">{formatDate(snapshot.date)}</td>
                           <td className="py-3 font-bold text-gray-900">{snapshot.balance.toFixed(2)}€</td>
+                          <td className="py-3">
+                            {delta !== null ? (
+                              <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${
+                                delta > 0 ? 'bg-green-100 text-green-700' : delta < 0 ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-500'
+                              }`}>
+                                {delta > 0 ? `+${delta.toFixed(2)}` : delta.toFixed(2)}€
+                              </span>
+                            ) : (
+                              <span className="text-xs text-gray-300">-</span>
+                            )}
+                          </td>
                           <td className="py-3 text-gray-500 italic">{snapshot.description || '-'}</td>
                           <td className="py-3 text-right">
                             <div className="flex gap-2 justify-end opacity-0 group-hover:opacity-100 transition-opacity">
@@ -216,9 +231,10 @@ export default function BankAccountsPage() {
                             </div>
                           </td>
                         </tr>
-                      ))}
+                        );
+                      })}
                       {(!account.snapshots || account.snapshots.length === 0) && (
-                        <tr><td colSpan={4} className="py-4 text-center text-gray-400">Sem registos de saldo</td></tr>
+                        <tr><td colSpan={5} className="py-4 text-center text-gray-400">Sem registos de saldo</td></tr>
                       )}
                     </tbody>
                   </table>
