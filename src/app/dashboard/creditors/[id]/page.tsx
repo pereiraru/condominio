@@ -6,6 +6,7 @@ import { useSession } from 'next-auth/react';
 import Sidebar from '@/components/Sidebar';
 import TransactionEditPanel from '@/components/TransactionEditPanel';
 import FeeHistoryManager from '@/components/FeeHistoryManager';
+import SupplierInvoicesManager from '@/components/SupplierInvoicesManager';
 import { Creditor, Transaction, FeeHistory, DescriptionMapping } from '@/lib/types';
 
 const CATEGORIES = [
@@ -446,6 +447,13 @@ export default function CreditorDetailPage() {
                   </table>
                 </div>
               </div>
+
+              {/* Pending Supplier Invoices / Expenses */}
+              <SupplierInvoicesManager
+                creditorId={id}
+                category={creditor.category}
+                readOnly={!isAdmin}
+              />
 
               {/* Transactions List */}
               <div className="card">
