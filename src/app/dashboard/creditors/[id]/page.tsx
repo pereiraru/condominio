@@ -7,6 +7,7 @@ import Sidebar from '@/components/Sidebar';
 import TransactionEditPanel from '@/components/TransactionEditPanel';
 import FeeHistoryManager from '@/components/FeeHistoryManager';
 import SupplierInvoicesManager from '@/components/SupplierInvoicesManager';
+import CreditorDiscrepanciesPanel from '@/components/CreditorDiscrepanciesPanel';
 import { Creditor, Transaction, FeeHistory, DescriptionMapping } from '@/lib/types';
 
 const CATEGORIES = [
@@ -223,6 +224,9 @@ export default function CreditorDetailPage() {
               )}
             </div>
           </div>
+
+          {/* Discrepancies / Verification Panel */}
+          {isAdmin && <CreditorDiscrepanciesPanel creditorId={id} />}
 
           {/* Navigation Tabs */}
           <div className="flex gap-1 mb-8 bg-gray-200/50 p-1.5 rounded-2xl w-fit">

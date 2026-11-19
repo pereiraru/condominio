@@ -77,6 +77,7 @@ model Creditor {
   feeHistory          FeeHistory[]
   descriptionMappings DescriptionMapping[]
   supplierInvoices    SupplierInvoice[]
+  discrepancyResolutions CreditorDiscrepancyResolution[]
   createdAt           DateTime             @default(now())
   updatedAt           DateTime             @updatedAt
 }
@@ -242,4 +243,22 @@ model BudgetLine {
   annualAmount  Float
   percentage    Float?
   sortOrder     Int    @default(0)
+}
+
+// Creditor discrepancy verification & resolution audit trail
+model CreditorDiscrepancyResolution {
+  id             String    @id @default(cuid())
+  creditorId     String
+  creditor       Creditor  @relation(fields: [creditorId], references: [id], onDelete: Cascade)
+  discrepancyKey String    @unique
+  type           String    // "unreconciled_invoice" | "unpaid_invoice" | "amount_mismatch" | "allocation_mismatch"
+  title          String
+  description    String
+  suggestedFix   String
+  resolved       Boolean   @default(true)
+  resolvedAt     DateTime?
+  resolvedBy     String?
+  notes          String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 }

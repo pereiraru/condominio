@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Sidebar from '@/components/Sidebar';
+import CreditorDiscrepanciesPanel from '@/components/CreditorDiscrepanciesPanel';
 import { Creditor } from '@/lib/types';
 
 const CATEGORIES = [
@@ -33,6 +34,10 @@ export default function CreditorsPage() {
   const [showModal, setShowModal] = useState(false);
   const [saving, setSaving] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [discrepancyCounts, setDiscrepancyCounts] = useState<Record<string, { unresolved: number; resolved: number }>>({});
+  const handleCountsChange = useCallback((counts: Record<string, { unresolved: number; resolved: number }>) => {
+    setDiscrepancyCounts(counts);
+  }, []);
   
   const [formData, setFormData] = useState({
     name: '',
@@ -130,6 +135,9 @@ export default function CreditorsPage() {
             </button>
           </div>
 
+          {/* Verification / Discrepancies Checklist */}
+          <CreditorDiscrepanciesPanel showCreditorLink onCountsChange={handleCountsChange} />
+
           {/* Search */}
           <div className="mb-6">
             <div className="relative group max-w-md">
@@ -171,7 +179,14 @@ export default function CreditorsPage() {
                             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={cat.icon} /></svg>
                           </div>
                           <div>
-                            <h3 className="text-lg font-bold text-gray-900 group-hover:text-primary-600 transition-colors">{creditor.name}</h3>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <h3 className="text-lg font-bold text-gray-900 group-hover:text-primary-600 transition-colors">{creditor.name}</h3>
+                              {(discrepancyCounts[creditor.id]?.unresolved ?? 0) > 0 && (
+                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
+                                  {discrepancyCounts[creditor.id].unresolved} a verificar
+                                </span>
+                              )}
+                            </div>
                             <p className="text-[10px] text-gray-400 font-medium uppercase tracking-wider">{cat.label}</p>
                           </div>
                         </div>
