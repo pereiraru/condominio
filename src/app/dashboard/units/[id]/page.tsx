@@ -319,7 +319,9 @@ export default function UnitDetailV2Page() {
   if (!unit) return null;
 
   const currentOwnerLocal = owners.find(o => !o.endMonth) || owners[0];
-  const totalDebt = (pastYearsDebt + previousDebtRemaining + (unit.totalOwed ?? 0));
+  const currentYear = new Date().getFullYear();
+  const currentYearDebt = yearlyData.find((y) => y.year === currentYear)?.debt ?? (unit.totalOwed ?? 0);
+  const totalDebt = (pastYearsDebt + previousDebtRemaining + currentYearDebt);
 
   return (
     <div className="flex min-h-screen bg-gray-50/50">
@@ -502,9 +504,9 @@ export default function UnitDetailV2Page() {
                         <span className="font-bold text-gray-900">{unit.monthlyFee.toFixed(2)}€</span>
                       </div>
                       <div className="flex justify-between items-center">
-                        <span className="text-gray-500 text-sm">Dívida {new Date().getFullYear()}:</span>
-                        <span className={`font-bold ${(unit.totalOwed ?? 0) > 0 ? 'text-red-600' : 'text-green-600'}`}>
-                          {(unit.totalOwed ?? 0).toFixed(2)}€
+                        <span className="text-gray-500 text-sm">Dívida {currentYear}:</span>
+                        <span className={`font-bold ${currentYearDebt > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                          {currentYearDebt.toFixed(2)}€
                         </span>
                       </div>
 
@@ -587,8 +589,8 @@ export default function UnitDetailV2Page() {
                   <p className="text-xl font-black text-gray-900">{unit.monthlyFee.toFixed(2)}€</p>
                 </div>
                 <div className="card bg-white border-l-4 border-l-green-500">
-                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Dívida {new Date().getFullYear()}</p>
-                  <p className="text-xl font-black text-red-600">{(unit.totalOwed ?? 0).toFixed(2)}€</p>
+                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Dívida {currentYear}</p>
+                  <p className="text-xl font-black text-red-600">{currentYearDebt.toFixed(2)}€</p>
                 </div>
                 <div className="card bg-white border-l-4 border-l-orange-400">
                   <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Dívida 2024-2025</p>

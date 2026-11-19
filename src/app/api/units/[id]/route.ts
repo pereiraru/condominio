@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { prisma } from '@/lib/prisma';
 import { authOptions, canAccessUnit } from '@/lib/auth';
+import { getTotalFeeForMonth, FeeHistoryRecord, ExtraChargeRecord } from '@/lib/feeHistory';
 
 export async function GET(
   request: NextRequest,
@@ -18,6 +19,7 @@ export async function GET(
       where: { id: params.id },
       include: {
         owners: true,
+        feeHistory: { orderBy: { effectiveFrom: 'asc' } },
         descriptionMappings: true,
         transactions: {
           orderBy: { date: 'desc' },
@@ -32,15 +34,42 @@ export async function GET(
     }
 
     const now = new Date();
-    const currentMonth = `${now.getFullYear()}-${(now.getMonth() + 1).toString().padStart(2, '0')}`;
+    const currentYear = now.getFullYear();
+    const currentMonthNum = now.getMonth() + 1;
+    const currentMonth = `${currentYear}-${currentMonthNum.toString().padStart(2, '0')}`;
 
-    // Calculate paid for current month using monthAllocations
-    const totalPaidCurrentMonth = unit.transactions
-      .filter((t) => t.type === 'payment')
-      .flatMap((t) => t.monthAllocations)
-      .filter((a) => a.month === currentMonth)
-      .reduce((sum, a) => sum + a.amount, 0);
-    const totalOwedCurrentMonth = Math.max(0, unit.monthlyFee - totalPaidCurrentMonth);
+    const extraCharges = await prisma.extraCharge.findMany({
+      where: {
+        OR: [{ unitId: null }, { unitId: params.id }],
+      },
+    });
+
+    const ytdAllocations = await prisma.transactionMonth.findMany({
+      where: {
+        transaction: { unitId: params.id, amount: { gt: 0 } },
+        month: {
+          gte: `${currentYear}-01`,
+          lte: currentMonth,
+        },
+      },
+      select: { amount: true },
+    });
+
+    let expectedYTD = 0;
+    for (let m = 1; m <= currentMonthNum; m++) {
+      const monthStr = `${currentYear}-${m.toString().padStart(2, '0')}`;
+      const feeData = getTotalFeeForMonth(
+        unit.feeHistory as FeeHistoryRecord[],
+        extraCharges as ExtraChargeRecord[],
+        monthStr,
+        unit.monthlyFee,
+        params.id
+      );
+      expectedYTD += feeData.total;
+    }
+
+    const paidYTD = ytdAllocations.reduce((sum, a) => sum + a.amount, 0);
+    const totalOwedYTD = Math.max(0, expectedYTD - paidYTD);
 
     // Calculate Pre-2024 Debt details
     const pre2024InitialDebt = unit.owners.reduce((sum, o) => sum + (o.previousDebt || 0), 0);
@@ -67,8 +96,8 @@ export async function GET(
 
     return NextResponse.json({
       ...unit,
-      totalPaid: totalPaidCurrentMonth,
-      totalOwed: totalOwedCurrentMonth,
+      totalPaid: paidYTD,
+      totalOwed: totalOwedYTD,
       pre2024: {
         initial: pre2024InitialDebt,
         paid: pre2024Paid,
