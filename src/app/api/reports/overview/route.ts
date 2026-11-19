@@ -52,12 +52,18 @@ export async function GET(request: NextRequest) {
       },
     });
 
-    // Get all allocations before the selected year (for past years debt)
+    // Get all allocations before the selected year (for past years debt) and PREV-DEBT allocations
     const pastAllocations = await prisma.transactionMonth.findMany({
       where: {
-        month: {
-          lt: `${year}-01`,
-        },
+        OR: [
+          { month: { lt: `${year}-01` } },
+          {
+            month: 'PREV-DEBT',
+            transaction: {
+              date: { lte: new Date(`${year}-12-31T23:59:59.999Z`) },
+            },
+          },
+        ],
       },
       include: {
         transaction: {
@@ -81,6 +87,7 @@ export async function GET(request: NextRequest) {
       // Collect all relevant years from allocations, feeHistory, and extra charges
       const pastYears = new Set<number>();
       entityAllocs.forEach((a) => {
+        if (a.month === 'PREV-DEBT') return;
         const y = parseInt(a.month.split('-')[0]);
         if (y < year) pastYears.add(y);
       });
@@ -139,6 +146,10 @@ export async function GET(request: NextRequest) {
       return accumulatedDebt;
     };
 
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonthNum = now.getMonth() + 1;
+
     // Build unit data (receitas)
     const unitData = units.map((unit) => {
       // Filter extra charges for this unit (global + unit-specific)
@@ -152,6 +163,7 @@ export async function GET(request: NextRequest) {
       > = {};
       let totalPaid = 0;
       let totalExpected = 0;
+      let expectedDue = 0;
 
       for (let m = 1; m <= 12; m++) {
         const monthStr = `${year}-${m.toString().padStart(2, '0')}`;
@@ -181,9 +193,12 @@ export async function GET(request: NextRequest) {
         };
         totalPaid += paid;
         totalExpected += feeData.total;
+        if (year < currentYear || (year === currentYear && m <= currentMonthNum)) {
+          expectedDue += feeData.total;
+        }
       }
 
-      const pastYearsDebt = calculatePastYearsDebt(
+      const pastYearsDebt2024Plus = calculatePastYearsDebt(
         unit.id,
         'unit',
         unit.feeHistory as FeeHistoryRecord[],
@@ -191,7 +206,21 @@ export async function GET(request: NextRequest) {
         unitExtraCharges
       );
 
-      const yearDebt = Math.max(0, totalExpected - totalPaid);
+      const manualPrevDebt =
+        unit.owners.reduce((sum, o) => sum + (o.previousDebt || 0), 0) -
+        (unit.previousBalance || 0);
+      const prevDebtPaid = pastAllocations
+        .filter(
+          (a) =>
+            a.transaction.unitId === unit.id &&
+            a.month === 'PREV-DEBT' &&
+            a.transaction.amount > 0
+        )
+        .reduce((sum, a) => sum + a.amount, 0);
+      const previousDebtRemaining = Math.max(0, manualPrevDebt - prevDebtPaid);
+      const pastYearsDebt = Number((pastYearsDebt2024Plus + previousDebtRemaining).toFixed(2));
+
+      const yearDebt = Math.max(0, Number((expectedDue - totalPaid).toFixed(2)));
 
       // Current owner = the one with endMonth = null
       const currentOwner = unit.owners?.find((o) => o.endMonth === null);
@@ -206,7 +235,7 @@ export async function GET(request: NextRequest) {
         totalExpected,
         yearDebt,
         pastYearsDebt,
-        totalDebt: yearDebt + pastYearsDebt,
+        totalDebt: Number((yearDebt + pastYearsDebt).toFixed(2)),
       };
     });
 

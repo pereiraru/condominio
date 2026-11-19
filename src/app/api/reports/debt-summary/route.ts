@@ -12,7 +12,9 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const currentYear = new Date().getFullYear();
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonthNum = now.getMonth() + 1;
     const startYear = 2024;
     const endYear = parseInt(
       request.nextUrl.searchParams.get('endYear') ?? currentYear.toString()
@@ -102,22 +104,25 @@ export async function GET(request: NextRequest) {
         let expectedForYear = 0;
         let paidForYear = 0;
         let baseFeeForYear = 0;
+        const maxExpectedMonth = year < currentYear ? 12 : (year === currentYear ? currentMonthNum : 0);
 
         for (let m = 1; m <= 12; m++) {
           const monthStr = `${year}-${m.toString().padStart(2, '0')}`;
-          const feeData = getTotalFeeForMonth(
-            unit.feeHistory as FeeHistoryRecord[],
-            unitExtraCharges,
-            monthStr,
-            unit.monthlyFee,
-            unit.id
-          );
-          expectedForYear += feeData.total;
-          baseFeeForYear += feeData.baseFee;
+          if (m <= maxExpectedMonth) {
+            const feeData = getTotalFeeForMonth(
+              unit.feeHistory as FeeHistoryRecord[],
+              unitExtraCharges,
+              monthStr,
+              unit.monthlyFee,
+              unit.id
+            );
+            expectedForYear += feeData.total;
+            baseFeeForYear += feeData.baseFee;
 
-          for (const extra of feeData.extras) {
-            if (extra.id && extraChargeMap.has(extra.id)) {
-              extraChargeMap.get(extra.id)!.yearlyTotals[year] += extra.amount;
+            for (const extra of feeData.extras) {
+              if (extra.id && extraChargeMap.has(extra.id)) {
+                extraChargeMap.get(extra.id)!.yearlyTotals[year] += extra.amount;
+              }
             }
           }
 
@@ -127,7 +132,7 @@ export async function GET(request: NextRequest) {
         }
 
         yearBaseFees[year] += baseFeeForYear;
-        const debt = Math.max(0, expectedForYear - paidForYear);
+        const debt = Math.max(0, Number((expectedForYear - paidForYear).toFixed(2)));
         yearlyData[year] = { expected: expectedForYear, paid: paidForYear, debt };
       }
 

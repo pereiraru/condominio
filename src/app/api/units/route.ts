@@ -26,7 +26,7 @@ export async function GET() {
         owners: true,
         feeHistory: { orderBy: { effectiveFrom: 'asc' } },
         transactions: {
-          where: { type: 'payment' },
+          where: { amount: { gt: 0 } },
           select: {
             id: true,
             amount: true,
@@ -42,8 +42,19 @@ export async function GET() {
         (e) => e.unitId === null || e.unitId === unit.id
       ) as ExtraChargeRecord[];
 
-      // Flatten all month allocations for this unit
+      // Flatten all month allocations for this unit and separate Pre-2024 debt payments
       const allAllocations = unit.transactions.flatMap((t) => t.monthAllocations);
+      const prevDebtAllocations = allAllocations.filter((a) => a.month === 'PREV-DEBT');
+      const regularAllocations = allAllocations.filter((a) => a.month !== 'PREV-DEBT');
+
+      const pre2024InitialDebt =
+        unit.owners.reduce((sum, o) => sum + (o.previousDebt || 0), 0) -
+        (unit.previousBalance || 0);
+      const pre2024Paid = prevDebtAllocations.reduce((sum, a) => sum + a.amount, 0);
+      const previousDebtRemaining = Math.max(
+        0,
+        Number((pre2024InitialDebt - pre2024Paid).toFixed(2))
+      );
 
       // Calculate unallocated payments (income transactions with no month allocations)
       const unallocatedTxs = unit.transactions.filter(
@@ -78,7 +89,7 @@ export async function GET() {
       }
 
       // Calculate paid YTD (current year)
-      const allocationsThisYear = allAllocations.filter((a) => a.month.startsWith(`${currentYear}-`));
+      const allocationsThisYear = regularAllocations.filter((a) => a.month.startsWith(`${currentYear}-`));
       const paidYTD = allocationsThisYear.reduce((sum, a) => sum + a.amount, 0);
       
       const paidUpToLastMonth = allocationsThisYear
@@ -87,7 +98,7 @@ export async function GET() {
 
       // Calculate past years debt (only from minYear onwards)
       const pastYears = new Set<number>();
-      allAllocations.forEach((a) => {
+      regularAllocations.forEach((a) => {
         const year = parseInt(a.month.split('-')[0]);
         if (year < currentYear && year >= minYear) pastYears.add(year);
       });
@@ -130,17 +141,17 @@ export async function GET() {
           );
           expectedForYear += feeData.total;
         }
-        const paidForYear = allAllocations
+        const paidForYear = regularAllocations
           .filter((a) => a.month.startsWith(`${year}-`))
           .reduce((sum, a) => sum + a.amount, 0);
         // Surplus from overpayment reduces previously accumulated debt
         pastYearsDebt = Math.max(0, pastYearsDebt + expectedForYear - paidForYear);
       }
 
-      const yearDebt = Math.max(0, expectedYTD - paidYTD);
-      const pastDebtInCurrentYear = Math.max(0, expectedUpToLastMonth - paidUpToLastMonth);
-      const totalOwed = yearDebt + pastYearsDebt;
-      const pastDebt = pastDebtInCurrentYear + pastYearsDebt;
+      const yearDebt = Math.max(0, Number((expectedYTD - paidYTD).toFixed(2)));
+      const pastDebtInCurrentYear = Math.max(0, Number((expectedUpToLastMonth - paidUpToLastMonth).toFixed(2)));
+      const totalOwed = Number((yearDebt + pastYearsDebt + previousDebtRemaining).toFixed(2));
+      const pastDebt = Number((pastDebtInCurrentYear + pastYearsDebt + previousDebtRemaining).toFixed(2));
 
       return {
         id: unit.id,
@@ -155,6 +166,7 @@ export async function GET() {
         totalPaid: paidYTD,
         totalOwed,
         pastDebt,
+        previousDebtRemaining,
         unallocatedPayments,
       };
     });
