@@ -21,7 +21,7 @@ export async function getCreditorDiscrepancies(creditorId?: string) {
     include: {
       feeHistory: true,
       transactions: {
-        include: { monthAllocations: true },
+        include: { monthAllocations: true, supplierInvoices: true },
         orderBy: { date: 'desc' },
       },
       supplierInvoices: {
@@ -138,11 +138,18 @@ export async function getCreditorDiscrepancies(creditorId?: string) {
       }
 
       // Amount mismatch vs agreed fee for fixed creditors
+      // Skip if reconciled to supplier invoice(s), multi-month, ATM, or one-off PAG.SERV./COMPRA
       if (creditor.isFixed && (creditor.amountDue != null || feeHistory.length > 0)) {
         const expected = getFeeForMonth(feeHistory, txMonth, creditor.amountDue || 0);
         const isMultiMonth = tx.monthAllocations.length > 1;
-        const isAtm = tx.description.toUpperCase().includes('LEV.ATM');
-        if (expected > 0 && !isMultiMonth && !isAtm && Math.abs(absAmt - expected) > 0.01) {
+        const descUp = tx.description.toUpperCase();
+        const isOneOff =
+          descUp.includes('LEV.ATM') ||
+          descUp.includes('PAG.SERV') ||
+          descUp.includes('COMPRA ') ||
+          descUp.includes('INSPEC');
+        const hasLinkedInvoice = tx.supplierInvoices.length > 0;
+        if (expected > 0 && !isMultiMonth && !isOneOff && !hasLinkedInvoice && Math.abs(absAmt - expected) > 0.01) {
           pushItem(
             `amount-mismatch:${tx.id}`,
             'amount_mismatch',
