@@ -172,6 +172,7 @@ export interface SupplierInvoice {
   amountPaid: number;
   isPaid: boolean;
   transactionId?: string;
+  attachmentFilename?: string | null;
 }
 
 export interface Budget {

@@ -27,11 +27,36 @@ export async function GET(request: NextRequest) {
 
   const invoices = await prisma.supplierInvoice.findMany({
     where,
-    include: { creditor: { select: { name: true, category: true } } },
+    include: {
+      creditor: {
+        select: {
+          name: true,
+          category: true,
+          attachments: { select: { name: true, filename: true } },
+        },
+      },
+    },
     orderBy: [{ date: 'desc' }],
   });
 
-  return NextResponse.json(invoices);
+  const enriched = invoices.map((inv) => {
+    const dateStr = inv.date.toISOString().slice(0, 10);
+    const exactPrefix = `${dateStr} - ${inv.amountDue.toFixed(2)}€`;
+    const attachments = inv.creditor?.attachments || [];
+    const matched =
+      attachments.find((a) => a.name.startsWith(exactPrefix)) ||
+      attachments.find((a) => a.name.startsWith(dateStr));
+
+    return {
+      ...inv,
+      creditor: inv.creditor
+        ? { name: inv.creditor.name, category: inv.creditor.category }
+        : undefined,
+      attachmentFilename: matched?.filename || null,
+    };
+  });
+
+  return NextResponse.json(enriched);
 }
 
 export async function POST(request: NextRequest) {
