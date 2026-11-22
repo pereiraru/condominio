@@ -25,7 +25,12 @@ function getCategoryInfo(value: string) {
 
 interface EnhancedCreditor extends Creditor {
   isFixed: boolean;
+  currentAmountDue?: number | null;
   paidThisMonth?: number;
+  paidThisYear?: number;
+  pendingInvoicesCount?: number;
+  pendingInvoicesTotal?: number;
+  totalInvoicesCount?: number;
 }
 
 export default function CreditorsPage() {
@@ -118,6 +123,11 @@ export default function CreditorsPage() {
     }
   }
 
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const rawMonth = now.toLocaleDateString('pt-PT', { month: 'short' }).replace('.', '');
+  const currentMonthLabel = rawMonth.charAt(0).toUpperCase() + rawMonth.slice(1);
+
   return (
     <div className="flex min-h-screen bg-gray-50/50">
       <Sidebar />
@@ -129,9 +139,9 @@ export default function CreditorsPage() {
               <h1 className="text-3xl font-bold text-gray-900 tracking-tight">Credores</h1>
               <p className="text-gray-500 mt-1">Gestão de fornecedores e prestadores de serviços</p>
             </div>
-            <button className="btn-primary flex items-center gap-2" onClick={() => setShowModal(true)}>
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
-              Novo Credor
+            <button className="btn-primary" onClick={() => setShowModal(true)}>
+              <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
+              <span>Novo Credor</span>
             </button>
           </div>
 
@@ -159,70 +169,181 @@ export default function CreditorsPage() {
               <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mb-4"></div>
               A carregar credores...
             </div>
+          ) : filteredCreditors.length === 0 ? (
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-12 text-center text-gray-500">
+              Nenhum credor encontrado para a pesquisa atual.
+            </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            <div className="space-y-3">
               {filteredCreditors.map((creditor) => {
                 const cat = getCategoryInfo(creditor.category);
-                // Fixed costs that haven't been paid this month turn red
-                const isOverdue = creditor.isFixed && (creditor.amountDue ?? 0) > 0 && (creditor.paidThisMonth ?? 0) < (creditor.amountDue ?? 0) * 0.95;
+                const monthlyDue = creditor.currentAmountDue ?? creditor.amountDue ?? 0;
+                const paidThisMonth = creditor.paidThisMonth ?? 0;
+                const paidThisYear = creditor.paidThisYear ?? 0;
+                const pendingInvoicesCount = creditor.pendingInvoicesCount ?? 0;
+                const pendingInvoicesTotal = creditor.pendingInvoicesTotal ?? 0;
+                const totalInvoicesCount = creditor.totalInvoicesCount ?? 0;
+                const isOverdue = creditor.isFixed && monthlyDue > 0 && paidThisMonth < monthlyDue * 0.95;
+                const hasPendingInvoices = pendingInvoicesTotal > 0.01;
+                const hasAlert = isOverdue || hasPendingInvoices;
+
+                const iconColors = hasAlert
+                  ? 'bg-red-50 text-red-600'
+                  : creditor.isFixed
+                    ? 'bg-emerald-50 text-emerald-600'
+                    : 'bg-blue-50 text-blue-600';
+
+                const statusText = hasPendingInvoices
+                  ? `${pendingInvoicesTotal.toFixed(2)}€ por pagar`
+                  : isOverdue
+                    ? 'Pagamento Pendente'
+                    : creditor.isFixed
+                      ? 'Regularizado'
+                      : 'Variável';
+
+                const statusTextColor = hasAlert
+                  ? 'text-red-600'
+                  : creditor.isFixed
+                    ? 'text-emerald-600'
+                    : 'text-blue-600';
+
+                const statusCircleColors = hasAlert
+                  ? 'bg-red-50 text-red-600 border border-red-100'
+                  : creditor.isFixed
+                    ? 'bg-emerald-50 text-emerald-600 border border-emerald-100'
+                    : 'bg-blue-50 text-blue-600 border border-blue-100';
 
                 return (
-                  <div 
-                    key={creditor.id} 
-                    className="group bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-xl hover:border-primary-100 transition-all duration-300 cursor-pointer overflow-hidden flex flex-col"
+                  <div
+                    key={creditor.id}
+                    className="group bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-md hover:border-primary-200 transition-all duration-200 cursor-pointer px-5 py-3.5"
                     onClick={() => router.push(`/dashboard/creditors/${creditor.id}`)}
                   >
-                    <div className="p-5 flex-1">
-                      <div className="flex justify-between items-start mb-4">
-                        <div className="flex items-center gap-3">
-                          <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${isOverdue ? 'bg-red-50 text-red-600' : 'bg-blue-50 text-blue-600'}`}>
-                            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={cat.icon} /></svg>
-                          </div>
-                          <div>
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <h3 className="text-lg font-bold text-gray-900 group-hover:text-primary-600 transition-colors">{creditor.name}</h3>
-                              {(discrepancyCounts[creditor.id]?.unresolved ?? 0) > 0 && (
-                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
-                                  {discrepancyCounts[creditor.id].unresolved} a verificar
-                                </span>
-                              )}
-                            </div>
-                            <p className="text-[10px] text-gray-400 font-medium uppercase tracking-wider">{cat.label}</p>
+                    {/* Line 1: Main Info, Monthly Value, YTD Paid & Status */}
+                    <div className="flex flex-wrap items-center justify-between gap-4">
+                      <div className="flex items-center gap-3.5 min-w-0">
+                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${iconColors}`}>
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={cat.icon} />
+                          </svg>
+                        </div>
+
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <h3 className="text-base font-bold text-gray-900 group-hover:text-primary-600 transition-colors">
+                              {creditor.name}
+                            </h3>
+                            <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">
+                              {cat.label}
+                            </span>
+                            <span
+                              className={`text-[11px] font-semibold px-2 py-0.5 rounded-full border ${
+                                creditor.isFixed
+                                  ? 'bg-emerald-50 text-emerald-700 border-emerald-100'
+                                  : 'bg-blue-50 text-blue-700 border-blue-100'
+                              }`}
+                            >
+                              {creditor.isFixed ? 'Avença Fixa' : 'Variável'}
+                            </span>
+                            {(discrepancyCounts[creditor.id]?.unresolved ?? 0) > 0 && (
+                              <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
+                                {discrepancyCounts[creditor.id].unresolved} a verificar
+                              </span>
+                            )}
                           </div>
                         </div>
-                        {creditor.amountDue && (
-                          <div className="text-right">
-                            <p className="text-sm font-bold text-gray-900">{creditor.amountDue.toFixed(2)}€</p>
-                            <p className="text-[10px] text-gray-400 uppercase font-bold">{creditor.isFixed ? '/ mês' : 'esperado'}</p>
-                          </div>
-                        )}
                       </div>
 
-                      <div className="space-y-3">
-                        <div className="p-3 bg-gray-50/50 rounded-xl border border-gray-100/50">
-                          <p className="text-[10px] text-gray-400 font-bold uppercase mb-1">Total Pago (Histórico)</p>
-                          <p className="text-sm font-semibold text-gray-700">{(creditor.totalPaid ?? 0).toFixed(2)}€</p>
+                      <div className="flex flex-wrap items-center gap-6 sm:gap-8 ml-auto">
+                        <div className="text-right">
+                          <p className="text-[10px] text-gray-400 uppercase font-bold tracking-wider">
+                            {creditor.isFixed ? 'Avença Mensal' : 'Média Mensal'}
+                          </p>
+                          <p className="text-sm font-bold text-gray-900 tabular-nums">
+                            {creditor.isFixed
+                              ? monthlyDue > 0
+                                ? `${monthlyDue.toFixed(2)}€`
+                                : '—'
+                              : `${(creditor.avgMonthly ?? 0).toFixed(2)}€`}
+                            <span className="text-[11px] font-normal text-gray-400 ml-0.5">/ mês</span>
+                          </p>
                         </div>
-                        
-                        {creditor.description && (
-                          <p className="text-xs text-gray-500 italic line-clamp-2">{creditor.description}</p>
-                        )}
+
+                        <div className="text-right">
+                          <p className="text-[10px] text-gray-400 uppercase font-bold tracking-wider">
+                            Pago {currentYear}
+                          </p>
+                          <p className="text-sm font-bold text-gray-900 tabular-nums">
+                            {paidThisYear.toFixed(2)}€
+                          </p>
+                        </div>
+
+                        <div className="flex items-center gap-2.5 min-w-[165px] justify-end">
+                          <div className="text-right">
+                            <p className="text-[10px] text-gray-400 uppercase font-bold tracking-wider">Estado</p>
+                            <p className={`text-xs font-bold tabular-nums ${statusTextColor}`}>
+                              {statusText}
+                            </p>
+                          </div>
+                          <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${statusCircleColors}`}>
+                            {hasAlert ? (
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                              </svg>
+                            ) : (
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                              </svg>
+                            )}
+                          </div>
+                        </div>
                       </div>
                     </div>
 
-                    <div className={`mt-auto px-5 py-3 border-t flex justify-between items-center ${isOverdue ? 'bg-red-50/30 border-red-100' : 'bg-blue-50/30 border-blue-100'}`}>
-                      <div className="flex flex-col">
-                        <span className="text-[10px] text-gray-400 font-bold uppercase">Estado Mensal</span>
-                        <span className={`text-xs font-bold ${isOverdue ? 'text-red-600' : 'text-blue-600'}`}>
-                          {isOverdue ? 'Pagamento Pendente' : (creditor.isFixed ? 'Regularizado' : 'Variável')}
+                    {/* Line 2: Monthly Payment, Historical Total, Invoices & Details */}
+                    <div className="mt-2.5 pt-2.5 border-t border-gray-100 flex flex-wrap items-center justify-between gap-x-6 gap-y-1.5 text-xs text-gray-500">
+                      <div className="flex flex-wrap items-center gap-x-5 gap-y-1">
+                        <span>
+                          Pago ({currentMonthLabel}):{' '}
+                          <strong className="text-gray-700 font-semibold tabular-nums">
+                            {paidThisMonth.toFixed(2)}€
+                          </strong>
+                        </span>
+                        <span>
+                          Total Histórico:{' '}
+                          <strong className="text-gray-700 font-semibold tabular-nums">
+                            {(creditor.totalPaid ?? 0).toFixed(2)}€
+                          </strong>
+                        </span>
+                        <span>
+                          Faturas:{' '}
+                          <strong className="text-gray-700 font-semibold tabular-nums">
+                            {totalInvoicesCount}
+                          </strong>
+                          {pendingInvoicesCount > 0 && (
+                            <span className="ml-1.5 text-amber-700 font-semibold tabular-nums">
+                              ({pendingInvoicesCount} pendente{pendingInvoicesCount > 1 ? 's' : ''} — {pendingInvoicesTotal.toFixed(2)}€)
+                            </span>
+                          )}
                         </span>
                       </div>
-                      <div className={`w-8 h-8 rounded-full flex items-center justify-center ${isOverdue ? 'bg-red-100 text-red-600' : 'bg-blue-100 text-blue-600'}`}>
-                        {isOverdue ? (
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                        ) : (
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+
+                      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-gray-400 ml-auto">
+                        {creditor.description && (
+                          <span className="truncate max-w-[260px] text-gray-500 italic" title={creditor.description}>
+                            {creditor.description}
+                          </span>
                         )}
+                        {creditor.email && (
+                          <span className="truncate max-w-[190px]" title={creditor.email}>
+                            {creditor.email}
+                          </span>
+                        )}
+                        {creditor.telefone && <span>Tel: {creditor.telefone}</span>}
+                        {creditor.nib && <span className="text-gray-500 font-medium">IBAN registado</span>}
+                        <span className="text-primary-600 font-semibold group-hover:translate-x-0.5 transition-transform inline-flex items-center gap-1">
+                          Ver →
+                        </span>
                       </div>
                     </div>
                   </div>
