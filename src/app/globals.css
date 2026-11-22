@@ -4,10 +4,19 @@
 
 :root {
   --foreground-rgb: 15, 23, 42;
-  --background-rgb: 248, 250, 252;
+  --background-rgb: 245, 247, 251;
   --sidebar-bg: 15, 23, 42;
   --sidebar-text: 203, 213, 225;
   --sidebar-active: 255, 255, 255;
+  --in-oklab: ;
+  --in-oklch: ;
+}
+
+@supports (background: linear-gradient(in oklab, white, black)) {
+  :root {
+    --in-oklab: in oklab;
+    --in-oklch: in oklch;
+  }
 }
 
 body {
@@ -46,11 +55,24 @@ body {
   }
 
   .app-shell {
-    @apply flex min-h-screen bg-slate-50;
+    @apply flex min-h-screen bg-[#f5f7fb] lg:bg-[#0f172a];
   }
 
   .app-main {
-    @apply flex-1 min-w-0 pt-[68px] pb-24 px-4 sm:px-6 md:pb-8 lg:pt-8 lg:px-8 print:p-0;
+    @apply flex-1 min-w-0 bg-[#f5f7fb] pt-[68px] pb-24 px-4 sm:px-6 md:pb-8 lg:pt-7 lg:px-8 lg:my-2 lg:mr-2 lg:rounded-[24px] lg:shadow-xl print:p-0 print:m-0 print:rounded-none print:bg-white print:shadow-none;
+  }
+
+  .shadow-card {
+    box-shadow:
+      0 1px 2px rgba(15, 23, 42, 0.04),
+      0 4px 12px rgba(15, 23, 42, 0.03);
+  }
+
+  .hero-bank-card {
+    background: linear-gradient(135deg var(--in-oklab), #0f172a 0%, #16233b 58%, #0c1426 100%);
+    box-shadow:
+      0 6px 20px rgba(15, 23, 42, 0.16),
+      0 2px 6px rgba(15, 23, 42, 0.1);
   }
 
   .app-container {
@@ -104,10 +126,76 @@ th {
   font-weight: 500;
 }
 
+/* Viewport-aware Notifications Popover */
+.notifications-popover {
+  width: min(380px, calc(100vw - 2rem));
+  max-height: min(75vh, 520px);
+  overflow-y: auto;
+  border-radius: 1rem;
+  border: 1px solid rgb(226 232 240 / 0.9);
+  background: white;
+  padding: 0;
+  color: rgb(15 23 42);
+  box-shadow:
+    0 12px 32px rgba(15, 23, 42, 0.14),
+    0 2px 8px rgba(15, 23, 42, 0.06);
+}
+
+.notifications-popover::backdrop {
+  background: rgba(15, 23, 42, 0.12);
+}
+
+@supports (position-area: block-end) {
+  [popover].notifications-popover {
+    inset: auto;
+    margin: 0;
+    margin-block-start: 0.5rem;
+    position-area: block-end span-inline-start;
+    position-try-fallbacks: flip-block, flip-inline, flip-block flip-inline;
+  }
+}
+
+@supports not (position-area: block-end) {
+  [popover].notifications-popover {
+    position: fixed;
+    inset: 4.75rem 1.5rem auto auto;
+    margin: 0;
+  }
+
+  @media (max-width: 639px) {
+    [popover].notifications-popover {
+      inset: auto 0.75rem 5rem 0.75rem;
+      width: auto;
+    }
+  }
+}
+
+@supports not selector(:popover-open) {
+  .notifications-popover:not([data-fallback-open="true"]) {
+    display: none;
+  }
+}
+
+.notifications-popover[data-fallback-open="true"] {
+  display: block;
+  position: fixed;
+  inset: 4.75rem 1.5rem auto auto;
+  margin: 0;
+  z-index: 60;
+}
+
+@media (max-width: 639px) {
+  .notifications-popover[data-fallback-open="true"] {
+    inset: auto 0.75rem 5rem 0.75rem;
+    width: auto;
+  }
+}
+
 /* Print styles for Relatório de Contas and Administration documents */
 @media print {
   html,
-  body {
+  body,
+  .app-shell {
     height: auto !important;
     min-height: 0 !important;
     background: white !important;
@@ -141,6 +229,9 @@ th {
     overflow: visible !important;
     padding: 0 !important;
     margin: 0 !important;
+    border-radius: 0 !important;
+    background: white !important;
+    box-shadow: none !important;
   }
 
   .report-container {

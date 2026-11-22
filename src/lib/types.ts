@@ -254,6 +254,11 @@ export interface DashboardExpenseCategoryItem {
   percentage: number;
 }
 
+export interface DashboardBalanceHistoryPoint {
+  month: string; // "YYYY-MM"
+  total: number;
+}
+
 export interface DashboardMyUnitSummary {
   id: string;
   code: string;
@@ -268,6 +273,7 @@ export interface DashboardMyUnitSummary {
 }
 
 export interface DashboardStats {
+  buildingName: string;
   currentBalance: number;
   balanceTrend?: number;
   monthlyIncome: number;
@@ -277,6 +283,7 @@ export interface DashboardStats {
   currentMonthLabel: string;
   totalBankBalance: number;
   bankAccounts: DashboardBankAccountSummary[];
+  balanceHistory: DashboardBalanceHistoryPoint[];
   yearSummary: {
     yearIncome: number;
     yearOperationalExpenses: number;
@@ -288,6 +295,8 @@ export interface DashboardStats {
   unitCompliance: {
     totalUnits: number;
     unitsUpToDateThisYear: number;
+    unitsPendingCurrent: number;
+    unitsOverdueThisYear: number;
     collectionRateYear: number;
   };
   announcements: DashboardAnnouncement[];

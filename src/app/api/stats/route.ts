@@ -11,6 +11,7 @@ import {
 import { canViewerSeeIncident } from '@/lib/incidents';
 import type {
   DashboardAnnouncement,
+  DashboardBalanceHistoryPoint,
   DashboardBankAccountSummary,
   DashboardExpenseCategoryItem,
   DashboardExtraordinaryActivity,
@@ -86,6 +87,7 @@ export async function GET() {
       creditors,
       allExtraordinaryTxs,
       rawIncidents,
+      latestMeeting,
     ] = await Promise.all([
       prisma.transaction.findFirst({
         orderBy: { date: 'desc' },
@@ -112,7 +114,7 @@ export async function GET() {
         include: {
           snapshots: {
             orderBy: { date: 'desc' },
-            take: 1,
+            take: 24,
           },
         },
       }),
@@ -161,6 +163,9 @@ export async function GET() {
       prisma.incident.findMany({
         orderBy: [{ reportedAt: 'desc' }, { createdAt: 'desc' }],
         take: 20,
+      }),
+      prisma.condoMeeting.findFirst({
+        orderBy: [{ year: 'desc' }, { meetingDate: 'desc' }],
       }),
     ]);
 
@@ -212,6 +217,41 @@ export async function GET() {
     const totalBankBalance = round2(
       bankAccounts.reduce((sum, acc) => sum + acc.balance, 0)
     );
+
+    // 1b. Historical total bank balance (up to last 12 months)
+    const accountMonthMaps = rawBankAccounts.map((acc) => {
+      const monthMap = new Map<string, number>();
+      // acc.snapshots is ordered desc; iterate oldest -> newest so latest snapshot in month wins
+      for (const snap of [...acc.snapshots].reverse()) {
+        const monthKey = snap.date.toISOString().slice(0, 7);
+        monthMap.set(monthKey, round2(snap.balance));
+      }
+      return monthMap;
+    });
+
+    const allSnapshotMonths = Array.from(
+      new Set(accountMonthMaps.flatMap((m) => Array.from(m.keys())))
+    ).sort();
+
+    const runningBalances = accountMonthMaps.map(() => 0);
+    const fullBalanceHistory: DashboardBalanceHistoryPoint[] = allSnapshotMonths.map((month) => {
+      let total = 0;
+      accountMonthMaps.forEach((m, idx) => {
+        if (m.has(month)) {
+          runningBalances[idx] = m.get(month)!;
+        }
+        total += runningBalances[idx];
+      });
+      return { month, total: round2(total) };
+    });
+
+    const balanceHistory = fullBalanceHistory.slice(-12);
+    if (balanceHistory.length > 0) {
+      balanceHistory[balanceHistory.length - 1] = {
+        ...balanceHistory[balanceHistory.length - 1],
+        total: totalBankBalance,
+      };
+    }
 
     // 2. Year financial summary & category breakdown
     let yearIncome = 0;
@@ -265,6 +305,8 @@ export async function GET() {
     let totalExpectedYTD = 0;
     let totalPaidYTD = 0;
     let unitsUpToDateThisYear = 0;
+    let unitsPendingCurrent = 0;
+    let unitsOverdueThisYear = 0;
     let myUnit: DashboardMyUnitSummary | null = null;
     const sessionUnitId = session.user?.unitId ?? null;
 
@@ -277,6 +319,7 @@ export async function GET() {
       const regularAllocations = allAllocations.filter((a) => a.month !== 'PREV-DEBT');
 
       let expectedYTD = 0;
+      let currentMonthExpected = 0;
       for (let m = 1; m <= currentMonth; m++) {
         const monthStr = `${currentYear}-${m.toString().padStart(2, '0')}`;
         const feeData = getTotalFeeForMonth(
@@ -287,6 +330,9 @@ export async function GET() {
           unit.id
         );
         expectedYTD += feeData.total;
+        if (m === currentMonth) {
+          currentMonthExpected = feeData.total;
+        }
       }
 
       const paidYTD = regularAllocations
@@ -298,6 +344,10 @@ export async function GET() {
       totalPaidYTD += paidYTD;
       if (yearDebt <= 0.01) {
         unitsUpToDateThisYear += 1;
+      } else if (yearDebt <= currentMonthExpected + 0.01) {
+        unitsPendingCurrent += 1;
+      } else {
+        unitsOverdueThisYear += 1;
       }
 
       if (sessionUnitId && unit.id === sessionUnitId) {
@@ -403,18 +453,35 @@ export async function GET() {
       ? round2(Math.abs(latestSavingsTx.amount))
       : 60;
 
+    const formatPtNumber = (val: number) =>
+      val.toLocaleString('pt-PT', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+    const assemblyTitle =
+      latestMeeting && latestMeeting.status === 'draft'
+        ? `Assembleia ${latestMeeting.assemblyType} (${
+            latestMeeting.meetingDate
+              ? formatShortDatePt(new Date(`${latestMeeting.meetingDate}T12:00:00`))
+              : latestMeeting.year
+          })`
+        : `Assembleia Ordinária de Condóminos (${currentYear}/${currentYear + 1})`;
+
+    const assemblyDateLabel =
+      latestMeeting && latestMeeting.status === 'draft'
+        ? 'Convocatória ativa'
+        : 'Convocatória em preparação';
+
     const announcements: DashboardAnnouncement[] = [
       {
         id: 'assembly-upcoming',
-        title: `Assembleia Ordinária de Condóminos (${currentYear}/${currentYear + 1})`,
+        title: assemblyTitle,
         message: `Ordem de trabalhos prevista: apresentação de contas de ${currentYear}, orçamento e eventual revisão de quotas para ${currentYear + 1}, assuntos gerais do edifício e eleição da Administração.`,
         category: 'assembly',
-        dateLabel: 'Convocatória em preparação',
+        dateLabel: assemblyDateLabel,
       },
       {
         id: 'savings-reserve',
         title: 'Reforço do Fundo Comum de Reserva',
-        message: `Reforço mensal regular de ${monthlySavingsValue.toFixed(2)} € para a conta Montepio Poupança${savingsAccount ? ` (saldo atual de ${savingsAccount.balance.toFixed(2)} €)` : ''}.`,
+        message: `Reforço mensal regular de ${formatPtNumber(monthlySavingsValue)} € para a conta Montepio Poupança${savingsAccount ? ` (saldo atual de ${formatPtNumber(savingsAccount.balance)} €)` : ''}.`,
         category: 'maintenance',
         dateLabel: 'Fundo de Reserva',
       },
@@ -623,6 +690,7 @@ export async function GET() {
       });
 
     return NextResponse.json({
+      buildingName: 'Rua Vieira da Silva, n.º 6',
       currentBalance: round2(latestTransaction?.balance ?? 0),
       balanceTrend,
       monthlyIncome,
@@ -632,6 +700,7 @@ export async function GET() {
       currentMonthLabel,
       totalBankBalance,
       bankAccounts,
+      balanceHistory,
       yearSummary: {
         yearIncome,
         yearOperationalExpenses,
@@ -643,6 +712,8 @@ export async function GET() {
       unitCompliance: {
         totalUnits: units.length,
         unitsUpToDateThisYear,
+        unitsPendingCurrent,
+        unitsOverdueThisYear,
         collectionRateYear,
       },
       announcements,
