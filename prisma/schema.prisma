@@ -337,3 +337,27 @@ model NotificationConfig {
   fromEmail   String?
   updatedAt   DateTime @updatedAt
 }
+
+// Condominium assembly meetings & minutes (Convocatória / Ata)
+model CondoMeeting {
+  id                   String    @id @default(cuid())
+  year                 Int
+  actaNumber           String    @default("24")
+  assemblyType         String    @default("Ordinária") // "Ordinária" | "Extraordinária"
+  meetingDate          String    // "YYYY-MM-DD"
+  startTime            String    @default("22:00")
+  endTime              String?   // "HH:mm"
+  convocationUsed      String    @default("2.ª") // "1.ª" | "2.ª"
+  location             String    @default("Parqueamento situado no Piso -4 do Edifício")
+  presidedBy           String    @default("Administração Cessante")
+  secretaryBy          String    @default("A designar na reunião")
+  newAdminNames        String?
+  status               String    @default("draft") // "draft" | "finalized"
+  attendanceJson       String    @default("{}")
+  discussionPointsJson String    @default("[]")
+  actionItemsJson      String    @default("[]")
+  generalNotes         String?
+  generatedAt          DateTime?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+}

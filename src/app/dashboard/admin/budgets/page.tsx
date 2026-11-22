@@ -8,6 +8,7 @@ import { Budget } from '@/lib/types';
 import {
   AnnualReportData,
   BudgetLineInput,
+  ConvocatoriaDraft,
   FeeSimulationConfig,
   UnitReportsPayload,
 } from './types';
@@ -31,6 +32,18 @@ export default function AdministrationCenterPage() {
   const [unitReportsData, setUnitReportsData] = useState<UnitReportsPayload | null>(null);
   const [annualReport, setAnnualReport] = useState<AnnualReportData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [convocatoriaDraft, setConvocatoriaDraft] = useState<ConvocatoriaDraft | null>(null);
+  const [pendingImportDraft, setPendingImportDraft] = useState<ConvocatoriaDraft | null>(null);
+
+  const handleTransferToActa = useCallback((draft: ConvocatoriaDraft) => {
+    setConvocatoriaDraft(draft);
+    setPendingImportDraft(draft);
+    setActiveTab('acta');
+  }, []);
+
+  const handlePendingImportConsumed = useCallback(() => {
+    setPendingImportDraft(null);
+  }, []);
 
   const [feeSimConfig, setFeeSimConfig] = useState<FeeSimulationConfig>({
     mode: 'percentage',
@@ -161,7 +174,7 @@ export default function AdministrationCenterPage() {
                 { id: 'budgets' as const, label: 'Orçamento & Aumento de Quotas' },
                 { id: 'units' as const, label: 'Relatório por Fração' },
                 { id: 'convocatoria' as const, label: 'Convocatória' },
-                { id: 'acta' as const, label: 'Ata da Reunião' },
+                { id: 'acta' as const, label: 'Reunião & Ata' },
                 { id: 'utilizadores' as const, label: 'Utilizadores & Acessos' },
                 { id: 'notificacoes' as const, label: 'Notificações & Email' },
               ].map((tab) => (
@@ -215,6 +228,8 @@ export default function AdministrationCenterPage() {
                   year={selectedYear}
                   buildingName={unitReportsData.buildingName}
                   projectedAnnualImpact={feeSimSummary.annualImpact}
+                  onDraftChange={setConvocatoriaDraft}
+                  onTransferToActa={handleTransferToActa}
                 />
               )}
 
@@ -226,6 +241,9 @@ export default function AdministrationCenterPage() {
                   annualReport={annualReport}
                   budgetLines={nextBudgetLines}
                   feeSimConfig={feeSimConfig}
+                  convocatoriaDraft={convocatoriaDraft}
+                  pendingImportDraft={pendingImportDraft}
+                  onPendingImportConsumed={handlePendingImportConsumed}
                 />
               )}
 

@@ -131,5 +131,13 @@ export interface FeeSimulationRow {
   annualDiff: number;
 }
 
+export interface ConvocatoriaDraft {
+  assemblyType: 'Ordinária' | 'Extraordinária';
+  meetingDate: string;
+  meetingTime: string;
+  location: string;
+  agendaItems: string[];
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type AnnualReportData = any;

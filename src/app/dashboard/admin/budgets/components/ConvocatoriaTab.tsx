@@ -1,18 +1,23 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { ConvocatoriaDraft } from '../types';
 import { fmtEur } from '../utils';
 
 interface ConvocatoriaTabProps {
   year: number;
   buildingName: string;
   projectedAnnualImpact?: number;
+  onDraftChange?: (draft: ConvocatoriaDraft) => void;
+  onTransferToActa?: (draft: ConvocatoriaDraft) => void;
 }
 
 export default function ConvocatoriaTab({
   year,
   buildingName,
   projectedAnnualImpact = 0,
+  onDraftChange,
+  onTransferToActa,
 }: ConvocatoriaTabProps) {
   const nextYear = year + 1;
   const [assemblyType, setAssemblyType] = useState<'Ordinária' | 'Extraordinária'>('Ordinária');
@@ -40,6 +45,36 @@ export default function ConvocatoriaTab({
   const [extraNote, setExtraNote] = useState<string>(
     'Encontra-se disponível para consulta o Balancete de Receitas e Despesas e os extratos individuais por fração.'
   );
+
+  const lastEmittedRef = useRef<string>('');
+  const onDraftChangeRef = useRef(onDraftChange);
+  onDraftChangeRef.current = onDraftChange;
+
+  useEffect(() => {
+    const cleanedItems = agendaItems.map((i) => i.trim()).filter(Boolean);
+    const payload: ConvocatoriaDraft = {
+      assemblyType,
+      meetingDate,
+      meetingTime,
+      location: meetingLocation,
+      agendaItems: cleanedItems,
+    };
+    const serialized = JSON.stringify(payload);
+    if (serialized !== lastEmittedRef.current) {
+      lastEmittedRef.current = serialized;
+      onDraftChangeRef.current?.(payload);
+    }
+  }, [assemblyType, meetingDate, meetingTime, meetingLocation, agendaItems]);
+
+  function buildCurrentDraft(): ConvocatoriaDraft {
+    return {
+      assemblyType,
+      meetingDate,
+      meetingTime,
+      location: meetingLocation,
+      agendaItems: agendaItems.map((i) => i.trim()).filter(Boolean),
+    };
+  }
 
   function formatPtDate(iso: string): string {
     if (!iso) return '____ / ____ / ______';
@@ -77,9 +112,20 @@ export default function ConvocatoriaTab({
               Edite a data, hora, local e ordem de trabalhos antes de imprimir ou guardar em PDF.
             </p>
           </div>
-          <button type="button" onClick={() => window.print()} className="btn-primary text-sm">
-            Imprimir / PDF Convocatória
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            {onTransferToActa && (
+              <button
+                type="button"
+                onClick={() => onTransferToActa(buildCurrentDraft())}
+                className="btn-secondary text-sm"
+              >
+                Passar para Reunião &amp; Ata →
+              </button>
+            )}
+            <button type="button" onClick={() => window.print()} className="btn-primary text-sm">
+              Imprimir / PDF Convocatória
+            </button>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
