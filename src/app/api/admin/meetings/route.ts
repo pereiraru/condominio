@@ -23,6 +23,7 @@ export async function GET(request: NextRequest) {
 
     const meetings = await prisma.condoMeeting.findMany({
       where,
+      include: { convocationDocument: true },
       orderBy: [{ meetingDate: 'desc' }, { updatedAt: 'desc' }],
     });
 
@@ -54,6 +55,7 @@ export async function POST(request: NextRequest) {
         ...data,
         generatedAt: data.status === 'finalized' ? new Date() : null,
       },
+      include: { convocationDocument: true },
     });
 
     return NextResponse.json(serializeMeeting(created), { status: 201 });

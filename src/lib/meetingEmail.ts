@@ -20,11 +20,13 @@ async function dispatchHtmlEmail({
   subject,
   html,
   text,
+  attachments,
 }: {
   toEmails: string;
   subject: string;
   html: string;
   text: string;
+  attachments?: Array<{ filename: string; content: Buffer; contentType?: string }>;
 }): Promise<NotificationDispatchResult> {
   const recipients = parseEmailList(toEmails);
   if (recipients.length === 0) {
@@ -53,6 +55,7 @@ async function dispatchHtmlEmail({
       subject,
       text,
       html,
+      attachments,
     });
 
     return { sent: true, recipients };
@@ -295,11 +298,13 @@ export async function sendMeetingConvocatoriaEmail({
   buildingName,
   toEmails,
   customNote,
+  pdfAttachment,
 }: {
   meeting: CondoMeetingDTO;
   buildingName: string;
   toEmails: string;
   customNote?: string;
+  pdfAttachment?: { filename: string; content: Buffer };
 }): Promise<NotificationDispatchResult> {
   const baseUrl = process.env.NEXTAUTH_URL || 'https://condominio.pereiraru.com';
   const formattedDate = formatMeetingDateLong(meeting.meetingDate);
@@ -368,6 +373,12 @@ export async function sendMeetingConvocatoriaEmail({
         <p style="margin:16px 0 4px;">Monte Abraão — Queluz, ${escapeHtml(issueFormatted)}</p>
         <p style="margin:0;font-weight:600;white-space:pre-line;">${escapeHtml(meeting.adminSigners)}</p>
 
+        ${
+          pdfAttachment
+            ? `<p style="margin:14px 0 0;padding:10px 12px;background:#ecfdf5;border:1px solid #a7f3d0;border-radius:8px;font-size:12px;color:#065f46;"><strong>Anexo:</strong> Em anexo segue o documento oficial da Convocatória em formato PDF (${escapeHtml(pdfAttachment.filename)}).</p>`
+            : ''
+        }
+
         <p style="font-size:12px;color:#6b7280;margin:18px 0 0;border-top:1px solid #e5e7eb;padding-top:12px;">
           Portal do Condomínio: <a href="${escapeHtml(baseUrl)}" style="color:#111827;">${escapeHtml(baseUrl)}</a>
         </p>
@@ -401,15 +412,26 @@ export async function sendMeetingConvocatoriaEmail({
   textLines.push(
     '',
     `Monte Abraão — Queluz, ${issueFormatted}`,
-    meeting.adminSigners,
-    '',
-    `Portal: ${baseUrl}`
+    meeting.adminSigners
   );
+  if (pdfAttachment) {
+    textLines.push('', `Anexo: Em anexo segue o documento oficial da Convocatória em formato PDF (${pdfAttachment.filename}).`);
+  }
+  textLines.push('', `Portal: ${baseUrl}`);
 
   return dispatchHtmlEmail({
     toEmails,
     subject,
     html,
     text: textLines.join('\n'),
+    attachments: pdfAttachment
+      ? [
+          {
+            filename: pdfAttachment.filename,
+            content: pdfAttachment.content,
+            contentType: 'application/pdf',
+          },
+        ]
+      : undefined,
   });
 }

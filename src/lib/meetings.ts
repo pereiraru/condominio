@@ -1,4 +1,4 @@
-import type { CondoMeeting } from '@prisma/client';
+import type { CondoMeeting, Document } from '@prisma/client';
 
 export type MeetingLinkedSection = 'none' | 'contas' | 'dividas' | 'orcamento' | 'eleicao';
 export type MeetingActionStatus = 'pending' | 'in_progress' | 'done';
@@ -7,7 +7,17 @@ export type AttendanceStatus = 'presente' | 'representado' | 'ausente';
 export type AssemblyType = 'Ordinária' | 'Extraordinária';
 export type ConvocationUsed = '1.ª' | '2.ª';
 export type MeetingStatus = 'draft' | 'finalized';
+export type ConvocationStatus = 'draft' | 'finalized';
 export type QuorumMode = 'units' | 'permilagem';
+
+export interface MeetingLinkedDocument {
+  id: string;
+  name: string;
+  filename: string;
+  mimeType: string;
+  size: number;
+  uploadedAt: string;
+}
 
 export const DEFAULT_CONVOCATION_EXTRA_NOTE =
   'Encontra-se disponível para consulta o Balancete de Receitas e Despesas e os extratos individuais por fração.';
@@ -62,6 +72,10 @@ export interface CondoMeetingDTO {
   extraNote: string;
   adminSigners: string;
   convocationSentAt: string | null;
+  convocationStatus: ConvocationStatus;
+  convocationFinalizedAt: string | null;
+  convocationDocumentId: string | null;
+  convocationDocument: MeetingLinkedDocument | null;
   attendance: MeetingAttendancePayload;
   discussionPoints: MeetingDiscussionPoint[];
   actionItems: MeetingActionItem[];
@@ -352,7 +366,9 @@ export function normalizeAttendance(raw: unknown): MeetingAttendancePayload {
   return empty;
 }
 
-export function serializeMeeting(record: CondoMeeting): CondoMeetingDTO {
+export function serializeMeeting(
+  record: CondoMeeting & { convocationDocument?: Document | null }
+): CondoMeetingDTO {
   return {
     id: record.id,
     year: record.year,
@@ -373,6 +389,21 @@ export function serializeMeeting(record: CondoMeeting): CondoMeetingDTO {
     extraNote: record.extraNote ?? DEFAULT_CONVOCATION_EXTRA_NOTE,
     adminSigners: record.adminSigners ?? DEFAULT_ADMIN_SIGNERS,
     convocationSentAt: record.convocationSentAt ? record.convocationSentAt.toISOString() : null,
+    convocationStatus: record.convocationStatus === 'finalized' ? 'finalized' : 'draft',
+    convocationFinalizedAt: record.convocationFinalizedAt
+      ? record.convocationFinalizedAt.toISOString()
+      : null,
+    convocationDocumentId: record.convocationDocumentId || null,
+    convocationDocument: record.convocationDocument
+      ? {
+          id: record.convocationDocument.id,
+          name: record.convocationDocument.name,
+          filename: record.convocationDocument.filename,
+          mimeType: record.convocationDocument.mimeType,
+          size: record.convocationDocument.size,
+          uploadedAt: record.convocationDocument.uploadedAt.toISOString(),
+        }
+      : null,
     attendance: normalizeAttendance(record.attendanceJson),
     discussionPoints: normalizeDiscussionPoints(record.discussionPointsJson),
     actionItems: normalizeActionItems(record.actionItemsJson),

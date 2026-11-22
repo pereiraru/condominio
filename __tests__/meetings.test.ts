@@ -1,10 +1,12 @@
-import type { CondoMeeting } from '@prisma/client';
+import type { CondoMeeting, Document } from '@prisma/client';
+import { PDFDocument } from 'pdf-lib';
 import {
   addMinutesToTime,
   computeMeetingQuorum,
   computeQuorumSummary,
   createDefaultDiscussionPoints,
   DEFAULT_ADMIN_SIGNERS,
+  DEFAULT_BUILDING_NAME,
   DEFAULT_CONVOCATION_EXTRA_NOTE,
   inferLinkedSectionFromTitle,
   normalizeActionItems,
@@ -13,6 +15,7 @@ import {
   parseMeetingWriteData,
   serializeMeeting,
 } from '@/lib/meetings';
+import { generateConvocationPdf, sanitizeWinAnsi } from '@/lib/convocationPdf';
 
 describe('Condo meeting helpers', () => {
   it('createDefaultDiscussionPoints returns the 5 standard sections for the given year', () => {
@@ -129,7 +132,18 @@ describe('Condo meeting helpers', () => {
 
   it('serializeMeeting safely parses valid and malformed JSON columns without throwing', () => {
     const now = new Date('2026-11-22T15:00:00.000Z');
-    const validRecord: CondoMeeting = {
+    const mockDoc: Document = {
+      id: 'doc-conv-1',
+      name: 'Convocatória — Assembleia Geral Extraordinária',
+      filename: 'convocatoria-acta-25-2026-11-30.pdf',
+      mimeType: 'application/pdf',
+      size: 2048,
+      category: 'convocation',
+      description: 'Convocatória oficial arquivada',
+      uploadedAt: now,
+    };
+
+    const validRecord: CondoMeeting & { convocationDocument?: Document | null } = {
       id: 'mtg-1',
       year: 2026,
       actaNumber: '25',
@@ -149,6 +163,10 @@ describe('Condo meeting helpers', () => {
       extraNote: 'Nota personalizada da convocatória',
       adminSigners: 'A Administração',
       convocationSentAt: now,
+      convocationStatus: 'finalized',
+      convocationFinalizedAt: now,
+      convocationDocumentId: mockDoc.id,
+      convocationDocument: mockDoc,
       attendanceJson: JSON.stringify({
         statuses: { u1: 'presente', u2: 'ausente' },
         permilagens: { u1: 65, u2: 60 },
@@ -194,11 +212,22 @@ describe('Condo meeting helpers', () => {
     expect(dto.extraNote).toBe('Nota personalizada da convocatória');
     expect(dto.adminSigners).toBe('A Administração');
     expect(dto.convocationSentAt).toBe(now.toISOString());
+    expect(dto.convocationStatus).toBe('finalized');
+    expect(dto.convocationFinalizedAt).toBe(now.toISOString());
+    expect(dto.convocationDocumentId).toBe('doc-conv-1');
+    expect(dto.convocationDocument).toEqual({
+      id: 'doc-conv-1',
+      name: mockDoc.name,
+      filename: mockDoc.filename,
+      mimeType: 'application/pdf',
+      size: 2048,
+      uploadedAt: now.toISOString(),
+    });
     expect(dto.discussionPoints).toHaveLength(1);
     expect(dto.actionItems).toHaveLength(1);
     expect(dto.generatedAt).toBe(now.toISOString());
 
-    const malformedRecord: CondoMeeting = {
+    const malformedRecord: CondoMeeting & { convocationDocument?: Document | null } = {
       ...validRecord,
       id: 'mtg-bad',
       assemblyType: 'Desconhecida',
@@ -209,6 +238,10 @@ describe('Condo meeting helpers', () => {
       extraNote: null,
       adminSigners: null,
       convocationSentAt: null,
+      convocationStatus: 'unexpected',
+      convocationFinalizedAt: null,
+      convocationDocumentId: null,
+      convocationDocument: null,
       endTime: null,
       newAdminNames: null,
       generalNotes: null,
@@ -226,6 +259,10 @@ describe('Condo meeting helpers', () => {
     expect(safeDto.extraNote).toBe(DEFAULT_CONVOCATION_EXTRA_NOTE);
     expect(safeDto.adminSigners).toBe(DEFAULT_ADMIN_SIGNERS);
     expect(safeDto.convocationSentAt).toBeNull();
+    expect(safeDto.convocationStatus).toBe('draft');
+    expect(safeDto.convocationFinalizedAt).toBeNull();
+    expect(safeDto.convocationDocumentId).toBeNull();
+    expect(safeDto.convocationDocument).toBeNull();
     expect(safeDto.attendance).toEqual({ statuses: {}, permilagens: {}, representatives: {} });
     expect(safeDto.discussionPoints).toEqual([]);
     expect(safeDto.actionItems).toEqual([]);
@@ -336,5 +373,66 @@ describe('Condo meeting helpers', () => {
     expect(writeData.issueDate).toBe('2026-11-12');
     expect(JSON.parse(writeData.discussionPointsJson)).toHaveLength(1);
     expect(JSON.parse(writeData.actionItemsJson)).toHaveLength(1);
+  });
+
+  it('generates a valid single-page WinAnsi-safe convocation PDF even with long Portuguese agendas', async () => {
+    expect(sanitizeWinAnsi('Quotas ≥ 250‰ → Aprovação (€) — nº 6 😀')).toBe(
+      'Quotas >= 250‰ -> Aprovação (€) — nº 6 '
+    );
+
+    const now = new Date('2026-11-22T15:00:00.000Z');
+    const longRecord: CondoMeeting = {
+      id: 'mtg-pdf',
+      year: 2026,
+      actaNumber: '24',
+      assemblyType: 'Ordinária',
+      meetingDate: '2026-12-06',
+      startTime: '22:00',
+      endTime: null,
+      convocationUsed: '2.ª',
+      location: 'Parqueamento situado no Piso -4 do Edifício',
+      presidedBy: 'Administração Cessante',
+      secretaryBy: 'A designar na reunião',
+      newAdminNames: null,
+      status: 'draft',
+      quorumMode: 'units',
+      firstConvocationTime: '21:30',
+      issueDate: '2026-11-22',
+      extraNote:
+        'Disponível para consulta o Balancete e os extratos (quotas ≥ 45,00 € / fração → pagamento mensal). 😀',
+      adminSigners: DEFAULT_ADMIN_SIGNERS,
+      convocationSentAt: null,
+      convocationStatus: 'finalized',
+      convocationFinalizedAt: now,
+      convocationDocumentId: null,
+      attendanceJson: '{}',
+      discussionPointsJson: JSON.stringify(
+        Array.from({ length: 10 }, (_, idx) => ({
+          id: `pt-${idx + 1}`,
+          title: `Ponto ${idx + 1}: Análise e deliberação sobre administração, finanças, quotas (€), manutenção e obras do edifício — exercício 2026/2027`,
+          linkedSection: 'none',
+          discussion: '',
+          votingOutcome: 'Tomado conhecimento (sem votação)',
+          votingDetails: '',
+          decision: '',
+        }))
+      ),
+      actionItemsJson: '[]',
+      generalNotes: null,
+      generatedAt: null,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    const pdfBytes = await generateConvocationPdf({
+      meeting: serializeMeeting(longRecord),
+      buildingName: DEFAULT_BUILDING_NAME,
+    });
+
+    expect(pdfBytes).toBeInstanceOf(Uint8Array);
+    expect(Buffer.from(pdfBytes.slice(0, 5)).toString('ascii')).toBe('%PDF-');
+
+    const loaded = await PDFDocument.load(pdfBytes);
+    expect(loaded.getPageCount()).toBe(1);
   });
 });

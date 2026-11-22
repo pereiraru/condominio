@@ -21,6 +21,7 @@ export async function GET(
   try {
     const meeting = await prisma.condoMeeting.findUnique({
       where: { id: params.id },
+      include: { convocationDocument: true },
     });
 
     if (!meeting) {
@@ -70,6 +71,7 @@ export async function PUT(
               : existing.generatedAt
             : null,
       },
+      include: { convocationDocument: true },
     });
 
     return NextResponse.json(serializeMeeting(updated));

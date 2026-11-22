@@ -507,7 +507,9 @@ export async function GET() {
 
     const assemblyDateLabel =
       latestMeeting && latestMeeting.status === 'draft'
-        ? 'Convocatória ativa'
+        ? latestMeeting.convocationStatus === 'finalized'
+          ? 'Convocatória emitida'
+          : 'Convocatória em preparação'
         : 'Convocatória em preparação';
 
     const announcements: DashboardAnnouncement[] = [

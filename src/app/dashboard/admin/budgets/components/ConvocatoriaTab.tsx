@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import Link from 'next/link';
 import {
   addMinutesToTime,
   CondoMeetingDTO,
@@ -67,6 +68,15 @@ export default function ConvocatoriaTab({
     [meetings, selectedMeetingId]
   );
 
+  const isConvocationFinalized = selectedMeeting?.convocationStatus === 'finalized';
+  const archivedDoc = selectedMeeting?.convocationDocument || null;
+  const archivedViewUrl = archivedDoc
+    ? `/api/documents/file?name=${encodeURIComponent(archivedDoc.filename)}`
+    : null;
+  const archivedDownloadUrl = archivedDoc
+    ? `/api/documents/file?name=${encodeURIComponent(archivedDoc.filename)}&download=1`
+    : null;
+
   const [actaNumber, setActaNumber] = useState<string>(() => suggestNextActaNumber(meetings));
   const [assemblyType, setAssemblyType] = useState<'Ordinária' | 'Extraordinária'>('Ordinária');
   const [meetingDate, setMeetingDate] = useState<string>(() => {
@@ -86,6 +96,7 @@ export default function ConvocatoriaTab({
   );
 
   const [saving, setSaving] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [feedback, setFeedback] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
 
   const [showEmailPanel, setShowEmailPanel] = useState(false);
@@ -100,6 +111,7 @@ export default function ConvocatoriaTab({
   const [printMode, setPrintMode] = useState<'convocatoria' | 'attendance'>('convocatoria');
 
   const lastHydratedSignatureRef = useRef<string | null>(null);
+  const busy = saving || submitting;
 
   const startNewConvocatoria = useCallback(() => {
     onSelectMeetingId(null);
@@ -117,6 +129,7 @@ export default function ConvocatoriaTab({
     setAgendaRows(buildDefaultAgendaRows(year, projectedAnnualImpact));
     setFeedback(null);
     setEmailFeedback(null);
+    setShowEmailPanel(false);
   }, [meetings, onSelectMeetingId, projectedAnnualImpact, year]);
 
   useEffect(() => {
@@ -127,7 +140,7 @@ export default function ConvocatoriaTab({
       return;
     }
 
-    const sig = `${selectedMeeting.id}:${selectedMeeting.updatedAt}`;
+    const sig = `${selectedMeeting.id}:${selectedMeeting.updatedAt}:${selectedMeeting.convocationStatus}:${selectedMeeting.convocationDocumentId || ''}`;
     if (lastHydratedSignatureRef.current === sig) return;
     lastHydratedSignatureRef.current = sig;
 
@@ -145,6 +158,9 @@ export default function ConvocatoriaTab({
         : buildDefaultAgendaRows(selectedMeeting.year || year, projectedAnnualImpact)
     );
     setEmailFeedback(null);
+    if (selectedMeeting.convocationStatus !== 'finalized') {
+      setShowEmailPanel(false);
+    }
   }, [selectedMeeting, selectedMeetingId, year, projectedAnnualImpact]);
 
   useEffect(() => {
@@ -239,12 +255,9 @@ export default function ConvocatoriaTab({
       });
   }
 
-  async function saveConvocatoria(silent = false): Promise<CondoMeetingDTO | null> {
-    setSaving(true);
-    if (!silent) setFeedback(null);
-
+  function buildPayload() {
     const discussionPoints = buildMergedDiscussionPoints();
-    const payload = selectedMeeting
+    return selectedMeeting
       ? {
           year: selectedMeeting.year,
           actaNumber: actaNumber.trim() || selectedMeeting.actaNumber,
@@ -291,6 +304,13 @@ export default function ConvocatoriaTab({
           discussionPoints,
           actionItems: [],
         };
+  }
+
+  async function saveConvocatoria(silent = false): Promise<CondoMeetingDTO | null> {
+    setSaving(true);
+    if (!silent) setFeedback(null);
+
+    const payload = buildPayload();
 
     try {
       const url = selectedMeeting
@@ -305,17 +325,17 @@ export default function ConvocatoriaTab({
       });
       const data = await res.json();
       if (!res.ok) {
-        setFeedback({ type: 'err', text: data.error || 'Erro ao guardar convocatória.' });
+        setFeedback({ type: 'err', text: data.error || 'Erro ao guardar rascunho da convocatória.' });
         return null;
       }
 
       const saved = data as CondoMeetingDTO;
-      lastHydratedSignatureRef.current = `${saved.id}:${saved.updatedAt}`;
+      lastHydratedSignatureRef.current = `${saved.id}:${saved.updatedAt}:${saved.convocationStatus}:${saved.convocationDocumentId || ''}`;
       onMeetingSaved(saved);
       if (!silent) {
         setFeedback({
           type: 'ok',
-          text: `Convocatória e Ordem de Trabalhos (Acta N.º ${saved.actaNumber}) guardadas e sincronizadas com a Reunião & Ata.`,
+          text: `Rascunho da Convocatória (Acta N.º ${saved.actaNumber}) guardado e sincronizado com a Reunião & Ata.`,
         });
       }
       return saved;
@@ -327,7 +347,85 @@ export default function ConvocatoriaTab({
     }
   }
 
+  async function handleSubmitFinalConvocatoria() {
+    setSubmitting(true);
+    setFeedback(null);
+    setEmailFeedback(null);
+
+    try {
+      let targetMeeting = selectedMeeting;
+      if (!targetMeeting) {
+        targetMeeting = await saveConvocatoria(true);
+        if (!targetMeeting) return;
+      }
+
+      const res = await fetch(`/api/admin/meetings/${targetMeeting.id}/submit-convocatoria`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(buildPayload()),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setFeedback({
+          type: 'err',
+          text: data.error || 'Não foi possível submeter a convocatória final.',
+        });
+        return;
+      }
+
+      const finalized = data.meeting as CondoMeetingDTO;
+      lastHydratedSignatureRef.current = `${finalized.id}:${finalized.updatedAt}:${finalized.convocationStatus}:${finalized.convocationDocumentId || ''}`;
+      onMeetingSaved(finalized);
+      setFeedback({
+        type: 'ok',
+        text: `Convocatória final (Acta N.º ${finalized.actaNumber}) submetida, PDF gerado e arquivado em Documentos.`,
+      });
+    } catch {
+      setFeedback({ type: 'err', text: 'Erro de ligação ao submeter a convocatória final.' });
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function handleReopenConvocatoria() {
+    if (!selectedMeeting) return;
+    setSubmitting(true);
+    setFeedback(null);
+    setEmailFeedback(null);
+
+    try {
+      const res = await fetch(`/api/admin/meetings/${selectedMeeting.id}/submit-convocatoria`, {
+        method: 'DELETE',
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setFeedback({
+          type: 'err',
+          text: data.error || 'Não foi possível reabrir a convocatória.',
+        });
+        return;
+      }
+
+      const reopened = data.meeting as CondoMeetingDTO;
+      lastHydratedSignatureRef.current = `${reopened.id}:${reopened.updatedAt}:${reopened.convocationStatus}:${reopened.convocationDocumentId || ''}`;
+      onMeetingSaved(reopened);
+      setShowEmailPanel(false);
+      setFeedback({
+        type: 'ok',
+        text: 'Convocatória reaberta para alterações. Após editar, clique em "Submeter Convocatória Final" para atualizar o PDF arquivado.',
+      });
+    } catch {
+      setFeedback({ type: 'err', text: 'Erro de ligação ao reabrir a convocatória.' });
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   async function handleGoToActa() {
+    if (isConvocationFinalized) {
+      onGoToActa();
+      return;
+    }
     const saved = await saveConvocatoria(true);
     if (saved) {
       onGoToActa();
@@ -335,20 +433,19 @@ export default function ConvocatoriaTab({
   }
 
   async function handleSendConvocatoriaEmail() {
+    if (!selectedMeeting || selectedMeeting.convocationStatus !== 'finalized') {
+      setEmailFeedback({
+        type: 'err',
+        text: 'Submeta primeiro a convocatória como final antes de enviar por email.',
+      });
+      return;
+    }
+
     setSendingEmail(true);
     setEmailFeedback(null);
 
     try {
-      const saved = await saveConvocatoria(true);
-      if (!saved) {
-        setEmailFeedback({
-          type: 'err',
-          text: 'Não foi possível guardar a convocatória antes do envio.',
-        });
-        return;
-      }
-
-      const res = await fetch(`/api/admin/meetings/${saved.id}/send-convocatoria`, {
+      const res = await fetch(`/api/admin/meetings/${selectedMeeting.id}/send-convocatoria`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -365,13 +462,16 @@ export default function ConvocatoriaTab({
         });
       } else {
         if (data.convocationSentAt) {
-          const updated: CondoMeetingDTO = { ...saved, convocationSentAt: data.convocationSentAt };
-          lastHydratedSignatureRef.current = `${updated.id}:${updated.updatedAt}`;
+          const updated: CondoMeetingDTO = {
+            ...selectedMeeting,
+            convocationSentAt: data.convocationSentAt,
+          };
+          lastHydratedSignatureRef.current = `${updated.id}:${updated.updatedAt}:${updated.convocationStatus}:${updated.convocationDocumentId || ''}`;
           onMeetingSaved(updated);
         }
         setEmailFeedback({
           type: 'ok',
-          text: `Convocatória enviada para ${data.recipients.length} destinatário(s): ${data.recipients.join(', ')}.`,
+          text: `Convocatória enviada (com PDF oficial em anexo) para ${data.recipients.length} destinatário(s): ${data.recipients.join(', ')}.`,
         });
       }
     } catch {
@@ -395,54 +495,121 @@ export default function ConvocatoriaTab({
     <div className="space-y-6 print:space-y-0">
       {/* Editor Controls (hidden on print) */}
       <div className="no-print card space-y-5">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+        <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-3">
           <div>
-            <h2 className="text-xl font-bold text-gray-900">Configurar Convocatória</h2>
-            <p className="text-xs text-gray-500 mt-0.5">
-              A Convocatória e os pontos da Ordem de Trabalhos ficam guardados e ligados diretamente à Reunião &amp; Ata correspondente.
+            <div className="flex flex-wrap items-center gap-2.5">
+              <h2 className="text-xl font-bold text-gray-900">Configurar Convocatória</h2>
+              {isConvocationFinalized ? (
+                <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                  Convocatória Final · Arquivada em Documentos
+                </span>
+              ) : (
+                <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-800 border border-amber-200">
+                  Rascunho
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-gray-500 mt-1">
+              Guarde rascunhos enquanto prepara a Ordem de Trabalhos; quando estiver pronta, submeta como final para gerar e arquivar o PDF em Documentos.
             </p>
           </div>
+
           <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              disabled={saving}
-              onClick={() => saveConvocatoria(false)}
-              className="btn-secondary text-xs h-9 px-3.5"
-            >
-              {saving ? 'A guardar...' : 'Guardar Convocatória'}
-            </button>
-            <button
-              type="button"
-              disabled={saving}
-              onClick={handleGoToActa}
-              className="btn-secondary text-xs h-9 px-3.5"
-            >
-              Abrir Reunião &amp; Ata →
-            </button>
-            <button
-              type="button"
-              onClick={() => setPrintMode('attendance')}
-              className="btn-secondary text-xs h-9 px-3.5"
-            >
-              Imprimir Folha de Presenças (p/ Assinar)
-            </button>
-            <button
-              type="button"
-              onClick={() => setShowEmailPanel((prev) => !prev)}
-              className="btn-secondary text-xs h-9 px-3.5"
-            >
-              Enviar Convocatória por Email
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setPrintMode('convocatoria');
-                setTimeout(() => window.print(), 20);
-              }}
-              className="btn-primary text-xs h-9 px-4"
-            >
-              Imprimir / PDF Convocatória
-            </button>
+            {!isConvocationFinalized ? (
+              <>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => saveConvocatoria(false)}
+                  className="btn-secondary text-xs h-9 px-3.5"
+                >
+                  {saving ? 'A guardar...' : 'Guardar Rascunho'}
+                </button>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={handleSubmitFinalConvocatoria}
+                  className="bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl px-4 text-xs h-9 font-semibold shadow-sm inline-flex items-center gap-1.5 transition-colors disabled:opacity-50"
+                >
+                  {submitting ? 'A gerar PDF...' : 'Submeter Convocatória Final'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPrintMode('convocatoria');
+                    setTimeout(() => window.print(), 20);
+                  }}
+                  className="btn-secondary text-xs h-9 px-3.5"
+                >
+                  Imprimir Pré-visualização
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPrintMode('attendance')}
+                  className="btn-secondary text-xs h-9 px-3.5"
+                >
+                  Imprimir Folha de Presenças
+                </button>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={handleGoToActa}
+                  className="btn-secondary text-xs h-9 px-3.5"
+                >
+                  Abrir Reunião &amp; Ata →
+                </button>
+              </>
+            ) : (
+              <>
+                {archivedDownloadUrl && (
+                  <a
+                    href={archivedDownloadUrl}
+                    className="btn-primary text-xs h-9 px-4"
+                  >
+                    Descarregar PDF
+                  </a>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setShowEmailPanel((prev) => !prev)}
+                  className="btn-secondary text-xs h-9 px-3.5"
+                >
+                  Enviar por Email (c/ PDF)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPrintMode('attendance')}
+                  className="btn-secondary text-xs h-9 px-3.5"
+                >
+                  Imprimir Folha de Presenças (p/ Assinar)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPrintMode('convocatoria');
+                    setTimeout(() => window.print(), 20);
+                  }}
+                  className="btn-secondary text-xs h-9 px-3.5"
+                >
+                  Imprimir (Browser)
+                </button>
+                <button
+                  type="button"
+                  onClick={handleGoToActa}
+                  className="btn-secondary text-xs h-9 px-3.5"
+                >
+                  Abrir Reunião &amp; Ata →
+                </button>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={handleReopenConvocatoria}
+                  className="border border-amber-300 bg-amber-50 text-amber-900 hover:bg-amber-100 rounded-xl text-xs h-9 px-3.5 font-semibold transition-colors disabled:opacity-50"
+                >
+                  {submitting ? 'A reabrir...' : 'Reabrir para Alterações'}
+                </button>
+              </>
+            )}
           </div>
         </div>
 
@@ -451,7 +618,7 @@ export default function ConvocatoriaTab({
           <div className="flex flex-wrap items-center gap-2">
             <label className="text-xs font-semibold text-gray-600">Reunião associada:</label>
             <select
-              className="input h-9 text-xs w-full sm:w-auto sm:min-w-[260px]"
+              className="input h-9 text-xs w-full sm:w-auto sm:min-w-[290px]"
               value={selectedMeetingId || '__new__'}
               onChange={(e) => {
                 const val = e.target.value;
@@ -470,7 +637,8 @@ export default function ConvocatoriaTab({
               {meetings.map((m) => (
                 <option key={m.id} value={m.id}>
                   Acta N.º {m.actaNumber} ({m.assemblyType}) — {formatMeetingDateShort(m.meetingDate)}{' '}
-                  [{m.status === 'finalized' ? 'Finalizada' : 'Rascunho'}]
+                  [{m.convocationStatus === 'finalized' ? 'Conv. Final' : 'Conv. Rascunho'} · Ata{' '}
+                  {m.status === 'finalized' ? 'Finalizada' : 'Rascunho'}]
                 </option>
               ))}
             </select>
@@ -492,6 +660,46 @@ export default function ConvocatoriaTab({
           )}
         </div>
 
+        {/* Finalized Archive Summary Banner */}
+        {isConvocationFinalized && archivedDoc && (
+          <div className="px-4 py-3 rounded-xl bg-emerald-50/90 border border-emerald-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="text-xs text-emerald-950 min-w-0">
+              <p className="font-bold truncate">{archivedDoc.name}</p>
+              <p className="text-emerald-800 mt-0.5">
+                PDF arquivado em Documentos ({(archivedDoc.size / 1024).toFixed(1)} KB)
+                {selectedMeeting?.convocationFinalizedAt &&
+                  ` · Submetida em ${new Date(selectedMeeting.convocationFinalizedAt).toLocaleString('pt-PT')}`}
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2 shrink-0">
+              <Link
+                href="/dashboard/documents"
+                className="px-3 py-1.5 rounded-lg bg-white border border-emerald-300 text-emerald-900 hover:bg-emerald-100 text-xs font-semibold transition-colors"
+              >
+                Ver em Documentos →
+              </Link>
+              {archivedViewUrl && (
+                <a
+                  href={archivedViewUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-3 py-1.5 rounded-lg bg-white border border-emerald-300 text-emerald-900 hover:bg-emerald-100 text-xs font-semibold transition-colors"
+                >
+                  Abrir PDF
+                </a>
+              )}
+              {archivedDownloadUrl && (
+                <a
+                  href={archivedDownloadUrl}
+                  className="px-3 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold transition-colors"
+                >
+                  Descarregar PDF
+                </a>
+              )}
+            </div>
+          </div>
+        )}
+
         {feedback && (
           <div
             className={`px-4 py-2.5 rounded-xl text-xs font-medium ${
@@ -504,8 +712,12 @@ export default function ConvocatoriaTab({
           </div>
         )}
 
-        {showEmailPanel && (
+        {showEmailPanel && isConvocationFinalized && (
           <div className="p-4 bg-gray-50 border border-gray-200 rounded-xl space-y-3">
+            <div className="px-3 py-2 rounded-lg bg-blue-50 border border-blue-200 text-xs text-blue-900">
+              O PDF oficial arquivado desta convocatória segue automaticamente em anexo neste email.
+            </div>
+
             <div className="flex flex-wrap items-center gap-4 text-xs">
               <label className="flex items-center gap-2 font-semibold text-gray-800 cursor-pointer">
                 <input
@@ -577,144 +789,158 @@ export default function ConvocatoriaTab({
                 onClick={handleSendConvocatoriaEmail}
                 className="btn-primary text-xs h-8 px-4"
               >
-                {sendingEmail ? 'A enviar...' : 'Confirmar Envio'}
+                {sendingEmail ? 'A enviar...' : 'Confirmar Envio (c/ PDF)'}
               </button>
             </div>
           </div>
         )}
 
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-          <div>
-            <label className="label text-xs">N.º da Ata</label>
-            <input
-              type="text"
-              className="input h-10 text-sm font-bold"
-              value={actaNumber}
-              onChange={(e) => setActaNumber(e.target.value)}
-            />
+        {isConvocationFinalized && (
+          <div className="px-3.5 py-2 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-600">
+            Os campos desta convocatória final encontram-se bloqueados para garantir integridade com o PDF arquivado. Clique em <strong>Reabrir para Alterações</strong> se necessitar de editar algum dado.
           </div>
-          <div>
-            <label className="label text-xs">Tipo de Assembleia</label>
-            <select
-              className="input h-10 text-sm"
-              value={assemblyType}
-              onChange={(e) => setAssemblyType(e.target.value as 'Ordinária' | 'Extraordinária')}
-            >
-              <option value="Ordinária">Assembleia Geral Ordinária</option>
-              <option value="Extraordinária">Assembleia Geral Extraordinária</option>
-            </select>
-          </div>
-          <div>
-            <label className="label text-xs">Data da Reunião</label>
-            <input
-              type="date"
-              className="input h-10 text-sm"
-              value={meetingDate}
-              onChange={(e) => setMeetingDate(e.target.value)}
-            />
-          </div>
-          <div>
-            <label className="label text-xs">Hora (1.ª Convocatória)</label>
-            <input
-              type="time"
-              className="input h-10 text-sm"
-              value={firstConvocationTime}
-              onChange={(e) => setFirstConvocationTime(e.target.value)}
-            />
-          </div>
-          <div>
-            <label className="label text-xs">Data de Emissão</label>
-            <input
-              type="date"
-              className="input h-10 text-sm"
-              value={issueDate}
-              onChange={(e) => setIssueDate(e.target.value)}
-            />
-          </div>
-          <div className="md:col-span-2">
-            <label className="label text-xs">Local</label>
-            <input
-              type="text"
-              className="input h-10 text-sm"
-              value={meetingLocation}
-              onChange={(e) => setMeetingLocation(e.target.value)}
-            />
-          </div>
-          <div className="md:col-span-3">
-            <label className="label text-xs">Nota Adicional</label>
-            <input
-              type="text"
-              className="input h-10 text-sm"
-              value={extraNote}
-              onChange={(e) => setExtraNote(e.target.value)}
-            />
-          </div>
-        </div>
+        )}
 
-        <div className="space-y-2">
-          <div className="flex flex-wrap items-center justify-between gap-2">
+        <fieldset disabled={isConvocationFinalized} className="space-y-5 disabled:opacity-75">
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
             <div>
-              <label className="label text-xs mb-0">Pontos da Ordem de Trabalhos</label>
-              <p className="text-[11px] text-gray-500">
-                Estes pontos ficam automaticamente ligados aos Pontos Discutidos na Reunião &amp; Ata.
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={addAgendaRow}
-              className="text-xs font-bold text-primary-600 hover:underline"
-            >
-              + Adicionar Ponto
-            </button>
-          </div>
-          {agendaRows.map((row, idx) => (
-            <div key={row.id} className="flex items-center gap-2">
-              <span className="text-xs font-bold text-gray-400 w-6 text-right">{idx + 1}.</span>
+              <label className="label text-xs">N.º da Ata</label>
               <input
                 type="text"
-                className="input h-9 text-sm flex-1"
-                value={row.title}
-                onChange={(e) => updateAgendaRow(idx, e.target.value)}
+                className="input h-10 text-sm font-bold"
+                value={actaNumber}
+                onChange={(e) => setActaNumber(e.target.value)}
               />
-              <button
-                type="button"
-                disabled={idx === 0}
-                onClick={() => moveAgendaRow(idx, -1)}
-                className="px-2 py-1 rounded border border-gray-200 bg-white text-xs text-gray-600 disabled:opacity-40 hover:bg-gray-100"
-                title="Mover para cima"
-              >
-                ↑
-              </button>
-              <button
-                type="button"
-                disabled={idx === agendaRows.length - 1}
-                onClick={() => moveAgendaRow(idx, 1)}
-                className="px-2 py-1 rounded border border-gray-200 bg-white text-xs text-gray-600 disabled:opacity-40 hover:bg-gray-100"
-                title="Mover para baixo"
-              >
-                ↓
-              </button>
-              <button
-                type="button"
-                onClick={() => removeAgendaRow(idx)}
-                className="text-gray-400 hover:text-red-600 px-2"
-                title="Remover ponto"
-              >
-                ✕
-              </button>
             </div>
-          ))}
-        </div>
+            <div>
+              <label className="label text-xs">Tipo de Assembleia</label>
+              <select
+                className="input h-10 text-sm"
+                value={assemblyType}
+                onChange={(e) => setAssemblyType(e.target.value as 'Ordinária' | 'Extraordinária')}
+              >
+                <option value="Ordinária">Assembleia Geral Ordinária</option>
+                <option value="Extraordinária">Assembleia Geral Extraordinária</option>
+              </select>
+            </div>
+            <div>
+              <label className="label text-xs">Data da Reunião</label>
+              <input
+                type="date"
+                className="input h-10 text-sm"
+                value={meetingDate}
+                onChange={(e) => setMeetingDate(e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="label text-xs">Hora (1.ª Convocatória)</label>
+              <input
+                type="time"
+                className="input h-10 text-sm"
+                value={firstConvocationTime}
+                onChange={(e) => setFirstConvocationTime(e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="label text-xs">Data de Emissão</label>
+              <input
+                type="date"
+                className="input h-10 text-sm"
+                value={issueDate}
+                onChange={(e) => setIssueDate(e.target.value)}
+              />
+            </div>
+            <div className="md:col-span-2">
+              <label className="label text-xs">Local</label>
+              <input
+                type="text"
+                className="input h-10 text-sm"
+                value={meetingLocation}
+                onChange={(e) => setMeetingLocation(e.target.value)}
+              />
+            </div>
+            <div className="md:col-span-3">
+              <label className="label text-xs">Nota Adicional</label>
+              <input
+                type="text"
+                className="input h-10 text-sm"
+                value={extraNote}
+                onChange={(e) => setExtraNote(e.target.value)}
+              />
+            </div>
+          </div>
 
-        <div>
-          <label className="label text-xs">Assinatura / Administração</label>
-          <textarea
-            rows={2}
-            className="input h-auto py-2 text-sm"
-            value={adminSigners}
-            onChange={(e) => setAdminSigners(e.target.value)}
-          />
-        </div>
+          <div className="space-y-2">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <label className="label text-xs mb-0">Pontos da Ordem de Trabalhos</label>
+                <p className="text-[11px] text-gray-500">
+                  Estes pontos ficam automaticamente ligados aos Pontos Discutidos na Reunião &amp; Ata.
+                </p>
+              </div>
+              {!isConvocationFinalized && (
+                <button
+                  type="button"
+                  onClick={addAgendaRow}
+                  className="text-xs font-bold text-primary-600 hover:underline"
+                >
+                  + Adicionar Ponto
+                </button>
+              )}
+            </div>
+            {agendaRows.map((row, idx) => (
+              <div key={row.id} className="flex items-center gap-2">
+                <span className="text-xs font-bold text-gray-400 w-6 text-right">{idx + 1}.</span>
+                <input
+                  type="text"
+                  className="input h-9 text-sm flex-1"
+                  value={row.title}
+                  onChange={(e) => updateAgendaRow(idx, e.target.value)}
+                />
+                {!isConvocationFinalized && (
+                  <>
+                    <button
+                      type="button"
+                      disabled={idx === 0}
+                      onClick={() => moveAgendaRow(idx, -1)}
+                      className="px-2 py-1 rounded border border-gray-200 bg-white text-xs text-gray-600 disabled:opacity-40 hover:bg-gray-100"
+                      title="Mover para cima"
+                    >
+                      ↑
+                    </button>
+                    <button
+                      type="button"
+                      disabled={idx === agendaRows.length - 1}
+                      onClick={() => moveAgendaRow(idx, 1)}
+                      className="px-2 py-1 rounded border border-gray-200 bg-white text-xs text-gray-600 disabled:opacity-40 hover:bg-gray-100"
+                      title="Mover para baixo"
+                    >
+                      ↓
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => removeAgendaRow(idx)}
+                      className="text-gray-400 hover:text-red-600 px-2"
+                      title="Remover ponto"
+                    >
+                      ✕
+                    </button>
+                  </>
+                )}
+              </div>
+            ))}
+          </div>
+
+          <div>
+            <label className="label text-xs">Assinatura / Administração</label>
+            <textarea
+              rows={2}
+              className="input h-auto py-2 text-sm"
+              value={adminSigners}
+              onChange={(e) => setAdminSigners(e.target.value)}
+            />
+          </div>
+        </fieldset>
       </div>
 
       {/* Printable Official Convocatória Document */}

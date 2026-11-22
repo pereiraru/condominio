@@ -134,17 +134,18 @@ model TransactionMonth {
   createdAt     DateTime     @default(now())
 }
 
-// Documents (invoices, receipts, minutes)
+// Documents (invoices, receipts, minutes, convocations)
 model Document {
-  id           String        @id @default(cuid())
-  name         String
-  filename     String
-  mimeType     String
-  size         Int
-  category     String        // "invoice", "receipt", "minutes", "contract", "other"
-  description  String?
-  transactions Transaction[]
-  uploadedAt   DateTime      @default(now())
+  id                  String         @id @default(cuid())
+  name                String
+  filename            String
+  mimeType            String
+  size                Int
+  category            String         // "invoice", "receipt", "minutes", "convocation", "contract", "other"
+  description         String?
+  transactions        Transaction[]
+  convocationMeetings CondoMeeting[] @relation("ConvocationDocument")
+  uploadedAt          DateTime       @default(now())
 }
 
 // Description pattern mapping for auto-assigning transactions
@@ -357,9 +358,13 @@ model CondoMeeting {
   firstConvocationTime String    @default("21:30") // Hora 1.ª convocatória
   issueDate            String?   // Data de emissão da convocatória ("YYYY-MM-DD")
   extraNote            String?   // Nota adicional da convocatória
-  adminSigners         String?   // Assinatura / Administração na convocatória
-  convocationSentAt    DateTime? // Último envio da convocatória por email
-  attendanceJson       String    @default("{}")
+  adminSigners           String?   // Assinatura / Administração na convocatória
+  convocationSentAt      DateTime? // Último envio da convocatória por email
+  convocationStatus      String    @default("draft") // "draft" | "finalized"
+  convocationFinalizedAt DateTime?
+  convocationDocumentId  String?
+  convocationDocument    Document? @relation("ConvocationDocument", fields: [convocationDocumentId], references: [id], onDelete: SetNull)
+  attendanceJson         String    @default("{}")
   discussionPointsJson String    @default("[]")
   actionItemsJson      String    @default("[]")
   generalNotes         String?

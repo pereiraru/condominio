@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
+import { existsSync } from 'fs';
+import { readFile } from 'fs/promises';
+import path from 'path';
 import { prisma } from '@/lib/prisma';
 import { authOptions } from '@/lib/auth';
 import { DEFAULT_BUILDING_NAME, serializeMeeting } from '@/lib/meetings';
+import { generateConvocationPdf } from '@/lib/convocationPdf';
 import { sendMeetingConvocatoriaEmail } from '@/lib/meetingEmail';
 import { parseEmailList } from '@/lib/incidentNotifications';
 
@@ -23,9 +27,20 @@ export async function POST(
   try {
     const record = await prisma.condoMeeting.findUnique({
       where: { id: params.id },
+      include: { convocationDocument: true },
     });
     if (!record) {
       return NextResponse.json({ error: 'Reunião não encontrada.' }, { status: 404 });
+    }
+
+    if (record.convocationStatus !== 'finalized') {
+      return NextResponse.json(
+        {
+          sent: false,
+          reason: 'Submeta primeiro a convocatória como final antes de enviar por email.',
+        },
+        { status: 400 }
+      );
     }
 
     const body = (await request.json()) as {
@@ -57,11 +72,38 @@ export async function POST(
       targetEmailsRaw = typeof body.customEmails === 'string' ? body.customEmails : '';
     }
 
+    let pdfBuffer: Buffer | null = null;
+    if (record.convocationDocument?.filename) {
+      const diskPath = path.join(
+        process.cwd(),
+        'public',
+        'uploads',
+        path.basename(record.convocationDocument.filename)
+      );
+      if (existsSync(diskPath)) {
+        pdfBuffer = await readFile(diskPath);
+      }
+    }
+    if (!pdfBuffer) {
+      const generated = await generateConvocationPdf({
+        meeting,
+        buildingName: DEFAULT_BUILDING_NAME,
+      });
+      pdfBuffer = Buffer.from(generated);
+    }
+
+    const safeActa = meeting.actaNumber.replace(/[^a-zA-Z0-9_-]/g, '') || 'sn';
+    const attachmentFilename = `Convocatoria-Acta-${safeActa}-${meeting.meetingDate}.pdf`;
+
     const result = await sendMeetingConvocatoriaEmail({
       meeting,
       buildingName: DEFAULT_BUILDING_NAME,
       toEmails: targetEmailsRaw,
       customNote: typeof body.customNote === 'string' ? body.customNote : undefined,
+      pdfAttachment: {
+        filename: attachmentFilename,
+        content: pdfBuffer,
+      },
     });
 
     let convocationSentAt = meeting.convocationSentAt;

@@ -53,11 +53,13 @@ export async function GET(request: NextRequest) {
     };
 
     const contentType = mimeTypes[ext] || 'application/octet-stream';
+    const isDownload = request.nextUrl.searchParams.get('download') === '1';
+    const disposition = isDownload ? 'attachment' : 'inline';
 
     return new NextResponse(buffer, {
       headers: {
         'Content-Type': contentType,
-        'Content-Disposition': `inline; filename="${sanitized}"`,
+        'Content-Disposition': `${disposition}; filename="${sanitized}"`,
       },
     });
   } catch {

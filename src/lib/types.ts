@@ -141,7 +141,7 @@ export interface Document {
   filename: string;
   mimeType: string;
   size: number;
-  category: 'invoice' | 'receipt' | 'minutes' | 'contract' | 'other';
+  category: 'invoice' | 'receipt' | 'minutes' | 'convocation' | 'contract' | 'other';
   description?: string;
   uploadedAt: string;
 }
