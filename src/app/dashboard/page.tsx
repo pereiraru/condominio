@@ -1177,8 +1177,9 @@ export default function Dashboard() {
                     )}
 
                     <div className="pt-2.5 border-t border-slate-100 text-[11px] text-slate-400 leading-relaxed">
-                      Percentagem calculada sobre saídas e reforços do Fundo de Reserva no extrato
-                      de {stats.currentYear}.
+                      Valores reais imputados ao exercício de {stats.currentYear} (alocações
+                      mensais de despesas e reforços do Fundo de Reserva, excluindo levantamentos
+                      ATM ou acertos de outros anos).
                     </div>
                   </div>
                 </div>

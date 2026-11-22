@@ -80,6 +80,7 @@ export async function GET() {
       thisMonthTransactions,
       lastMonthTransactions,
       yearTransactions,
+      yearExpenseAllocations,
       rawBankAccounts,
       unpaidInvoices,
       allExtraCharges,
@@ -106,8 +107,26 @@ export async function GET() {
       }),
       prisma.transaction.findMany({
         where: { date: { gte: startOfYear } },
-        include: { creditor: true },
+        include: {
+          creditor: true,
+          monthAllocations: { select: { month: true, amount: true } },
+        },
         orderBy: { date: 'desc' },
+      }),
+      prisma.transactionMonth.findMany({
+        where: {
+          month: { startsWith: currentYearPrefix },
+          transaction: { amount: { lt: 0 } },
+        },
+        include: {
+          transaction: {
+            select: {
+              id: true,
+              category: true,
+              creditor: { select: { category: true, name: true } },
+            },
+          },
+        },
       }),
       prisma.bankAccount.findMany({
         orderBy: { name: 'asc' },
@@ -253,7 +272,7 @@ export async function GET() {
       };
     }
 
-    // 2. Year financial summary & category breakdown
+    // 2. Year financial summary (bank cash flow) & real imputed category breakdown
     let yearIncome = 0;
     let yearOperationalExpenses = 0;
     let yearSavingsTransfers = 0;
@@ -270,8 +289,24 @@ export async function GET() {
         } else {
           yearOperationalExpenses += absAmount;
         }
-        categoryTotals.set(category, (categoryTotals.get(category) ?? 0) + absAmount);
+
+        // Fallback for non-ATM expenses without any monthly allocations
+        if (
+          tx.monthAllocations.length === 0 &&
+          tx.creditor?.name !== 'Levantamentos ATM'
+        ) {
+          categoryTotals.set(category, (categoryTotals.get(category) ?? 0) + absAmount);
+        }
       }
+    }
+
+    // Primary source for "Para Onde Vão as Quotas?": real expenses allocated to months of currentYear
+    for (const alloc of yearExpenseAllocations) {
+      if (alloc.transaction.creditor?.name === 'Levantamentos ATM') continue;
+      const category =
+        alloc.transaction.creditor?.category || alloc.transaction.category || 'other';
+      const absAmount = Math.abs(alloc.amount);
+      categoryTotals.set(category, (categoryTotals.get(category) ?? 0) + absAmount);
     }
 
     yearIncome = round2(yearIncome);
@@ -279,7 +314,9 @@ export async function GET() {
     yearSavingsTransfers = round2(yearSavingsTransfers);
     const yearNetBalance = round2(yearIncome - yearOperationalExpenses);
 
-    const totalOutflows = round2(yearOperationalExpenses + yearSavingsTransfers);
+    const totalRealOutflows = round2(
+      Array.from(categoryTotals.values()).reduce((sum, val) => sum + val, 0)
+    );
     const expenseBreakdown: DashboardExpenseCategoryItem[] = Array.from(
       categoryTotals.entries()
     )
@@ -288,8 +325,8 @@ export async function GET() {
         label: CATEGORY_LABELS[category] ?? category,
         amount: round2(amount),
         percentage:
-          totalOutflows > 0
-            ? Math.round((amount / totalOutflows) * 1000) / 10
+          totalRealOutflows > 0
+            ? Math.round((amount / totalRealOutflows) * 1000) / 10
             : 0,
       }))
       .sort((a, b) => b.amount - a.amount);
