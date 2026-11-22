@@ -196,7 +196,7 @@ export default function UnitsPage() {
               <h1 className="text-3xl font-bold text-gray-900 tracking-tight">Frações</h1>
               <p className="text-gray-500 mt-1">Gestão de unidades e proprietários do edifício</p>
             </div>
-            <div className="flex gap-3 w-full md:w-auto">
+            <div className="flex items-center gap-3 shrink-0">
               <input
                 type="file"
                 ref={fileInputRef}
@@ -205,20 +205,20 @@ export default function UnitsPage() {
                 className="hidden"
               />
               <button
-                className="btn-secondary flex-1 md:flex-none justify-center gap-2"
+                className="btn-secondary"
                 onClick={handleImportClick}
                 disabled={importing}
               >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
                 </svg>
-                {importing ? 'A importar...' : 'Importar Excel'}
+                <span>{importing ? 'A importar...' : 'Importar Excel'}</span>
               </button>
-              <button className="btn-primary flex-1 md:flex-none justify-center gap-2" onClick={() => setShowModal(true)}>
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <button className="btn-primary" onClick={() => setShowModal(true)}>
+                <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                 </svg>
-                Nova Unidade
+                <span>Nova Unidade</span>
               </button>
             </div>
           </div>
@@ -249,115 +249,161 @@ export default function UnitsPage() {
           ) : (
             <>
               {filteredUnits.length > 0 ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 auto-rows-fr">
+                <div className="space-y-3">
                   {filteredUnits.map((unit) => {
-                    const currentOwner = unit.owners?.find(o => !o.endMonth) || unit.owners?.[0];
-                    // RED if previous months unpaid, GREEN if only current month unpaid
+                    const currentOwner =
+                      unit.owners?.find((o) => !o.endMonth && Boolean(o.startMonth)) ||
+                      unit.owners?.find((o) => !o.endMonth) ||
+                      unit.owners?.[0];
                     const hasPastDebt = (unit.pastDebt ?? 0) > 0.01;
                     const totalOwed = unit.totalOwed ?? 0;
+                    const yearDebt = unit.yearDebt ?? 0;
+                    const pastYearsDebt = unit.pastYearsDebt ?? 0;
+                    const prevDebtRemaining = unit.previousDebtRemaining ?? 0;
+                    const totalPaid = unit.totalPaid ?? 0;
+                    const currentYear = new Date().getFullYear();
                     const isGaragem = unit.code.startsWith('G') || unit.code.toLowerCase().startsWith('garagem');
-                    
+
                     return (
-                      <div 
-                        key={unit.id} 
-                        className="group bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-xl hover:border-primary-100 transition-all duration-300 cursor-pointer overflow-hidden flex flex-col"
+                      <div
+                        key={unit.id}
+                        className="group bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-md hover:border-primary-200 transition-all duration-200 cursor-pointer px-5 py-3.5"
                         onClick={() => router.push(`/dashboard/units/${unit.id}`)}
                       >
-                        <div className="p-5 flex-1">
-                          <div className="flex justify-between items-start mb-4">
-                            <div className="flex items-center gap-3">
-                              <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${hasPastDebt ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-600'}`}>
-                                {isGaragem ? (
-                                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
-                                  </svg>
-                                ) : (
-                                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
-                                  </svg>
-                                )}
-                              </div>
-                              <div>
-                                <h3 className="text-lg font-bold text-gray-900 group-hover:text-primary-600 transition-colors">
-                                  {formatUnitCode(unit.code)}
-                                </h3>
-                                {!isGaragem && (
-                                  <p className="text-[10px] text-gray-400 font-medium uppercase tracking-wider">
-                                    {unit.floor != null ? `${unit.floor}º Andar` : 'Fração Autónoma'}
-                                  </p>
-                                )}
-                              </div>
-                            </div>
-                            <div className="text-right">
-                              <p className="text-sm font-bold text-gray-900">{unit.monthlyFee.toFixed(2)}€</p>
-                              <p className="text-[10px] text-gray-400 uppercase font-bold">/ mês</p>
-                            </div>
-                          </div>
-
-                          <div className="space-y-3">
-                            <div className="p-3 bg-gray-50/50 rounded-xl border border-gray-100/50">
-                              <p className="text-[9px] text-gray-400 font-bold uppercase mb-0.5">Proprietário</p>
-                              <p className="text-sm font-semibold text-gray-700 truncate">
-                                {currentOwner?.name || 'N/A'}
-                              </p>
-                            </div>
-
-                            {!isGaragem && (
-                              <div className="flex flex-wrap gap-2">
-                                {unit.email && (
-                                  <span className="inline-flex items-center px-2 py-1 rounded-md bg-blue-50 text-blue-600 text-[10px] font-bold uppercase">
-                                    <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                                    </svg>
-                                    Email
-                                  </span>
-                                )}
-                                {unit.telefone && (
-                                  <span className="inline-flex items-center px-2 py-1 rounded-md bg-purple-50 text-purple-600 text-[10px] font-bold uppercase">
-                                    <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 011.94.86l-.85 4.48a1 1 0 01-1.03.79H6.22a9.62 9.62 0 004.42 4.42v-2.04a1 1 0 01.79-1.03l4.48-.85a1 1 0 011.23.96V19a2 2 0 01-2 2h-1.27a9.91 9.91 0 01-9.91-9.91V5z" />
-                                    </svg>
-                                    Tel
-                                  </span>
-                                )}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-
-                        <div className="mt-auto px-5 py-3 border-t bg-gray-50/30 space-y-1.5">
-                          <div className="flex justify-between items-center">
-                            <div className="flex flex-col">
-                              <span className="text-[10px] text-gray-400 font-bold uppercase">Estado Financeiro</span>
-                              <span className={`text-xs font-bold ${hasPastDebt ? 'text-red-600' : 'text-green-600'}`}>
-                                {totalOwed > 0.01 ? `${totalOwed.toFixed(2)}€ em falta` : 'Regularizado'}
-                              </span>
-                            </div>
-                            <div className={`w-8 h-8 rounded-full flex items-center justify-center ${hasPastDebt ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'}`}>
-                              {hasPastDebt ? (
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        {/* Linha 1: Informação Principal */}
+                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                          <div className="flex items-center gap-3.5 min-w-0">
+                            <div
+                              className={`w-10 h-10 rounded-xl shrink-0 flex items-center justify-center ${
+                                hasPastDebt ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-600'
+                              }`}
+                            >
+                              {isGaragem ? (
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
                                 </svg>
                               ) : (
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
                                 </svg>
                               )}
                             </div>
-                          </div>
-                          {(unit.unallocatedPayments?.count ?? 0) > 0 && (
-                            <div className="flex items-center gap-1.5 text-amber-600">
-                              <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4.5c-.77-.833-2.694-.833-3.464 0L3.34 16.5c-.77.833.192 2.5 1.732 2.5z" />
-                              </svg>
-                              <span className="text-[10px] font-bold uppercase">
-                                {unit.unallocatedPayments!.count === 1
-                                  ? `1 pagamento sem alocação — ${unit.unallocatedPayments!.total.toFixed(2)}€`
-                                  : `${unit.unallocatedPayments!.count} pagamentos sem alocação — ${unit.unallocatedPayments!.total.toFixed(2)}€`
-                                }
-                              </span>
+
+                            <div className="min-w-0">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <h3 className="text-base font-bold text-gray-900 group-hover:text-primary-600 transition-colors">
+                                  {formatUnitCode(unit.code)}
+                                </h3>
+                                <span className="px-2 py-0.5 rounded-md bg-gray-100 text-gray-600 text-[10px] font-bold uppercase tracking-wider">
+                                  {unit.code}
+                                </span>
+                                {unit.floor != null && (
+                                  <span className="text-[11px] text-gray-400 font-medium">
+                                    • {unit.floor === 0 ? 'Rés-do-Chão' : unit.floor < 0 ? `Piso ${unit.floor}` : `${unit.floor}º Andar`}
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-sm font-medium text-gray-700 truncate">
+                                {currentOwner?.name || 'Sem proprietário'}
+                              </p>
                             </div>
-                          )}
+                          </div>
+
+                          <div className="flex flex-wrap items-center gap-4 md:gap-6 justify-between md:justify-end">
+                            <div className="text-left md:text-right">
+                              <p className="text-[10px] font-bold text-gray-400 uppercase">Quota</p>
+                              <p className="text-sm font-bold text-gray-900">
+                                {unit.monthlyFee.toFixed(2)}€ <span className="text-[11px] font-normal text-gray-400">/ mês</span>
+                              </p>
+                            </div>
+
+                            <div className="text-left md:text-right">
+                              <p className="text-[10px] font-bold text-gray-400 uppercase">Pago {currentYear}</p>
+                              <p className="text-sm font-bold text-green-700">{totalPaid.toFixed(2)}€</p>
+                            </div>
+
+                            <div className="flex items-center gap-2.5 min-w-[165px] justify-end">
+                              <div className="text-right">
+                                <p className="text-[10px] font-bold text-gray-400 uppercase">Estado Financeiro</p>
+                                <p className={`text-sm font-black ${hasPastDebt ? 'text-red-600' : 'text-green-600'}`}>
+                                  {totalOwed > 0.01 ? `${totalOwed.toFixed(2)}€ em falta` : 'Regularizado'}
+                                </p>
+                              </div>
+                              <div
+                                className={`w-8 h-8 rounded-full shrink-0 flex items-center justify-center ${
+                                  hasPastDebt ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'
+                                }`}
+                              >
+                                {hasPastDebt ? (
+                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                  </svg>
+                                ) : (
+                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                  </svg>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Linha 2: Detalhe de Dívidas, Alertas e Contactos */}
+                        <div className="mt-2.5 pt-2.5 border-t border-gray-100 flex flex-wrap items-center justify-between gap-2 text-xs">
+                          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-gray-500">
+                            <span>
+                              Dívida {currentYear}:{' '}
+                              <strong className={yearDebt > 0.01 ? 'text-red-600' : 'text-gray-700'}>
+                                {yearDebt.toFixed(2)}€
+                              </strong>
+                            </span>
+                            <span>
+                              Dívida 2024–{currentYear - 1}:{' '}
+                              <strong className={pastYearsDebt > 0.01 ? 'text-red-600' : 'text-gray-700'}>
+                                {pastYearsDebt.toFixed(2)}€
+                              </strong>
+                            </span>
+                            <span>
+                              Dívida Pré-2024:{' '}
+                              <strong className={prevDebtRemaining > 0.01 ? 'text-orange-600' : 'text-gray-700'}>
+                                {prevDebtRemaining.toFixed(2)}€
+                              </strong>
+                            </span>
+                            {(unit.unallocatedPayments?.count ?? 0) > 0 && (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-amber-50 text-amber-700 font-bold text-[11px]">
+                                ⚠{' '}
+                                {unit.unallocatedPayments!.count === 1
+                                  ? `1 pag. por alocar (${unit.unallocatedPayments!.total.toFixed(2)}€)`
+                                  : `${unit.unallocatedPayments!.count} pags. por alocar (${unit.unallocatedPayments!.total.toFixed(2)}€)`}
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="flex flex-wrap items-center gap-2 text-[11px] text-gray-500">
+                            {unit.description && (
+                              <span className="italic text-gray-400 truncate max-w-[220px]">
+                                {unit.description}
+                              </span>
+                            )}
+                            {unit.email && (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded bg-blue-50 text-blue-700 font-semibold">
+                                {unit.email}
+                              </span>
+                            )}
+                            {unit.telefone && (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded bg-purple-50 text-purple-700 font-semibold">
+                                Tel: {unit.telefone}
+                              </span>
+                            )}
+                            {unit.nib && (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded bg-gray-100 text-gray-600 font-mono">
+                                IBAN/NIB registado
+                              </span>
+                            )}
+                            <span className="text-primary-600 font-bold group-hover:translate-x-0.5 transition-transform">
+                              Ver →
+                            </span>
+                          </div>
                         </div>
                       </div>
                     );

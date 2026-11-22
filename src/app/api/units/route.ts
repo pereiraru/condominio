@@ -150,8 +150,9 @@ export async function GET() {
 
       const yearDebt = Math.max(0, Number((expectedYTD - paidYTD).toFixed(2)));
       const pastDebtInCurrentYear = Math.max(0, Number((expectedUpToLastMonth - paidUpToLastMonth).toFixed(2)));
-      const totalOwed = Number((yearDebt + pastYearsDebt + previousDebtRemaining).toFixed(2));
-      const pastDebt = Number((pastDebtInCurrentYear + pastYearsDebt + previousDebtRemaining).toFixed(2));
+      const roundedPastYearsDebt = Number(pastYearsDebt.toFixed(2));
+      const totalOwed = Number((yearDebt + roundedPastYearsDebt + previousDebtRemaining).toFixed(2));
+      const pastDebt = Number((pastDebtInCurrentYear + roundedPastYearsDebt + previousDebtRemaining).toFixed(2));
 
       return {
         id: unit.id,
@@ -163,12 +164,37 @@ export async function GET() {
         telefone: unit.telefone,
         email: unit.email,
         owners: unit.owners,
-        totalPaid: paidYTD,
+        totalPaid: Number(paidYTD.toFixed(2)),
         totalOwed,
         pastDebt,
+        yearDebt,
+        pastYearsDebt: roundedPastYearsDebt,
         previousDebtRemaining,
         unallocatedPayments,
       };
+    });
+
+    const getUnitSortOrder = (code: string, floor: number | null): number => {
+      const upper = code.toUpperCase();
+      if (upper === 'GARAGEM' || upper.startsWith('G')) return -20;
+      if (upper === 'CV' || upper === 'CVD' || upper === 'CVE') {
+        const side = upper === 'CVE' ? 1 : 0;
+        return -10 + side;
+      }
+      if (upper === 'RCD') return 0;
+      if (upper === 'RCE') return 1;
+      const match = upper.match(/^(\d+)([DE])$/);
+      if (match) {
+        const fl = parseInt(match[1], 10);
+        const side = match[2] === 'D' ? 0 : 1;
+        return fl * 10 + side;
+      }
+      return (floor ?? 99) * 10;
+    };
+
+    result.sort((a, b) => {
+      const diff = getUnitSortOrder(a.code, a.floor) - getUnitSortOrder(b.code, b.floor);
+      return diff !== 0 ? diff : a.code.localeCompare(b.code);
     });
 
     return NextResponse.json(result);

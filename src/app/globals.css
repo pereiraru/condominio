@@ -18,15 +18,15 @@ body {
 
 @layer components {
   .btn-primary {
-    @apply bg-gray-900 text-white px-5 py-2.5 rounded-xl hover:bg-gray-800 transition-all font-medium shadow-sm;
+    @apply inline-flex items-center justify-center gap-2 whitespace-nowrap bg-gray-900 text-white px-5 py-2.5 rounded-xl hover:bg-gray-800 transition-all font-medium shadow-sm h-[42px];
   }
 
   .btn-secondary {
-    @apply bg-white text-gray-700 px-5 py-2.5 rounded-xl hover:bg-gray-50 transition-all font-medium border border-gray-200 shadow-sm h-[42px];
+    @apply inline-flex items-center justify-center gap-2 whitespace-nowrap bg-white text-gray-700 px-5 py-2.5 rounded-xl hover:bg-gray-50 transition-all font-medium border border-gray-200 shadow-sm h-[42px];
   }
 
   .btn-ghost {
-    @apply text-gray-600 px-4 py-2 rounded-xl hover:bg-gray-100 transition-all font-medium;
+    @apply inline-flex items-center justify-center gap-2 whitespace-nowrap text-gray-600 px-4 py-2 rounded-xl hover:bg-gray-100 transition-all font-medium;
   }
 
   .card {
