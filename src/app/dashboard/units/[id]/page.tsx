@@ -11,10 +11,12 @@ import FeeHistoryManager from '@/components/FeeHistoryManager';
 import ExtraChargesManager from '@/components/ExtraChargesManager';
 import IncidentReportModal from '@/components/IncidentReportModal';
 import IncidentDetailModal from '@/components/IncidentDetailModal';
+import UnitFinancialReportCard from '@/components/UnitFinancialReportCard';
+import type { UnitReportItem } from '@/app/dashboard/admin/budgets/types';
 import { LOCATION_LABEL_MAP, PRIORITY_STYLE_MAP, STATUS_STYLE_MAP } from '@/lib/incidentConstants';
 import { Unit, Transaction, Creditor, MonthPaymentStatus, FeeHistory, ExtraCharge, Owner, MonthExpectedBreakdown, DescriptionMapping, Incident } from '@/lib/types';
 
-type TabType = 'geral' | 'historico' | 'anomalias' | 'config';
+type TabType = 'financeira' | 'anomalias' | 'geral' | 'historico' | 'config';
 
 interface EnhancedUnit extends Unit {
   transactions?: Transaction[];
@@ -42,7 +44,14 @@ export default function UnitDetailV2Page() {
   const [unit, setUnit] = useState<EnhancedUnit | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [activeTab, setActiveTab] = useState<TabType>('geral');
+  const [activeTab, setActiveTab] = useState<TabType>('financeira');
+  const [financialReport, setFinancialReport] = useState<{
+    unit: UnitReportItem;
+    year: number;
+    buildingName: string;
+  } | null>(null);
+  const [loadingReport, setLoadingReport] = useState(true);
+  const [customReportNote, setCustomReportNote] = useState<string | undefined>(undefined);
   
   const [formData, setFormData] = useState({
     code: '',
@@ -101,6 +110,27 @@ export default function UnitDetailV2Page() {
   const [incidentReportOpen, setIncidentReportOpen] = useState(false);
   const [selectedIncidentId, setSelectedIncidentId] = useState<string | null>(null);
 
+  async function fetchUnitFinancialReport() {
+    setLoadingReport(true);
+    try {
+      const res = await fetch(`/api/admin/unit-reports?unitId=${id}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.units && data.units.length > 0) {
+          setFinancialReport({
+            unit: data.units[0],
+            year: data.year,
+            buildingName: data.buildingName,
+          });
+        }
+      }
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setLoadingReport(false);
+    }
+  }
+
   async function fetchUnitIncidents() {
     try {
       const res = await fetch(`/api/incidents?unitId=${id}`);
@@ -110,28 +140,35 @@ export default function UnitDetailV2Page() {
 
   useEffect(() => {
     fetchUnit();
-    fetchPaymentHistory();
-    fetchFeeHistory();
-    fetchExtraCharges();
+    fetchUnitFinancialReport();
     fetchUnitIncidents();
     if (isAdmin) {
+      fetchPaymentHistory();
+      fetchFeeHistory();
+      fetchExtraCharges();
       fetchAllUnits();
       fetchCreditors();
     }
   }, [id, isAdmin]);
 
   useEffect(() => {
-    if (id) {
+    if (!isAdmin && (activeTab === 'geral' || activeTab === 'historico' || activeTab === 'config')) {
+      setActiveTab('financeira');
+    }
+  }, [isAdmin, activeTab]);
+
+  useEffect(() => {
+    if (id && isAdmin) {
       fetchMonthlyStatus(selectedOwnerId || undefined);
       fetchPastYearsDebt(selectedOwnerId || undefined);
     }
-  }, [id, calendarYear, selectedOwnerId]);
+  }, [id, calendarYear, selectedOwnerId, isAdmin]);
 
   useEffect(() => {
-    if (id) {
+    if (id && isAdmin) {
       fetchPaymentHistory(selectedOwnerId || undefined);
     }
-  }, [selectedOwnerId]);
+  }, [selectedOwnerId, isAdmin]);
 
   async function fetchAllUnits() {
     try {
@@ -354,14 +391,26 @@ export default function UnitDetailV2Page() {
   const currentYearDebt = yearlyData.find((y) => y.year === currentYear)?.debt ?? (unit.totalOwed ?? 0);
   const totalDebt = (pastYearsDebt + previousDebtRemaining + currentYearDebt);
 
+  const visibleTabs = [
+    { id: 'financeira', label: 'Situação Financeira', icon: 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z' },
+    { id: 'anomalias', label: `Anomalias Registadas (${unitIncidents.length})`, icon: 'M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z' },
+    ...(isAdmin
+      ? [
+          { id: 'geral', label: 'Dados Gerais', icon: 'M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z' },
+          { id: 'historico', label: 'Histórico de Pagamentos', icon: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01' },
+          { id: 'config', label: 'Configurações', icon: 'M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z M15 12a3 3 0 11-6 0 3 3 0 016 0z' },
+        ]
+      : []),
+  ];
+
   return (
-    <div className="flex min-h-screen bg-gray-50/50">
+    <div className="print-page-wrapper flex min-h-screen bg-gray-50/50">
       <Sidebar />
 
-      <main className="flex-1 p-8">
-        <div className="max-w-7xl mx-auto">
+      <main className="flex-1 p-8 print:p-0">
+        <div className="max-w-7xl mx-auto print:max-w-none">
           {/* Header */}
-          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
+          <div className="no-print flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
             <div className="flex items-center gap-4">
               <div className="w-16 h-16 bg-primary-600 rounded-2xl flex items-center justify-center text-white text-2xl font-bold shadow-lg shadow-primary-200">
                 {unit.code}
@@ -380,7 +429,7 @@ export default function UnitDetailV2Page() {
             
             <div className="flex gap-3">
               <button 
-                onClick={() => router.push('/dashboard/units')}
+                onClick={() => router.push(isAdmin ? '/dashboard/units' : '/dashboard')}
                 className="btn-secondary flex items-center gap-2"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -401,13 +450,8 @@ export default function UnitDetailV2Page() {
           </div>
 
           {/* Navigation Tabs */}
-          <div className="flex flex-wrap gap-1 mb-8 bg-gray-200/50 p-1.5 rounded-2xl w-fit">
-            {[
-              { id: 'geral', label: 'Dados Gerais', icon: 'M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z' },
-              { id: 'historico', label: 'Histórico de Pagamentos', icon: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01' },
-              { id: 'anomalias', label: `Anomalias Registadas (${unitIncidents.length})`, icon: 'M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z' },
-              { id: 'config', label: 'Configurações', icon: 'M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z M15 12a3 3 0 11-6 0 3 3 0 016 0z' }
-            ].map((tab) => (
+          <div className="no-print flex flex-wrap gap-1 mb-8 bg-gray-200/50 p-1.5 rounded-2xl w-fit">
+            {visibleTabs.map((tab) => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id as TabType)}
@@ -425,8 +469,31 @@ export default function UnitDetailV2Page() {
             ))}
           </div>
 
-          {/* TAB 1: DADOS GERAIS */}
-          {activeTab === 'geral' && (
+          {/* TAB: SITUAÇÃO FINANCEIRA (PADRÃO) */}
+          {activeTab === 'financeira' && (
+            loadingReport ? (
+              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-12 text-center text-sm text-gray-500">
+                A carregar situação financeira da fração...
+              </div>
+            ) : financialReport ? (
+              <UnitFinancialReportCard
+                unit={financialReport.unit}
+                year={financialReport.year}
+                buildingName={financialReport.buildingName}
+                isAdmin={isAdmin}
+                customNote={customReportNote}
+                onCustomNoteChange={isAdmin ? setCustomReportNote : undefined}
+                showPrintButton
+              />
+            ) : (
+              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-12 text-center text-sm text-gray-500">
+                Não foi possível carregar o relatório financeiro desta fração.
+              </div>
+            )
+          )}
+
+          {/* TAB 1: DADOS GERAIS (Admin Only) */}
+          {activeTab === 'geral' && isAdmin && (
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
               <div className="lg:col-span-2 space-y-8">
                 {/* Unit Details Card */}
@@ -611,8 +678,8 @@ export default function UnitDetailV2Page() {
             </div>
           )}
 
-          {/* TAB 2: HISTÓRICO */}
-          {activeTab === 'historico' && (
+          {/* TAB 2: HISTÓRICO (Admin Only) */}
+          {activeTab === 'historico' && isAdmin && (
             <div className="space-y-8">
               {/* Summary Metrics */}
               <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
@@ -833,13 +900,22 @@ export default function UnitDetailV2Page() {
                     Acompanhe aqui o estado de resolução, responsável, datas e despesas associadas às ocorrências reportadas.
                   </p>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setIncidentReportOpen(true)}
-                  className="btn-primary text-sm"
-                >
-                  + Reportar Anomalia
-                </button>
+                <div className="flex items-center gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => router.push('/dashboard/incidents')}
+                    className="btn-secondary text-sm"
+                  >
+                    Ver Todas do Prédio →
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIncidentReportOpen(true)}
+                    className="btn-primary text-sm"
+                  >
+                    + Reportar Anomalia
+                  </button>
+                </div>
               </div>
 
               {unitIncidents.length === 0 ? (
@@ -891,8 +967,8 @@ export default function UnitDetailV2Page() {
             </div>
           )}
 
-          {/* TAB 3: CONFIGURAÇÕES */}
-          {activeTab === 'config' && (
+          {/* TAB 3: CONFIGURAÇÕES (Admin Only) */}
+          {activeTab === 'config' && isAdmin && (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
               <div className="space-y-8">
                 {/* Mappings Card */}

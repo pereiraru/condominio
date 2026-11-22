@@ -9,15 +9,31 @@ const MONTH_NAMES_PT = [
   'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro',
 ];
 
+export const dynamic = 'force-dynamic';
+
 function round2(n: number): number {
   return Math.round(n * 100) / 100;
 }
 
 export async function GET(request: NextRequest) {
   const session = await getServerSession(authOptions);
-  if (!session || session.user.role !== 'admin') {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
+  if (!session) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
+
+  const isAdmin = session.user.role === 'admin';
+  const requestedUnitId = request.nextUrl.searchParams.get('unitId');
+
+  if (!isAdmin) {
+    if (!session.user.unitId) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+    if (requestedUnitId && requestedUnitId !== session.user.unitId) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+  }
+
+  const targetUnitId = isAdmin ? requestedUnitId : session.user.unitId!;
 
   try {
     const now = new Date();
@@ -31,6 +47,7 @@ export async function GET(request: NextRequest) {
     const [units, allExtraCharges, unitTransactions, creditors, expenseAllocations, supplierInvoices, savingsTxs] =
       await Promise.all([
         prisma.unit.findMany({
+          where: targetUnitId ? { id: targetUnitId } : undefined,
           orderBy: { code: 'asc' },
           include: {
             owners: { orderBy: { startMonth: 'asc' } },
@@ -39,7 +56,7 @@ export async function GET(request: NextRequest) {
         }),
         prisma.extraCharge.findMany(),
         prisma.transaction.findMany({
-          where: { unitId: { not: null }, amount: { gt: 0 } },
+          where: { unitId: targetUnitId ? targetUnitId : { not: null }, amount: { gt: 0 } },
           orderBy: { date: 'desc' },
           include: {
             monthAllocations: {
@@ -48,38 +65,46 @@ export async function GET(request: NextRequest) {
             },
           },
         }),
-        prisma.creditor.findMany({
-          include: { feeHistory: { orderBy: { effectiveFrom: 'asc' } } },
-          orderBy: { name: 'asc' },
-        }),
-        prisma.transactionMonth.findMany({
-          where: {
-            month: { gte: `${targetYear}-01`, lte: `${targetYear}-12` },
-            transaction: { amount: { lt: 0 }, creditorId: { not: null } },
-          },
-          include: { transaction: { select: { creditorId: true } } },
-        }),
-        prisma.supplierInvoice.findMany({
-          where: {
-            date: {
-              gte: new Date(`${targetYear}-01-01`),
-              lte: new Date(`${targetYear}-12-31T23:59:59`),
-            },
-          },
-        }),
-        prisma.transaction.findMany({
-          where: {
-            date: {
-              gte: new Date(`${targetYear}-01-01`),
-              lte: new Date(`${targetYear}-12-31T23:59:59`),
-            },
-            amount: { lt: 0 },
-            OR: [
-              { category: 'savings' },
-              { creditor: { category: 'savings' } },
-            ],
-          },
-        }),
+        isAdmin
+          ? prisma.creditor.findMany({
+              include: { feeHistory: { orderBy: { effectiveFrom: 'asc' } } },
+              orderBy: { name: 'asc' },
+            })
+          : Promise.resolve([]),
+        isAdmin
+          ? prisma.transactionMonth.findMany({
+              where: {
+                month: { gte: `${targetYear}-01`, lte: `${targetYear}-12` },
+                transaction: { amount: { lt: 0 }, creditorId: { not: null } },
+              },
+              include: { transaction: { select: { creditorId: true } } },
+            })
+          : Promise.resolve([]),
+        isAdmin
+          ? prisma.supplierInvoice.findMany({
+              where: {
+                date: {
+                  gte: new Date(`${targetYear}-01-01`),
+                  lte: new Date(`${targetYear}-12-31T23:59:59`),
+                },
+              },
+            })
+          : Promise.resolve([]),
+        isAdmin
+          ? prisma.transaction.findMany({
+              where: {
+                date: {
+                  gte: new Date(`${targetYear}-01-01`),
+                  lte: new Date(`${targetYear}-12-31T23:59:59`),
+                },
+                amount: { lt: 0 },
+                OR: [
+                  { category: 'savings' },
+                  { creditor: { category: 'savings' } },
+                ],
+              },
+            })
+          : Promise.resolve([]),
       ]);
 
     const gridYears: number[] = [];
