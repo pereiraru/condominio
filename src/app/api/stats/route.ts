@@ -57,6 +57,8 @@ export async function GET() {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
+  const isAdmin = session.user?.role === 'admin';
+
   try {
     const now = new Date();
     const currentYear = now.getFullYear();
@@ -442,32 +444,13 @@ export async function GET() {
           amount: round2(Math.abs(t.amount)),
         }));
 
-    // 6. Pending issues & anomalies feed (DB pending invoices + building tracking issues)
-    const pendingIssues: DashboardPendingIssue[] = unpaidInvoices.map((inv) => ({
-      id: `invoice-${inv.id}`,
-      title: `${inv.creditor.name} — ${inv.description}`,
-      description:
-        inv.creditor.category === 'cleaning'
-          ? 'Serviço extraordinário de limpeza registado e a aguardar liquidação pela administração.'
-          : 'Fatura do fornecedor emitida e a aguardar liquidação (débito direto / pagamento).',
-      category:
-        inv.creditor.category === 'cleaning'
-          ? 'Limpeza'
-          : inv.creditor.category === 'electricity'
-            ? 'Eletricidade'
-            : 'Fornecedores',
-      status: 'pending_payment',
-      priority: 'medium',
-      amount: round2(Math.max(0, (inv.amountDue ?? 0) - (inv.amountPaid ?? 0))),
-      dateLabel: formatShortDatePt(inv.date),
-    }));
-
-    pendingIssues.push(
+    // 6. Pending issues & building anomalies feed (no unpaid supplier invoices)
+    const pendingIssues: DashboardPendingIssue[] = [
       {
         id: 'issue-painting',
         title: 'Pintura e Conservação do Edifício',
         description:
-          'Recolha de orçamentos e avaliação do estado da fachada e zonas comuns para deliberação na próxima Assembleia de Condóminos.',
+          'Recolha de orçamentos e avaliação da fachada e zonas comuns para deliberação na próxima Assembleia.',
         category: 'Conservação',
         status: 'in_analysis',
         priority: 'high',
@@ -476,16 +459,16 @@ export async function GET() {
       },
       {
         id: 'issue-equipments',
-        title: 'Monitorização Técnica: Elevadores, Bomba de Água e Portão da Garagem',
+        title: 'Elevadores, Bomba de Água e Portão da Garagem',
         description:
-          'Acompanhamento contínuo do funcionamento dos equipamentos comuns; em breve será possível reportar anomalias diretamente por ticket.',
+          'Acompanhamento técnico contínuo dos equipamentos comuns. Brevemente será possível reportar anomalias (ex.: botão do elevador, iluminação) por ticket.',
         category: 'Equipamentos',
         status: 'monitoring',
         priority: 'low',
         amount: null,
         dateLabel: 'Acompanhamento contínuo',
-      }
-    );
+      },
+    ];
 
     const latestInspection = extraordinaryActivities.find((a) =>
       a.creditorName.toLowerCase().includes('câmara municipal')
@@ -495,7 +478,7 @@ export async function GET() {
         id: `resolved-${latestInspection.id}`,
         title: 'Inspeção Periódica dos Elevadores — Câmara Municipal de Sintra',
         description:
-          'Taxa camarária de inspeção dos elevadores liquidada e processo regularizado junto da Câmara Municipal de Sintra.',
+          'Inspeção periódica realizada e taxa camarária regularizada junto da Câmara Municipal de Sintra.',
         category: 'Segurança',
         status: 'resolved',
         priority: 'low',
@@ -536,12 +519,13 @@ export async function GET() {
 
         const paidThisYear = round2(Math.abs(paidThisYearRaw));
         const paidThisMonth = round2(Math.abs(paidThisMonthRaw));
-        const pendingAmount = round2(
+        const rawPendingAmount = round2(
           c.supplierInvoices.reduce(
             (sum, inv) => sum + Math.max(0, (inv.amountDue ?? 0) - (inv.amountPaid ?? 0)),
             0
           )
         );
+        const pendingAmount = isAdmin ? rawPendingAmount : 0;
 
         const monthlyAmount = c.isFixed
           ? round2(
@@ -558,7 +542,7 @@ export async function GET() {
             );
 
         const isFixedOverdue =
-          c.isFixed && monthlyAmount > 0 && paidThisMonth < monthlyAmount * 0.95;
+          isAdmin && c.isFixed && monthlyAmount > 0 && paidThisMonth < monthlyAmount * 0.95;
 
         const status: DashboardRegularService['status'] =
           pendingAmount > 0.01 || isFixedOverdue
@@ -594,7 +578,7 @@ export async function GET() {
       balanceTrend,
       monthlyIncome,
       monthlyExpenses,
-      pendingPayments,
+      pendingPayments: isAdmin ? pendingPayments : 0,
       currentYear,
       currentMonthLabel,
       totalBankBalance,
@@ -604,8 +588,8 @@ export async function GET() {
         yearOperationalExpenses,
         yearSavingsTransfers,
         yearNetBalance,
-        pendingInvoicesTotal,
-        pendingInvoicesCount: unpaidInvoices.length,
+        pendingInvoicesTotal: isAdmin ? pendingInvoicesTotal : 0,
+        pendingInvoicesCount: isAdmin ? unpaidInvoices.length : 0,
       },
       unitCompliance: {
         totalUnits: units.length,

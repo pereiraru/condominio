@@ -80,37 +80,41 @@ export default function Dashboard() {
   const displayedActivities = stats
     ? showAllActivities
       ? stats.extraordinaryActivities
-      : stats.extraordinaryActivities.slice(0, 6)
+      : stats.extraordinaryActivities.slice(0, 5)
     : [];
+
+  const openIssuesCount = stats
+    ? stats.pendingIssues.filter((i) => i.status !== 'resolved').length
+    : 0;
 
   return (
     <div className="flex min-h-screen bg-gray-50/50">
       <Sidebar />
 
-      <main className="flex-1 p-6 md:p-8">
+      <main className="flex-1 p-5 md:p-6">
         <div className="max-w-7xl mx-auto">
           {/* Header */}
-          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-5">
             <div>
-              <h1 className="text-3xl font-bold text-gray-900 tracking-tight">
+              <h1 className="text-2xl font-bold text-gray-900 tracking-tight">
                 Portal do Condomínio
               </h1>
-              <p className="text-gray-500 mt-1">
-                Visão geral, contas comuns, serviços e atividades do edifício
+              <p className="text-sm text-gray-500 mt-0.5">
+                Visão geral, finanças comuns, ocorrências e serviços do edifício
                 {stats?.currentMonthLabel ? ` · ${stats.currentMonthLabel}` : ''}
               </p>
             </div>
 
-            <div className="flex flex-wrap items-center gap-3">
+            <div className="flex flex-wrap items-center gap-2.5">
               {isAdmin ? (
                 <>
-                  <Link href="/dashboard/admin/budgets" className="btn-secondary">
+                  <Link href="/dashboard/admin/budgets" className="btn-secondary h-[38px] px-4 text-sm">
                     <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" />
                     </svg>
                     <span>Administração</span>
                   </Link>
-                  <Link href="/dashboard/relatorio-contas" className="btn-primary">
+                  <Link href="/dashboard/relatorio-contas" className="btn-primary h-[38px] px-4 text-sm">
                     <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                     </svg>
@@ -119,7 +123,7 @@ export default function Dashboard() {
                 </>
               ) : (
                 stats?.myUnit && (
-                  <Link href={`/dashboard/units/${stats.myUnit.id}`} className="btn-primary">
+                  <Link href={`/dashboard/units/${stats.myUnit.id}`} className="btn-primary h-[38px] px-4 text-sm">
                     <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
                     </svg>
@@ -131,27 +135,19 @@ export default function Dashboard() {
           </div>
 
           {loading ? (
-            <div className="flex flex-col items-center justify-center py-24 text-gray-500 font-medium">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900 mb-4"></div>
+            <div className="flex flex-col items-center justify-center py-20 text-gray-500 font-medium">
+              <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-gray-900 mb-3"></div>
               A carregar visão geral do condomínio...
             </div>
           ) : error || !stats ? (
-            <div className="bg-red-50 border border-red-200 rounded-2xl p-6 text-red-700">
+            <div className="bg-red-50 border border-red-200 rounded-2xl p-5 text-red-700 text-sm">
               {error || 'Sem dados disponíveis.'}
             </div>
           ) : (
-            <div className="space-y-8">
-              {/* 1. Mural de Avisos & Próxima Assembleia */}
+            <div className="space-y-5">
+              {/* 1. Mural de Avisos Compacto */}
               <section>
-                <div className="flex items-center justify-between mb-3">
-                  <h2 className="text-sm font-bold text-gray-500 uppercase tracking-wider flex items-center gap-2">
-                    <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z" />
-                    </svg>
-                    Avisos & Comunicações do Prédio
-                  </h2>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                   {stats.announcements.map((item) => {
                     const styleMap = {
                       assembly: {
@@ -177,19 +173,19 @@ export default function Dashboard() {
                     return (
                       <div
                         key={item.id}
-                        className={`rounded-2xl border p-4 shadow-sm ${styleMap.card}`}
+                        className={`rounded-xl border px-4 py-3 shadow-sm ${styleMap.card}`}
                       >
-                        <div className="flex items-center justify-between gap-2 mb-2">
+                        <div className="flex items-center justify-between gap-2 mb-1">
+                          <h3 className={`text-xs font-bold truncate ${styleMap.title}`}>
+                            {item.title}
+                          </h3>
                           <span
-                            className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full ${styleMap.badge}`}
+                            className={`text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 ${styleMap.badge}`}
                           >
                             {item.dateLabel}
                           </span>
                         </div>
-                        <h3 className={`text-sm font-bold mb-1 ${styleMap.title}`}>
-                          {item.title}
-                        </h3>
-                        <p className={`text-xs leading-relaxed ${styleMap.text}`}>
+                        <p className={`text-[11px] leading-snug line-clamp-2 ${styleMap.text}`}>
                           {item.message}
                         </p>
                       </div>
@@ -198,63 +194,61 @@ export default function Dashboard() {
                 </div>
               </section>
 
-              {/* 2. Resumo Privado da Própria Fração (visível apenas para o próprio condómino) */}
+              {/* 2. Resumo Privado da Própria Fração (visível apenas para condómino com unitId) */}
               {stats.myUnit && (
                 <section>
-                  <div className="bg-white rounded-2xl border border-gray-200 shadow-sm px-6 py-4">
+                  <div className="bg-white rounded-2xl border border-gray-200 shadow-sm px-5 py-3.5">
                     <div className="flex flex-wrap items-center justify-between gap-4">
-                      <div className="flex items-center gap-3.5">
+                      <div className="flex items-center gap-3">
                         <div
-                          className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 ${
+                          className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
                             stats.myUnit.totalOwed > 0.01
                               ? 'bg-amber-50 text-amber-700'
                               : 'bg-emerald-50 text-emerald-700'
                           }`}
                         >
-                          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
                           </svg>
                         </div>
                         <div>
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="text-xs font-bold uppercase tracking-wider text-gray-400">
+                          <div className="flex items-center gap-2">
+                            <span className="text-[11px] font-bold uppercase tracking-wider text-gray-400">
                               A Minha Fração
                             </span>
-                            <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-gray-100 text-gray-700">
-                              Acesso Privado
+                            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">
+                              Privado
                             </span>
                           </div>
-                          <h3 className="text-base font-bold text-gray-900">
+                          <p className="text-sm font-bold text-gray-900">
                             {stats.myUnit.code}
-                            {stats.myUnit.description ? ` — ${stats.myUnit.description}` : ''}
                             {stats.myUnit.ownerName ? ` · ${stats.myUnit.ownerName}` : ''}
-                          </h3>
+                            {stats.myUnit.lastPaymentDate && (
+                              <span className="font-normal text-xs text-gray-500 ml-2">
+                                (Último pag.: {formatDatePt(stats.myUnit.lastPaymentDate)})
+                              </span>
+                            )}
+                          </p>
                         </div>
                       </div>
 
-                      <div className="flex flex-wrap items-center gap-6 sm:gap-8 ml-auto">
+                      <div className="flex flex-wrap items-center gap-5 ml-auto">
                         <div className="text-right">
-                          <p className="text-[10px] text-gray-400 uppercase font-bold tracking-wider">
-                            Quota Mensal
-                          </p>
+                          <p className="text-[10px] text-gray-400 uppercase font-bold">Quota Mensal</p>
                           <p className="text-sm font-bold text-gray-900 tabular-nums">
                             {formatEur(stats.myUnit.monthlyFee)}
                           </p>
                         </div>
-
                         <div className="text-right">
-                          <p className="text-[10px] text-gray-400 uppercase font-bold tracking-wider">
+                          <p className="text-[10px] text-gray-400 uppercase font-bold">
                             Pago {stats.currentYear}
                           </p>
                           <p className="text-sm font-bold text-gray-900 tabular-nums">
                             {formatEur(stats.myUnit.paidThisYear)}
                           </p>
                         </div>
-
                         <div className="text-right">
-                          <p className="text-[10px] text-gray-400 uppercase font-bold tracking-wider">
-                            Situação da Fração
-                          </p>
+                          <p className="text-[10px] text-gray-400 uppercase font-bold">Situação</p>
                           <p
                             className={`text-sm font-bold tabular-nums ${
                               stats.myUnit.totalOwed > 0.01 ? 'text-red-600' : 'text-emerald-600'
@@ -265,64 +259,41 @@ export default function Dashboard() {
                               : 'Regularizada'}
                           </p>
                         </div>
-
                         <Link
                           href={`/dashboard/units/${stats.myUnit.id}`}
-                          className="btn-secondary text-sm h-[38px] px-4"
+                          className="btn-secondary text-xs h-[34px] px-3.5"
                         >
                           Ver Extrato →
                         </Link>
                       </div>
                     </div>
-
-                    {stats.myUnit.lastPaymentDate && (
-                      <div className="mt-2.5 pt-2.5 border-t border-gray-100 flex flex-wrap items-center justify-between gap-2 text-xs text-gray-500">
-                        <span>
-                          Último pagamento registado:{' '}
-                          <strong className="text-gray-700 font-semibold">
-                            {formatDatePt(stats.myUnit.lastPaymentDate)}
-                          </strong>
-                          {stats.myUnit.lastPaymentAmount !== null &&
-                            ` (${formatEur(stats.myUnit.lastPaymentAmount)})`}
-                        </span>
-                        <span className="text-gray-400">
-                          Apenas visível para o titular desta fração.
-                        </span>
-                      </div>
-                    )}
                   </div>
                 </section>
               )}
 
               {/* 3. Saúde Financeira & Contas Bancárias do Prédio */}
               <section>
-                <div className="flex items-center justify-between mb-3">
-                  <h2 className="text-sm font-bold text-gray-500 uppercase tracking-wider">
-                    Saúde Financeira do Condomínio ({stats.currentYear})
-                  </h2>
-                </div>
-
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
                   {/* Disponibilidades Bancárias */}
-                  <div className="bg-gray-900 text-white rounded-2xl p-6 shadow-sm flex flex-col justify-between">
+                  <div className="bg-gray-900 text-white rounded-2xl p-5 shadow-sm flex flex-col justify-between">
                     <div>
-                      <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">
+                      <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">
                         Disponibilidades Bancárias Totais
                       </p>
-                      <p className="text-3xl font-bold mt-2 tabular-nums">
+                      <p className="text-2xl font-bold mt-1 tabular-nums">
                         {formatEur(stats.totalBankBalance)}
                       </p>
                     </div>
 
-                    <div className="mt-5 pt-4 border-t border-white/10 space-y-2.5">
+                    <div className="mt-3 pt-3 border-t border-white/10 space-y-1.5">
                       {stats.bankAccounts.map((acc) => (
-                        <div key={acc.id} className="flex items-center justify-between text-sm">
+                        <div key={acc.id} className="flex items-center justify-between text-xs">
                           <div>
-                            <p className="font-medium text-gray-100">{acc.name}</p>
+                            <span className="font-medium text-gray-100">{acc.name}</span>
                             {acc.lastDate && (
-                              <p className="text-[11px] text-gray-400">
-                                Saldo a {formatDatePt(acc.lastDate)}
-                              </p>
+                              <span className="text-[10px] text-gray-400 ml-1.5">
+                                ({formatDatePt(acc.lastDate)})
+                              </span>
                             )}
                           </div>
                           <span className="font-bold tabular-nums text-white">
@@ -334,32 +305,32 @@ export default function Dashboard() {
                   </div>
 
                   {/* Balanço do Exercício */}
-                  <div className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm flex flex-col justify-between">
+                  <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm flex flex-col justify-between">
                     <div>
                       <div className="flex items-center justify-between">
-                        <p className="text-xs font-bold uppercase tracking-wider text-gray-400">
-                          Movimento do Ano ({stats.currentYear})
+                        <p className="text-[11px] font-bold uppercase tracking-wider text-gray-400">
+                          Movimento de {stats.currentYear}
                         </p>
-                        <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">
+                        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">
                           Extrato Bancário
                         </span>
                       </div>
 
-                      <div className="mt-4 space-y-2.5">
-                        <div className="flex items-center justify-between text-sm">
+                      <div className="mt-3 space-y-1.5 text-xs">
+                        <div className="flex items-center justify-between">
                           <span className="text-gray-600">Receitas recebidas</span>
                           <span className="font-bold text-emerald-600 tabular-nums">
                             + {formatEur(stats.yearSummary.yearIncome)}
                           </span>
                         </div>
-                        <div className="flex items-center justify-between text-sm">
+                        <div className="flex items-center justify-between">
                           <span className="text-gray-600">Despesas operacionais</span>
                           <span className="font-bold text-red-600 tabular-nums">
                             - {formatEur(stats.yearSummary.yearOperationalExpenses)}
                           </span>
                         </div>
-                        <div className="flex items-center justify-between text-sm">
-                          <span className="text-gray-600">Transf. Fundo Poupança</span>
+                        <div className="flex items-center justify-between">
+                          <span className="text-gray-600">Reforço Fundo Poupança</span>
                           <span className="font-semibold text-teal-700 tabular-nums">
                             {formatEur(stats.yearSummary.yearSavingsTransfers)}
                           </span>
@@ -367,18 +338,18 @@ export default function Dashboard() {
                       </div>
                     </div>
 
-                    <div className="mt-4 pt-3.5 border-t border-gray-100 flex items-center justify-between">
+                    <div className="mt-3 pt-2.5 border-t border-gray-100 flex items-center justify-between">
                       <div>
                         <p className="text-xs text-gray-500">Saldo operacional (Rec. - Desp.)</p>
-                        {stats.yearSummary.pendingInvoicesCount > 0 && (
-                          <p className="text-[11px] text-amber-700 font-medium mt-0.5">
-                            {stats.yearSummary.pendingInvoicesCount} faturas por liquidar:{' '}
-                            {formatEur(stats.yearSummary.pendingInvoicesTotal)}
+                        {isAdmin && stats.yearSummary.pendingInvoicesCount > 0 && (
+                          <p className="text-[10px] text-amber-700 font-medium">
+                            Admin: {stats.yearSummary.pendingInvoicesCount} faturas por liquidar (
+                            {formatEur(stats.yearSummary.pendingInvoicesTotal)})
                           </p>
                         )}
                       </div>
                       <span
-                        className={`text-base font-bold tabular-nums ${
+                        className={`text-sm font-bold tabular-nums ${
                           stats.yearSummary.yearNetBalance >= 0
                             ? 'text-emerald-700'
                             : 'text-red-600'
@@ -390,36 +361,34 @@ export default function Dashboard() {
                     </div>
                   </div>
 
-                  {/* Regularização Global Anónima */}
-                  <div className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm flex flex-col justify-between">
+                  {/* Cobrança Global Anónima */}
+                  <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm flex flex-col justify-between">
                     <div>
                       <div className="flex items-center justify-between">
-                        <p className="text-xs font-bold uppercase tracking-wider text-gray-400">
-                          Cobrança de Quotas ({stats.currentYear})
+                        <p className="text-[11px] font-bold uppercase tracking-wider text-gray-400">
+                          Cobrança Global ({stats.currentYear})
                         </p>
-                        <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700">
+                        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700">
                           Dados Anónimos
                         </span>
                       </div>
 
-                      <div className="mt-4 flex items-baseline gap-2">
-                        <span className="text-3xl font-bold text-gray-900 tabular-nums">
+                      <div className="mt-2.5 flex items-baseline gap-2">
+                        <span className="text-2xl font-bold text-gray-900 tabular-nums">
                           {stats.unitCompliance.unitsUpToDateThisYear} /{' '}
                           {stats.unitCompliance.totalUnits}
                         </span>
-                        <span className="text-sm text-gray-500">frações em dia no ano</span>
+                        <span className="text-xs text-gray-500">frações em dia no ano</span>
                       </div>
 
-                      <div className="mt-4">
-                        <div className="flex items-center justify-between text-xs mb-1.5">
-                          <span className="text-gray-500 font-medium">
-                            Taxa de execução das quotas {stats.currentYear}
-                          </span>
+                      <div className="mt-3">
+                        <div className="flex items-center justify-between text-xs mb-1">
+                          <span className="text-gray-500">Execução das quotas</span>
                           <span className="font-bold text-gray-900 tabular-nums">
                             {stats.unitCompliance.collectionRateYear.toFixed(1)}%
                           </span>
                         </div>
-                        <div className="w-full h-2.5 bg-gray-100 rounded-full overflow-hidden">
+                        <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
                           <div
                             className="h-full bg-emerald-500 rounded-full transition-all duration-500"
                             style={{
@@ -430,223 +399,185 @@ export default function Dashboard() {
                       </div>
                     </div>
 
-                    <p className="mt-4 pt-3 border-t border-gray-100 text-[11px] text-gray-400 leading-relaxed">
-                      Indicadores agregados do edifício. Nenhuma informação individual de outros
-                      condóminos é apresentada neste painel.
+                    <p className="mt-3 pt-2 border-t border-gray-100 text-[10px] text-gray-400">
+                      Dados agregados sem exposição de informações individuais de outras frações.
                     </p>
                   </div>
                 </div>
               </section>
 
-              {/* 4. Assuntos Pendentes & Anomalias (preparado para futura ticket tool) */}
-              <section>
-                <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
-                  <div>
-                    <h2 className="text-sm font-bold text-gray-500 uppercase tracking-wider flex items-center gap-2">
-                      Assuntos Pendentes & Anomalias do Edifício
-                      <span className="text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 normal-case tracking-normal">
-                        {stats.pendingIssues.filter((i) => i.status !== 'resolved').length} em aberto
+              {/* 4. Lado a Lado: Assuntos Pendentes & Anomalias | Últimas Atividades Extraordinárias */}
+              <section className="grid grid-cols-1 lg:grid-cols-2 gap-5 items-start">
+                {/* Coluna Esquerda: Assuntos Pendentes & Anomalias */}
+                <div>
+                  <div className="flex items-center justify-between mb-2.5">
+                    <div className="flex items-center gap-2">
+                      <h2 className="text-xs font-bold text-gray-500 uppercase tracking-wider">
+                        Assuntos Pendentes & Anomalias
+                      </h2>
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800">
+                        {openIssuesCount} em aberto
                       </span>
-                    </h2>
+                    </div>
                   </div>
-                  <span className="text-xs text-gray-400">
-                    Registo de ocorrências, faturas por liquidar e ações de manutenção
-                  </span>
+
+                  <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+                    <div className="divide-y divide-gray-100">
+                      {stats.pendingIssues.map((issue) => {
+                        const statusConfig = {
+                          pending_payment: {
+                            label: 'Pendente',
+                            pill: 'bg-red-50 text-red-700 border-red-100',
+                            iconBg: 'bg-red-50 text-red-600',
+                          },
+                          in_analysis: {
+                            label: 'Em análise',
+                            pill: 'bg-amber-50 text-amber-800 border-amber-200',
+                            iconBg: 'bg-amber-50 text-amber-600',
+                          },
+                          monitoring: {
+                            label: 'Acompanhamento',
+                            pill: 'bg-blue-50 text-blue-700 border-blue-100',
+                            iconBg: 'bg-blue-50 text-blue-600',
+                          },
+                          resolved: {
+                            label: 'Resolvido',
+                            pill: 'bg-emerald-50 text-emerald-700 border-emerald-100',
+                            iconBg: 'bg-emerald-50 text-emerald-600',
+                          },
+                        }[issue.status];
+
+                        return (
+                          <div key={issue.id} className="px-4 py-3">
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="flex items-start gap-2.5 min-w-0">
+                                <div
+                                  className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 mt-0.5 ${statusConfig.iconBg}`}
+                                >
+                                  {issue.status === 'resolved' ? (
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                    </svg>
+                                  ) : (
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                                    </svg>
+                                  )}
+                                </div>
+                                <div className="min-w-0">
+                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                    <h3 className="text-xs font-bold text-gray-900">
+                                      {issue.title}
+                                    </h3>
+                                    <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-gray-100 text-gray-600">
+                                      {issue.category}
+                                    </span>
+                                  </div>
+                                  <p className="text-[11px] text-gray-500 mt-0.5 leading-snug">
+                                    {issue.description}
+                                  </p>
+                                </div>
+                              </div>
+
+                              <div className="flex flex-col items-end shrink-0 gap-1">
+                                <span
+                                  className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${statusConfig.pill}`}
+                                >
+                                  {statusConfig.label}
+                                </span>
+                                {issue.dateLabel && (
+                                  <span className="text-[10px] text-gray-400">
+                                    {issue.dateLabel}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    <div className="bg-gray-50/80 px-4 py-2.5 border-t border-gray-100 flex items-center justify-between gap-2 text-[11px] text-gray-500">
+                      <span>
+                        Brevemente: registo de anomalias por ticket (ex.: botão do elevador,
+                        iluminação).
+                      </span>
+                      <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-gray-200/70 text-gray-600 shrink-0">
+                        Tickets em breve
+                      </span>
+                    </div>
+                  </div>
                 </div>
 
-                <div className="space-y-3">
-                  {stats.pendingIssues.map((issue) => {
-                    const statusConfig = {
-                      pending_payment: {
-                        label: 'A aguardar pagamento',
-                        pill: 'bg-red-50 text-red-700 border-red-100',
-                        iconBg: 'bg-red-50 text-red-600',
-                      },
-                      in_analysis: {
-                        label: 'Em análise / Orçamento',
-                        pill: 'bg-amber-50 text-amber-800 border-amber-200',
-                        iconBg: 'bg-amber-50 text-amber-600',
-                      },
-                      monitoring: {
-                        label: 'Acompanhamento',
-                        pill: 'bg-blue-50 text-blue-700 border-blue-100',
-                        iconBg: 'bg-blue-50 text-blue-600',
-                      },
-                      resolved: {
-                        label: 'Resolvido',
-                        pill: 'bg-emerald-50 text-emerald-700 border-emerald-100',
-                        iconBg: 'bg-emerald-50 text-emerald-600',
-                      },
-                    }[issue.status];
-
-                    return (
-                      <div
-                        key={issue.id}
-                        className={`bg-white rounded-2xl border border-gray-100 shadow-sm px-5 py-3.5 transition-all ${
-                          isAdmin && issue.status === 'pending_payment'
-                            ? 'hover:shadow-md hover:border-primary-200 cursor-pointer'
-                            : ''
-                        }`}
-                        onClick={() => {
-                          if (isAdmin && issue.status === 'pending_payment') {
-                            router.push('/dashboard/creditors');
-                          }
-                        }}
+                {/* Coluna Direita: Últimas Atividades Extraordinárias */}
+                <div>
+                  <div className="flex items-center justify-between mb-2.5">
+                    <h2 className="text-xs font-bold text-gray-500 uppercase tracking-wider">
+                      Últimas Atividades Extraordinárias
+                    </h2>
+                    {stats.extraordinaryActivities.length > 5 && (
+                      <button
+                        type="button"
+                        onClick={() => setShowAllActivities((prev) => !prev)}
+                        className="text-[11px] font-semibold text-gray-600 hover:text-gray-900"
                       >
-                        <div className="flex flex-wrap items-center justify-between gap-4">
-                          <div className="flex items-center gap-3.5 min-w-0">
-                            <div
-                              className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${statusConfig.iconBg}`}
-                            >
-                              {issue.status === 'resolved' ? (
-                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                </svg>
-                              ) : issue.status === 'pending_payment' ? (
-                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
-                                </svg>
-                              ) : (
-                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                                </svg>
-                              )}
-                            </div>
+                        {showAllActivities
+                          ? 'Mostrar menos'
+                          : `Ver todas (${stats.extraordinaryActivities.length})`}
+                      </button>
+                    )}
+                  </div>
 
-                            <div className="min-w-0">
-                              <div className="flex items-center gap-2 flex-wrap">
-                                <h3 className="text-sm font-bold text-gray-900">
-                                  {issue.title}
-                                </h3>
-                                <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">
-                                  {issue.category}
+                  <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+                    {displayedActivities.length === 0 ? (
+                      <div className="p-6 text-center text-gray-500 text-xs">
+                        Sem intervenções extraordinárias registadas.
+                      </div>
+                    ) : (
+                      <div className="divide-y divide-gray-100">
+                        {displayedActivities.map((act) => (
+                          <div key={act.id} className="px-4 py-2.5">
+                            <div className="flex items-center justify-between gap-3">
+                              <div className="flex items-center gap-2.5 min-w-0">
+                                <div className="w-8 h-8 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center shrink-0">
+                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                  </svg>
+                                </div>
+                                <div className="min-w-0">
+                                  <h3 className="text-xs font-bold text-gray-900 truncate">
+                                    {act.creditorName}
+                                  </h3>
+                                  <p className="text-[11px] text-gray-500 truncate" title={act.description}>
+                                    {act.description}
+                                  </p>
+                                </div>
+                              </div>
+
+                              <div className="flex items-center gap-3 shrink-0 text-right">
+                                <span className="text-[11px] text-gray-400 tabular-nums">
+                                  {formatDatePt(act.date)}
+                                </span>
+                                <span className="text-xs font-bold text-gray-900 tabular-nums min-w-[68px]">
+                                  {formatEur(act.amount)}
                                 </span>
                               </div>
                             </div>
                           </div>
-
-                          <div className="flex items-center gap-4 ml-auto">
-                            {issue.amount !== null && issue.amount !== undefined && (
-                              <span className="text-sm font-bold text-gray-900 tabular-nums">
-                                {formatEur(issue.amount)}
-                              </span>
-                            )}
-                            <span
-                              className={`text-xs font-bold px-3 py-1 rounded-full border ${statusConfig.pill}`}
-                            >
-                              {statusConfig.label}
-                            </span>
-                          </div>
-                        </div>
-
-                        <div className="mt-2 pt-2 border-t border-gray-100 flex flex-wrap items-center justify-between gap-2 text-xs text-gray-500">
-                          <span>{issue.description}</span>
-                          {issue.dateLabel && (
-                            <span className="text-gray-400 font-medium">{issue.dateLabel}</span>
-                          )}
-                        </div>
+                        ))}
                       </div>
-                    );
-                  })}
+                    )}
+                  </div>
                 </div>
               </section>
 
-              {/* 5. Últimas Atividades Extraordinárias & Intervenções no Edifício */}
-              <section>
-                <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
-                  <div>
-                    <h2 className="text-sm font-bold text-gray-500 uppercase tracking-wider">
-                      Últimas Atividades Extraordinárias & Intervenções
-                    </h2>
-                    <p className="text-xs text-gray-400 mt-0.5">
-                      Inspeções camarárias, extintores, reparações e trabalhos pontuais no prédio
-                    </p>
-                  </div>
-
-                  {stats.extraordinaryActivities.length > 6 && (
-                    <button
-                      type="button"
-                      onClick={() => setShowAllActivities((prev) => !prev)}
-                      className="text-xs font-semibold text-gray-700 hover:text-gray-900 px-3 py-1.5 rounded-lg bg-white border border-gray-200 shadow-sm"
-                    >
-                      {showAllActivities
-                        ? 'Mostrar menos'
-                        : `Ver todas (${stats.extraordinaryActivities.length})`}
-                    </button>
-                  )}
-                </div>
-
-                {displayedActivities.length === 0 ? (
-                  <div className="bg-white rounded-2xl border border-gray-100 p-8 text-center text-gray-500 text-sm">
-                    Sem intervenções extraordinárias registadas.
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    {displayedActivities.map((act) => (
-                      <div
-                        key={act.id}
-                        className="bg-white rounded-2xl border border-gray-100 shadow-sm px-5 py-3.5"
-                      >
-                        <div className="flex flex-wrap items-center justify-between gap-4">
-                          <div className="flex items-center gap-3.5 min-w-0">
-                            <div className="w-10 h-10 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center shrink-0">
-                              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                              </svg>
-                            </div>
-                            <div className="min-w-0">
-                              <div className="flex items-center gap-2 flex-wrap">
-                                <h3 className="text-sm font-bold text-gray-900">
-                                  {act.creditorName}
-                                </h3>
-                                <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">
-                                  {CATEGORY_LABELS[act.category] ?? act.category}
-                                </span>
-                              </div>
-                            </div>
-                          </div>
-
-                          <div className="flex items-center gap-6 ml-auto">
-                            <div className="text-right">
-                              <p className="text-[10px] text-gray-400 uppercase font-bold tracking-wider">
-                                Data
-                              </p>
-                              <p className="text-xs font-semibold text-gray-700 tabular-nums">
-                                {formatDatePt(act.date)}
-                              </p>
-                            </div>
-                            <div className="text-right min-w-[90px]">
-                              <p className="text-[10px] text-gray-400 uppercase font-bold tracking-wider">
-                                Valor
-                              </p>
-                              <p className="text-sm font-bold text-gray-900 tabular-nums">
-                                {formatEur(act.amount)}
-                              </p>
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="mt-2 pt-2 border-t border-gray-100 flex flex-wrap items-center justify-between gap-2 text-xs text-gray-500">
-                          <span>
-                            Descrição: <strong className="text-gray-700 font-medium">{act.description}</strong>
-                          </span>
-                          <span className="text-[11px] font-medium text-purple-700 bg-purple-50 px-2 py-0.5 rounded-full">
-                            Despesa Extraordinária
-                          </span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </section>
-
-              {/* 6. Serviços Regulares & Para Onde Vão as Quotas */}
-              <section className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              {/* 5. Serviços Regulares & Para Onde Vão as Quotas */}
+              <section className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
                 {/* Serviços Regulares */}
-                <div className="lg:col-span-2">
-                  <div className="flex items-center justify-between mb-3">
-                    <h2 className="text-sm font-bold text-gray-500 uppercase tracking-wider">
+                <div className="lg:col-span-7">
+                  <div className="flex items-center justify-between mb-2.5">
+                    <h2 className="text-xs font-bold text-gray-500 uppercase tracking-wider">
                       Serviços Regulares do Edifício
                     </h2>
                     {isAdmin && (
@@ -659,102 +590,86 @@ export default function Dashboard() {
                     )}
                   </div>
 
-                  <div className="space-y-3">
+                  <div className="bg-white rounded-2xl border border-gray-100 shadow-sm divide-y divide-gray-100 overflow-hidden">
                     {stats.regularServices.map((srv) => {
                       const statusStyle = {
                         regularized: {
                           label: 'Regularizado',
                           text: 'text-emerald-600',
-                          pill: 'bg-emerald-50 text-emerald-700 border-emerald-100',
                         },
                         pending: {
                           label:
                             srv.pendingAmount > 0.01
                               ? `${formatEur(srv.pendingAmount)} por pagar`
-                              : 'Pagamento Pendente',
+                              : 'Pendente',
                           text: 'text-red-600',
-                          pill: 'bg-red-50 text-red-700 border-red-100',
                         },
                         variable: {
-                          label: 'Consumo Variável',
+                          label: 'Variável',
                           text: 'text-blue-600',
-                          pill: 'bg-blue-50 text-blue-700 border-blue-100',
                         },
                       }[srv.status];
 
                       return (
                         <div
                           key={srv.id}
-                          className={`bg-white rounded-2xl border border-gray-100 shadow-sm px-5 py-3.5 transition-all ${
-                            isAdmin ? 'hover:shadow-md hover:border-primary-200 cursor-pointer' : ''
+                          className={`px-4 py-2.5 transition-colors ${
+                            isAdmin ? 'hover:bg-gray-50/80 cursor-pointer' : ''
                           }`}
                           onClick={() => {
                             if (isAdmin) router.push(`/dashboard/creditors/${srv.id}`);
                           }}
                         >
-                          <div className="flex flex-wrap items-center justify-between gap-4">
-                            <div className="flex items-center gap-3 min-w-0">
-                              <div>
-                                <div className="flex items-center gap-2 flex-wrap">
-                                  <h3 className="text-sm font-bold text-gray-900">
-                                    {srv.name}
-                                  </h3>
-                                  <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">
-                                    {CATEGORY_LABELS[srv.category] ?? srv.category}
-                                  </span>
-                                  <span
-                                    className={`text-[11px] font-semibold px-2 py-0.5 rounded-full border ${
-                                      srv.isFixed
-                                        ? 'bg-emerald-50 text-emerald-700 border-emerald-100'
-                                        : 'bg-blue-50 text-blue-700 border-blue-100'
-                                    }`}
-                                  >
-                                    {srv.isFixed ? 'Avença Fixa' : 'Variável'}
-                                  </span>
-                                </div>
+                          <div className="flex flex-wrap items-center justify-between gap-3">
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <h3 className="text-xs font-bold text-gray-900">{srv.name}</h3>
+                                <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-gray-100 text-gray-600">
+                                  {CATEGORY_LABELS[srv.category] ?? srv.category}
+                                </span>
+                                <span
+                                  className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${
+                                    srv.isFixed
+                                      ? 'bg-emerald-50 text-emerald-700'
+                                      : 'bg-blue-50 text-blue-700'
+                                  }`}
+                                >
+                                  {srv.isFixed ? 'Fixo' : 'Variável'}
+                                </span>
                               </div>
+                              <p className="text-[11px] text-gray-400 mt-0.5">
+                                Último pag.: {formatDatePt(srv.lastPaymentDate)}
+                                {srv.lastPaymentAmount !== null &&
+                                  ` (${formatEur(srv.lastPaymentAmount)})`}
+                              </p>
                             </div>
 
-                            <div className="flex flex-wrap items-center gap-5 ml-auto">
-                              <div className="text-right">
-                                <p className="text-[10px] text-gray-400 uppercase font-bold tracking-wider">
+                            <div className="flex items-center gap-4 ml-auto text-right">
+                              <div>
+                                <p className="text-[10px] text-gray-400 uppercase font-bold">
                                   {srv.isFixed ? 'Mensal' : 'Média/Mês'}
                                 </p>
-                                <p className="text-sm font-bold text-gray-900 tabular-nums">
+                                <p className="text-xs font-bold text-gray-900 tabular-nums">
                                   {formatEur(srv.monthlyAmount)}
                                 </p>
                               </div>
-                              <div className="text-right">
-                                <p className="text-[10px] text-gray-400 uppercase font-bold tracking-wider">
+                              <div>
+                                <p className="text-[10px] text-gray-400 uppercase font-bold">
                                   Pago {stats.currentYear}
                                 </p>
-                                <p className="text-sm font-bold text-gray-900 tabular-nums">
+                                <p className="text-xs font-bold text-gray-900 tabular-nums">
                                   {formatEur(srv.paidThisYear)}
                                 </p>
                               </div>
-                              <div className="text-right min-w-[120px]">
-                                <p className="text-[10px] text-gray-400 uppercase font-bold tracking-wider">
+                              <div className="min-w-[85px]">
+                                <p className="text-[10px] text-gray-400 uppercase font-bold">
                                   Estado
                                 </p>
-                                <p className={`text-xs font-bold tabular-nums ${statusStyle.text}`}>
+                                <p className={`text-[11px] font-bold tabular-nums ${statusStyle.text}`}>
                                   {statusStyle.label}
                                 </p>
                               </div>
                             </div>
-                          </div>
-
-                          <div className="mt-2 pt-2 border-t border-gray-100 flex flex-wrap items-center justify-between gap-2 text-xs text-gray-500">
-                            <span>
-                              Último pagamento:{' '}
-                              <strong className="text-gray-700 font-semibold">
-                                {formatDatePt(srv.lastPaymentDate)}
-                              </strong>
-                              {srv.lastPaymentAmount !== null &&
-                                ` (${formatEur(srv.lastPaymentAmount)})`}
-                            </span>
-                            {isAdmin && (
-                              <span className="text-primary-600 font-semibold">Ver →</span>
-                            )}
                           </div>
                         </div>
                       );
@@ -763,16 +678,16 @@ export default function Dashboard() {
                 </div>
 
                 {/* Repartição das Despesas */}
-                <div>
-                  <div className="flex items-center justify-between mb-3">
-                    <h2 className="text-sm font-bold text-gray-500 uppercase tracking-wider">
+                <div className="lg:col-span-5">
+                  <div className="flex items-center justify-between mb-2.5">
+                    <h2 className="text-xs font-bold text-gray-500 uppercase tracking-wider">
                       Para Onde Vão as Quotas? ({stats.currentYear})
                     </h2>
                   </div>
 
-                  <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 space-y-4">
+                  <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 space-y-3">
                     {stats.expenseBreakdown.length === 0 ? (
-                      <p className="text-sm text-gray-500 text-center py-6">
+                      <p className="text-xs text-gray-500 text-center py-6">
                         Sem despesas registadas em {stats.currentYear}.
                       </p>
                     ) : (
@@ -785,7 +700,7 @@ export default function Dashboard() {
                               <span className="text-gray-400">({item.percentage.toFixed(1)}%)</span>
                             </span>
                           </div>
-                          <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+                          <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
                             <div
                               className={`h-full rounded-full ${
                                 CATEGORY_BAR_COLORS[item.category] ?? 'bg-gray-500'
@@ -797,9 +712,9 @@ export default function Dashboard() {
                       ))
                     )}
 
-                    <div className="pt-3 border-t border-gray-100 text-[11px] text-gray-400 leading-relaxed">
-                      Percentagem calculada sobre o total de saídas e reforços do Fundo de Reserva
-                      registados no extrato de {stats.currentYear}.
+                    <div className="pt-2.5 border-t border-gray-100 text-[10px] text-gray-400 leading-relaxed">
+                      Percentagem calculada sobre saídas e reforços do Fundo de Reserva no extrato
+                      de {stats.currentYear}.
                     </div>
                   </div>
                 </div>
