@@ -256,6 +256,11 @@ th {
     page-break-inside: avoid;
   }
 
+  .convocatoria-print {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
   .attendance-sheet-cell {
     padding-top: 5px !important;
     padding-bottom: 5px !important;
@@ -278,6 +283,11 @@ th {
 }
 
 @media print and (orientation: landscape) {
+  .convocatoria-print {
+    font-size: 11px !important;
+    line-height: 1.3 !important;
+  }
+
   .attendance-sheet-print {
     font-size: 9.5px;
   }

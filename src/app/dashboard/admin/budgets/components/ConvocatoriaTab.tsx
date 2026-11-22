@@ -718,19 +718,19 @@ export default function ConvocatoriaTab({
       </div>
 
       {/* Printable Official Convocatória Document */}
-      <div className={printMode === 'attendance' ? 'no-print' : ''}>
-        <div className="report-container bg-white rounded-2xl shadow-sm p-5 sm:p-10 print:p-2 border border-gray-200 print:border-none max-w-4xl mx-auto text-gray-900">
-          <div className="text-center border-b-2 border-gray-800 pb-4 mb-8">
+      <div className={printMode === 'attendance' ? 'no-print' : 'print:mt-0'}>
+        <div className="convocatoria-print report-container bg-white rounded-2xl shadow-sm p-5 sm:p-10 print:p-0 border border-gray-200 print:border-none max-w-4xl mx-auto text-gray-900">
+          <div className="text-center border-b-2 border-gray-800 pb-4 mb-8 print:pb-2.5 print:mb-4">
             <p className="text-xs font-bold uppercase tracking-widest text-gray-600">
               Condomínio do Prédio sito na
             </p>
-            <p className="text-base font-bold text-gray-900 mt-0.5">{buildingName}</p>
-            <h1 className="text-2xl font-black tracking-wide uppercase mt-5 underline underline-offset-4">
+            <p className="text-base print:text-sm font-bold text-gray-900 mt-0.5">{buildingName}</p>
+            <h1 className="text-2xl print:text-xl font-black tracking-wide uppercase mt-5 print:mt-2.5 underline underline-offset-4">
               CONVOCATÓRIA
             </h1>
           </div>
 
-          <div className="space-y-5 text-sm leading-relaxed text-justify">
+          <div className="space-y-5 print:space-y-3 text-sm print:text-[12.5px] leading-relaxed print:leading-snug text-justify">
             <p className="font-semibold">Exmo.(a) Senhor(a) Condómino(a),</p>
 
             <p>
@@ -740,11 +740,11 @@ export default function ConvocatoriaTab({
               <strong>{firstConvocationTime} horas</strong>, no <strong>{meetingLocation}</strong>, com a seguinte:
             </p>
 
-            <div className="my-6 p-5 bg-gray-50 border border-gray-300 rounded-lg">
-              <h2 className="text-sm font-black uppercase tracking-wider mb-3 text-gray-900">
+            <div className="my-6 p-5 print:my-2.5 print:p-3.5 bg-gray-50 border border-gray-300 rounded-lg">
+              <h2 className="text-sm print:text-xs font-black uppercase tracking-wider mb-3 print:mb-2 text-gray-900">
                 Ordem de Trabalhos
               </h2>
-              <ol className="list-decimal pl-6 space-y-2">
+              <ol className="list-decimal pl-6 space-y-2 print:space-y-1">
                 {visibleAgendaTitles.map((item, idx) => (
                   <li key={idx} className="font-medium text-gray-900">
                     {item}
@@ -753,28 +753,28 @@ export default function ConvocatoriaTab({
               </ol>
             </div>
 
-            <p className="text-xs leading-relaxed text-gray-700 bg-gray-50/60 p-4 border-l-4 border-gray-700">
+            <p className="text-xs leading-relaxed print:p-3 print:text-[11px] print:leading-snug text-gray-700 bg-gray-50/60 p-4 border-l-4 border-gray-700">
               Na reunião da Assembleia de Condóminos acima referida, se não estiverem presentes ou representados condóminos titulares da maioria dos votos representativos do capital investido no prédio, ou não for possível formar a maioria prevista no n.º 3 do art.º 1432.º do Código Civil, fica também desde já convocada nova reunião da Assembleia de Condóminos a realizar no <strong>mesmo dia e no mesmo local, trinta minutos depois ({secondConvocationTime} horas)</strong>, com a mesma ordem de trabalhos, a qual poderá deliberar por maioria dos votos dos proprietários presentes, desde que representem pelo menos um quarto do valor total do prédio, nos termos do n.º 4 do citado art.º 1432.º do Código Civil.
             </p>
 
             {extraNote.trim() && (
-              <p className="text-xs italic text-gray-700">{extraNote}</p>
+              <p className="text-xs print:text-[11px] italic text-gray-700">{extraNote}</p>
             )}
 
-            <p className="pt-2">
+            <p className="pt-2 print:pt-0.5">
               A sua comparência e participação são muito importantes para a gestão do nosso edifício.
             </p>
             <p>Com os melhores cumprimentos,</p>
 
-            <div className="pt-8 flex flex-col sm:flex-row justify-between items-start sm:items-end gap-6">
-              <p className="text-sm text-gray-700">
+            <div className="pt-8 print:pt-5 flex flex-col sm:flex-row print:flex-row justify-between items-start sm:items-end print:items-end gap-6 print:gap-4">
+              <p className="text-sm print:text-xs text-gray-700">
                 Monte Abraão — Queluz,{' '}
                 <strong>
                   {issueDate ? formatMeetingDateLong(issueDate) : '____ / ____ / ______'}
                 </strong>
               </p>
               <div className="text-center min-w-[240px]">
-                <div className="border-t border-gray-800 pt-2 whitespace-pre-line text-sm font-semibold">
+                <div className="border-t border-gray-800 pt-2 print:pt-1.5 whitespace-pre-line text-sm print:text-xs font-semibold">
                   {adminSigners}
                 </div>
               </div>
