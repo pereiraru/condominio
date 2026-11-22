@@ -34,7 +34,7 @@ export default function AdministrationCenterPage() {
     mode: 'percentage',
     value: 0,
     rounding: 'exact',
-    applyToCommercialRcd: false,
+    rcdAdminMode: 'proportional',
     customOverrides: {},
   });
 

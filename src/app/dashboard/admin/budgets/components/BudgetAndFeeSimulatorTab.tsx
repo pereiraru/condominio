@@ -419,22 +419,22 @@ export default function BudgetAndFeeSimulatorTab({
             </select>
           </div>
 
-          <div className="flex flex-col justify-end pb-1">
-            <label className="flex items-center gap-2 cursor-pointer text-xs text-gray-700 font-medium">
-              <input
-                type="checkbox"
-                checked={feeSimConfig.applyToCommercialRcd}
-                onChange={(e) =>
-                  onFeeSimConfigChange({
-                    ...feeSimConfig,
-                    applyToCommercialRcd: e.target.checked,
-                    customOverrides: {},
-                  })
-                }
-                className="w-4 h-4 rounded"
-              />
-              Aplicar também ao RCD (20,00 €)
-            </label>
+          <div>
+            <label className="label text-xs">R/C Direito (Admin. 50%)</label>
+            <select
+              className="input h-10 text-sm"
+              value={feeSimConfig.rcdAdminMode}
+              onChange={(e) =>
+                onFeeSimConfigChange({
+                  ...feeSimConfig,
+                  rcdAdminMode: e.target.value as FeeSimulationConfig['rcdAdminMode'],
+                  customOverrides: {},
+                })
+              }
+            >
+              <option value="proportional">Aumento proporcional (mesma % / 50% do valor)</option>
+              <option value="half_standard">50% exato da nova quota base</option>
+            </select>
             {Object.keys(feeSimConfig.customOverrides).length > 0 && (
               <button
                 type="button"

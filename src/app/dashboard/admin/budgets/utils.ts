@@ -32,6 +32,17 @@ function applyRounding(amount: number, rounding: FeeSimulationConfig['rounding']
   return round2(amount);
 }
 
+function computeStandardNewFee(
+  baseMonthly: number,
+  config: FeeSimulationConfig
+): number {
+  const raw =
+    config.mode === 'percentage'
+      ? baseMonthly * (1 + config.value / 100)
+      : baseMonthly + config.value;
+  return applyRounding(raw, config.rounding);
+}
+
 export function computeFeeSimulation(
   units: UnitReportItem[],
   config: FeeSimulationConfig
@@ -45,18 +56,31 @@ export function computeFeeSimulation(
   annualImpact: number;
   overallPercentImpact: number;
 } {
+  // Reference standard fee (first non-RCD unit, typically 45.00 EUR)
+  const standardUnit = units.find((u) => u.code !== 'RCD');
+  const standardNewMonthly = standardUnit
+    ? computeStandardNewFee(standardUnit.monthlyFee, config)
+    : 45;
+
   const rows: FeeSimulationRow[] = units.map((u) => {
     const currentMonthly = u.monthlyFee;
     let computedNew = currentMonthly;
 
     if (config.customOverrides[u.id] != null && !isNaN(config.customOverrides[u.id])) {
       computedNew = config.customOverrides[u.id];
-    } else if (u.code === 'RCD' && !config.applyToCommercialRcd) {
-      computedNew = currentMonthly;
-    } else if (config.mode === 'percentage') {
-      computedNew = applyRounding(currentMonthly * (1 + config.value / 100), config.rounding);
+    } else if (u.code === 'RCD') {
+      if (config.rcdAdminMode === 'half_standard') {
+        computedNew = applyRounding(standardNewMonthly * 0.5, config.rounding);
+      } else {
+        // Proportional: same % increase over current 20.00 €, or 50% of fixed € increase
+        const raw =
+          config.mode === 'percentage'
+            ? currentMonthly * (1 + config.value / 100)
+            : currentMonthly + config.value * 0.5;
+        computedNew = applyRounding(raw, config.rounding);
+      }
     } else {
-      computedNew = applyRounding(currentMonthly + config.value, config.rounding);
+      computedNew = computeStandardNewFee(currentMonthly, config);
     }
 
     const newMonthly = Math.max(0, round2(computedNew));

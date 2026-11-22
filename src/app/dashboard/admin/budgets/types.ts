@@ -90,12 +90,13 @@ export interface UnitReportsPayload {
 
 export type FeeAdjustmentMode = 'percentage' | 'fixed';
 export type FeeRoundingMode = 'exact' | 'half_euro' | 'integer';
+export type RcdAdminMode = 'proportional' | 'half_standard';
 
 export interface FeeSimulationConfig {
   mode: FeeAdjustmentMode;
   value: number;
   rounding: FeeRoundingMode;
-  applyToCommercialRcd: boolean;
+  rcdAdminMode: RcdAdminMode;
   customOverrides: Record<string, number>;
 }
 

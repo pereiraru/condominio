@@ -213,7 +213,11 @@ export async function GET(request: NextRequest) {
         autoNotes.push('Situação contributiva totalmente regularizada até ao mês corrente, sem valores em dívida.');
       }
 
-      const currentOwner = unit.owners.find((o) => !o.endMonth) || unit.owners[0] || null;
+      const currentOwner =
+        unit.owners.find((o) => !o.endMonth && Boolean(o.startMonth)) ||
+        unit.owners.find((o) => !o.endMonth) ||
+        unit.owners[0] ||
+        null;
       const totalPaidDigital = round2(txs.reduce((sum, t) => sum + t.amount, 0));
 
       return {
