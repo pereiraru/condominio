@@ -138,10 +138,20 @@ function isRouteActive(pathname: string, href: string): boolean {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
+interface BeforeInstallPromptEvent extends Event {
+  prompt: () => Promise<void>;
+  userChoice: Promise<{ outcome: 'accepted' | 'dismissed'; platform: string }>;
+}
+
 export default function Sidebar() {
   const pathname = usePathname();
   const { data: session } = useSession();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [supportsWebInstall, setSupportsWebInstall] = useState(false);
+  const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
+  const [isStandalone, setIsStandalone] = useState(false);
+  const [installing, setInstalling] = useState(false);
+  const [installStatus, setInstallStatus] = useState<string | null>(null);
 
   const isAdmin = session?.user?.role === 'admin';
   const userUnitId = session?.user?.unitId;
@@ -158,6 +168,67 @@ export default function Sidebar() {
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [mobileOpen]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const standaloneCheck =
+      window.matchMedia?.('(display-mode: standalone)')?.matches ||
+      (window.navigator as unknown as { standalone?: boolean }).standalone === true;
+    setIsStandalone(standaloneCheck);
+
+    const webInstallAvailable =
+      typeof (Navigator.prototype as unknown as { install?: unknown }).install === 'function';
+    setSupportsWebInstall(webInstallAvailable);
+
+    const onBeforeInstallPrompt = (e: Event) => {
+      e.preventDefault();
+      setDeferredPrompt(e as BeforeInstallPromptEvent);
+    };
+    const onAppInstalled = () => {
+      setDeferredPrompt(null);
+      setIsStandalone(true);
+      setInstallStatus('Aplicação instalada.');
+    };
+
+    window.addEventListener('beforeinstallprompt', onBeforeInstallPrompt);
+    window.addEventListener('appinstalled', onAppInstalled);
+    return () => {
+      window.removeEventListener('beforeinstallprompt', onBeforeInstallPrompt);
+      window.removeEventListener('appinstalled', onAppInstalled);
+    };
+  }, []);
+
+  const canPromptInstall = !isStandalone && (supportsWebInstall || deferredPrompt !== null);
+
+  async function handleInstallClick() {
+    if (installing) return;
+    setInstalling(true);
+    setInstallStatus(null);
+
+    try {
+      const navWithInstall = navigator as unknown as { install?: () => Promise<void> };
+      if (supportsWebInstall && typeof navWithInstall.install === 'function') {
+        await navWithInstall.install();
+        setInstallStatus('Aplicação instalada ou aberta.');
+      } else if (deferredPrompt) {
+        const promptEvent = deferredPrompt;
+        setDeferredPrompt(null);
+        await promptEvent.prompt();
+        const { outcome } = await promptEvent.userChoice;
+        if (outcome === 'accepted') {
+          setInstallStatus('Aplicação instalada.');
+          setIsStandalone(true);
+        }
+      }
+    } catch (err) {
+      if (!(err instanceof Error && err.name === 'AbortError')) {
+        console.error('Web app install error:', err);
+      }
+    } finally {
+      setInstalling(false);
+    }
+  }
 
   const portalItems: NavItem[] = [
     { href: '/dashboard', label: 'Portal', icon: ICONS.portal },
@@ -187,16 +258,26 @@ export default function Sidebar() {
   const renderSidebarContent = (showCloseButton: boolean) => (
     <>
       <div className="p-5 flex items-center justify-between gap-2 border-b border-white/10">
-        <div className="min-w-0">
-          <h1 className="text-lg font-bold text-white tracking-tight truncate">Condomínio</h1>
-          <p className="text-xs text-slate-400 mt-0.5 truncate">Rua Vieira da Silva, n.º 6</p>
+        <div className="flex items-center gap-3 min-w-0">
+          <img
+            src="/icons/icon.svg"
+            alt=""
+            aria-hidden="true"
+            width={34}
+            height={34}
+            className="w-[34px] h-[34px] rounded-xl shrink-0 shadow-sm ring-1 ring-white/15"
+          />
+          <div className="min-w-0">
+            <h1 className="text-lg font-bold text-white tracking-tight truncate">Condomínio</h1>
+            <p className="text-xs text-slate-400 mt-0.5 truncate">Rua Vieira da Silva, n.º 6</p>
+          </div>
         </div>
         {showCloseButton && (
           <button
             type="button"
             onClick={() => setMobileOpen(false)}
             aria-label="Fechar menu"
-            className="p-2 rounded-lg text-slate-300 hover:text-white hover:bg-white/10"
+            className="p-2 rounded-lg text-slate-300 hover:text-white hover:bg-white/10 shrink-0"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -277,6 +358,31 @@ export default function Sidebar() {
           </div>
         )}
 
+        {canPromptInstall && (
+          <button
+            type="button"
+            onClick={handleInstallClick}
+            aria-disabled={installing ? 'true' : undefined}
+            className="sidebar-item w-full text-left mb-1 bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/25 hover:text-emerald-200 font-medium"
+          >
+            <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={1.6}
+                d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5m0 0l5-5m-5 5V4"
+              />
+            </svg>
+            <span>{installing ? 'A instalar...' : 'Instalar App'}</span>
+          </button>
+        )}
+
+        {installStatus && (
+          <p role="status" className="px-3.5 pb-1.5 text-[11px] text-emerald-300">
+            {installStatus}
+          </p>
+        )}
+
         <Link
           href="/change-password"
           className={pathname === '/change-password' ? 'sidebar-item-active mb-1' : 'sidebar-item mb-1'}
@@ -324,28 +430,38 @@ export default function Sidebar() {
       <aside className="sidebar print:hidden">{renderSidebarContent(false)}</aside>
 
       {/* Mobile / Tablet Fixed Top Bar */}
-      <header className="lg:hidden print:hidden fixed top-0 inset-x-0 h-14 z-30 bg-slate-900 text-white px-4 flex items-center justify-between shadow-sm">
-        <div className="flex items-center gap-3 min-w-0">
-          <button
-            type="button"
-            onClick={() => setMobileOpen(true)}
-            aria-label="Abrir menu"
-            className="p-2 -ml-2 rounded-lg text-slate-200 hover:text-white hover:bg-white/10"
-          >
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M4 6h16M4 12h16M4 18h16" />
-            </svg>
-          </button>
-          <Link href="/dashboard" className="font-bold text-base tracking-tight truncate">
-            Condomínio
-          </Link>
-        </div>
+      <header className="lg:hidden print:hidden fixed top-0 inset-x-0 z-30 bg-slate-900 text-white shadow-sm safe-top-bar">
+        <div className="h-14 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-3 min-w-0">
+            <button
+              type="button"
+              onClick={() => setMobileOpen(true)}
+              aria-label="Abrir menu"
+              className="p-2 -ml-2 min-w-[44px] min-h-[44px] inline-flex items-center justify-center rounded-lg text-slate-200 hover:text-white hover:bg-white/10"
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M4 6h16M4 12h16M4 18h16" />
+              </svg>
+            </button>
+            <Link href="/dashboard" className="flex items-center gap-2 font-bold text-base tracking-tight truncate">
+              <img
+                src="/icons/icon.svg"
+                alt=""
+                aria-hidden="true"
+                width={26}
+                height={26}
+                className="w-[26px] h-[26px] rounded-lg shrink-0 ring-1 ring-white/15"
+              />
+              <span className="truncate">Condomínio</span>
+            </Link>
+          </div>
 
-        {session?.user && (
-          <span className="text-[11px] font-semibold px-2.5 py-1 rounded-full bg-white/10 text-slate-200 shrink-0">
-            {isAdmin ? 'Admin' : session.user.unitCode || 'Condómino'}
-          </span>
-        )}
+          {session?.user && (
+            <span className="text-[11px] font-semibold px-2.5 py-1 rounded-full bg-white/10 text-slate-200 shrink-0">
+              {isAdmin ? 'Admin' : session.user.unitCode || 'Condómino'}
+            </span>
+          )}
+        </div>
       </header>
 
       {/* Mobile / Tablet Slide-Over Drawer */}
@@ -355,7 +471,7 @@ export default function Sidebar() {
             className="fixed inset-0 bg-slate-950/60 backdrop-blur-[1px]"
             onClick={() => setMobileOpen(false)}
           />
-          <aside className="relative w-72 max-w-[82vw] h-full bg-slate-900 flex flex-col shadow-2xl">
+          <aside className="relative w-72 max-w-[82vw] h-full bg-slate-900 flex flex-col shadow-2xl safe-drawer">
             {renderSidebarContent(true)}
           </aside>
         </div>
@@ -364,7 +480,7 @@ export default function Sidebar() {
       {/* Mobile Fixed Bottom Navigation Bar */}
       <nav
         aria-label="Navegação rápida"
-        className={`md:hidden print:hidden fixed bottom-0 inset-x-0 h-16 z-30 bg-white/95 backdrop-blur border-t border-slate-200 grid ${mobileColsClass}`}
+        className={`md:hidden print:hidden fixed bottom-0 inset-x-0 min-h-16 z-30 bg-white/95 backdrop-blur border-t border-slate-200 grid ${mobileColsClass} safe-bottom-bar`}
       >
         {bottomNavItems.map((item) => {
           const active = isRouteActive(pathname, item.href);
@@ -372,7 +488,7 @@ export default function Sidebar() {
             <Link
               key={item.href}
               href={item.href}
-              className={`flex flex-col items-center justify-center gap-0.5 text-[11px] font-medium transition-colors ${
+              className={`min-h-[44px] py-1.5 flex flex-col items-center justify-center gap-0.5 text-[11px] font-medium transition-colors ${
                 active ? 'text-slate-900 font-bold' : 'text-slate-500 hover:text-slate-800'
               }`}
             >
@@ -385,7 +501,7 @@ export default function Sidebar() {
           <button
             type="button"
             onClick={() => setMobileOpen(true)}
-            className="flex flex-col items-center justify-center gap-0.5 text-[11px] font-medium text-slate-500 hover:text-slate-800"
+            className="min-h-[44px] py-1.5 flex flex-col items-center justify-center gap-0.5 text-[11px] font-medium text-slate-500 hover:text-slate-800"
           >
             <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.6} d="M4 6h16M4 12h16M4 18h16" />

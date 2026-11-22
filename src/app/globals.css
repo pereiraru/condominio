@@ -116,6 +116,44 @@ body {
   background: #9ca3af;
 }
 
+/* PWA Safe Area Insets & Fixed-Bar Scroll Padding */
+.safe-top-bar {
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-left: max(1rem, env(safe-area-inset-left, 0px));
+  padding-right: max(1rem, env(safe-area-inset-right, 0px));
+}
+
+.safe-bottom-bar {
+  padding-bottom: max(0.375rem, env(safe-area-inset-bottom, 0px));
+  padding-left: max(0.5rem, env(safe-area-inset-left, 0px));
+  padding-right: max(0.5rem, env(safe-area-inset-right, 0px));
+}
+
+.safe-drawer {
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+@media (max-width: 1023px) {
+  html {
+    scroll-padding-top: calc(3.75rem + env(safe-area-inset-top, 0px));
+  }
+
+  .app-main {
+    padding-top: calc(4.25rem + env(safe-area-inset-top, 0px));
+  }
+}
+
+@media (max-width: 767px) {
+  html {
+    scroll-padding-bottom: calc(4.5rem + env(safe-area-inset-bottom, 0px));
+  }
+
+  .app-main {
+    padding-bottom: calc(5.25rem + env(safe-area-inset-bottom, 0px));
+  }
+}
+
 /* Table styles */
 table {
   border-collapse: separate;
