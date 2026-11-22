@@ -4,29 +4,33 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ACTION_PRIORITY_LABELS,
   ACTION_STATUS_LABELS,
+  addMinutesToTime,
   AttendanceStatus,
-  computeMeetingQuorum,
+  computeQuorumSummary,
   CondoMeetingDTO,
   createClientItemId,
   createDefaultDiscussionPoints,
+  DEFAULT_ADMIN_SIGNERS,
+  DEFAULT_CONVOCATION_EXTRA_NOTE,
   formatMeetingDateShort,
-  inferLinkedSectionFromTitle,
   LINKED_SECTION_LABELS,
   MeetingActionItem,
   MeetingActionPriority,
   MeetingActionStatus,
   MeetingDiscussionPoint,
   MeetingLinkedSection,
+  QuorumMode,
+  suggestNextActaNumber,
   VOTING_OUTCOME_OPTIONS,
 } from '@/lib/meetings';
 import {
   AnnualReportData,
   BudgetLineInput,
-  ConvocatoriaDraft,
   FeeSimulationConfig,
   UnitReportItem,
 } from '../types';
 import { formatUnitLabel } from '../utils';
+import AttendanceSheetView from './AttendanceSheetView';
 import MeetingDocumentView from './MeetingDocumentView';
 
 interface ActaTabProps {
@@ -36,9 +40,12 @@ interface ActaTabProps {
   annualReport: AnnualReportData | null;
   budgetLines: BudgetLineInput[];
   feeSimConfig: FeeSimulationConfig;
-  convocatoriaDraft?: ConvocatoriaDraft | null;
-  pendingImportDraft?: ConvocatoriaDraft | null;
-  onPendingImportConsumed?: () => void;
+  meetings: CondoMeetingDTO[];
+  selectedMeetingId: string | null;
+  onSelectMeetingId: (id: string | null) => void;
+  onMeetingSaved: (saved: CondoMeetingDTO) => void;
+  onMeetingDeleted: (deletedId: string) => void;
+  onGoToConvocatoria: () => void;
 }
 
 function buildDefaultStatuses(units: UnitReportItem[]): Record<string, AttendanceStatus> {
@@ -63,17 +70,6 @@ function getDefaultMeetingDateIso(): string {
   return d.toISOString().slice(0, 10);
 }
 
-function suggestNextActaNumber(saved: CondoMeetingDTO[]): string {
-  let maxNum = 23;
-  for (const m of saved) {
-    const parsed = parseInt(m.actaNumber, 10);
-    if (Number.isFinite(parsed) && parsed > maxNum) {
-      maxNum = parsed;
-    }
-  }
-  return String(maxNum + 1);
-}
-
 export default function ActaTab({
   year,
   buildingName,
@@ -81,20 +77,26 @@ export default function ActaTab({
   annualReport,
   budgetLines,
   feeSimConfig,
-  convocatoriaDraft,
-  pendingImportDraft,
-  onPendingImportConsumed,
+  meetings,
+  selectedMeetingId,
+  onSelectMeetingId,
+  onMeetingSaved,
+  onMeetingDeleted,
+  onGoToConvocatoria,
 }: ActaTabProps) {
   const nextYear = year + 1;
 
-  const [savedMeetings, setSavedMeetings] = useState<CondoMeetingDTO[]>([]);
-  const [loadingMeetings, setLoadingMeetings] = useState(true);
-  const [meetingId, setMeetingId] = useState<string | null>(null);
+  const selectedMeeting = useMemo(
+    () => meetings.find((m) => m.id === selectedMeetingId) || null,
+    [meetings, selectedMeetingId]
+  );
+
   const [meetingStatus, setMeetingStatus] = useState<'draft' | 'finalized'>('draft');
   const [generatedAt, setGeneratedAt] = useState<string | null>(null);
 
   const [templateMode, setTemplateMode] = useState<'filled' | 'blank'>('filled');
-  const [actaNumber, setActaNumber] = useState<string>('24');
+  const [quorumMode, setQuorumMode] = useState<QuorumMode>('units');
+  const [actaNumber, setActaNumber] = useState<string>(() => suggestNextActaNumber(meetings));
   const [assemblyType, setAssemblyType] = useState<'Ordinária' | 'Extraordinária'>('Ordinária');
   const [meetingDate, setMeetingDate] = useState<string>(getDefaultMeetingDateIso);
   const [startTime, setStartTime] = useState<string>('22:00');
@@ -124,6 +126,7 @@ export default function ActaTab({
   const [saving, setSaving] = useState(false);
   const [feedback, setFeedback] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
   const [generatedBanner, setGeneratedBanner] = useState<string | null>(null);
+  const [printMode, setPrintMode] = useState<'full' | 'attendance'>('full');
 
   const [showEmailPanel, setShowEmailPanel] = useState(false);
   const [emailMode, setEmailMode] = useState<'all_units' | 'custom'>('all_units');
@@ -136,13 +139,13 @@ export default function ActaTab({
 
   const actionsSectionRef = useRef<HTMLDivElement>(null);
   const documentSectionRef = useRef<HTMLDivElement>(null);
-  const initializedRef = useRef(false);
+  const lastHydratedSignatureRef = useRef<string | null>(null);
 
   const hydrateFromMeeting = useCallback(
     (m: CondoMeetingDTO) => {
-      setMeetingId(m.id);
       setMeetingStatus(m.status);
       setGeneratedAt(m.generatedAt);
+      setQuorumMode(m.quorumMode || 'units');
       setActaNumber(m.actaNumber);
       setAssemblyType(m.assemblyType);
       setMeetingDate(m.meetingDate);
@@ -177,17 +180,18 @@ export default function ActaTab({
       );
       setActionItems(m.actionItems || []);
       setGeneratedBanner(null);
-      setFeedback(null);
       setEmailFeedback(null);
     },
     [units, year]
   );
 
   const startNewDraft = useCallback(
-    (existingList: CondoMeetingDTO[] = savedMeetings) => {
-      setMeetingId(null);
+    (existingList: CondoMeetingDTO[] = meetings) => {
+      onSelectMeetingId(null);
+      lastHydratedSignatureRef.current = '__new__';
       setMeetingStatus('draft');
       setGeneratedAt(null);
+      setQuorumMode('units');
       setActaNumber(suggestNextActaNumber(existingList));
       setAssemblyType('Ordinária');
       setMeetingDate(getDefaultMeetingDateIso());
@@ -208,114 +212,54 @@ export default function ActaTab({
       setFeedback(null);
       setEmailFeedback(null);
     },
-    [savedMeetings, units, year]
+    [meetings, onSelectMeetingId, units, year]
   );
 
-  const hydrateRef = useRef(hydrateFromMeeting);
-  hydrateRef.current = hydrateFromMeeting;
-  const yearRef = useRef(year);
-  yearRef.current = year;
-  const pendingImportAtMountRef = useRef(Boolean(pendingImportDraft));
-
   useEffect(() => {
-    let cancelled = false;
-    async function loadMeetings() {
-      setLoadingMeetings(true);
-      try {
-        const res = await fetch('/api/admin/meetings');
-        if (!res.ok) return;
-        const list = (await res.json()) as CondoMeetingDTO[];
-        if (cancelled) return;
-        setSavedMeetings(list);
-        if (!initializedRef.current) {
-          initializedRef.current = true;
-          const matchingYear = list.find((m) => m.year === yearRef.current) || list[0];
-          if (matchingYear && !pendingImportAtMountRef.current) {
-            hydrateRef.current(matchingYear);
-          }
-        }
-      } catch (err) {
-        console.error('Failed to load condo meetings:', err);
-      } finally {
-        if (!cancelled) setLoadingMeetings(false);
+    if (!selectedMeeting) {
+      if (selectedMeetingId === null && lastHydratedSignatureRef.current !== '__new__') {
+        lastHydratedSignatureRef.current = '__new__';
       }
+      return;
     }
-    loadMeetings();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
-  const applyConvocatoriaDraft = useCallback(
-    (draft: ConvocatoriaDraft) => {
-      setAssemblyType(draft.assemblyType);
-      if (draft.meetingDate) setMeetingDate(draft.meetingDate);
-      if (draft.meetingTime) setStartTime(draft.meetingTime);
-      if (draft.location.trim()) setLocation(draft.location.trim());
-
-      if (draft.agendaItems.length > 0) {
-        setDiscussionPoints((prev) => {
-          const existingBySection = new Map<MeetingLinkedSection, MeetingDiscussionPoint>();
-          const existingByTitle = new Map<string, MeetingDiscussionPoint>();
-          for (const pt of prev) {
-            if (pt.linkedSection !== 'none' && !existingBySection.has(pt.linkedSection)) {
-              existingBySection.set(pt.linkedSection, pt);
-            }
-            const norm = pt.title.trim().toLowerCase();
-            if (norm) existingByTitle.set(norm, pt);
-          }
-
-          return draft.agendaItems.map((title) => {
-            const inferred = inferLinkedSectionFromTitle(title);
-            const matched =
-              existingByTitle.get(title.trim().toLowerCase()) ||
-              (inferred !== 'none' ? existingBySection.get(inferred) : undefined);
-
-            if (matched) {
-              return { ...matched, title };
-            }
-            return {
-              id: createClientItemId('pt'),
-              title,
-              linkedSection: inferred,
-              discussion: '',
-              votingOutcome: 'Tomado conhecimento (sem votação)',
-              votingDetails: '',
-              decision: '',
-            };
-          });
-        });
-      }
-
-      setFeedback({
-        type: 'ok',
-        text: 'Dados e ordem de trabalhos importados da Convocatória para a Reunião.',
-      });
-    },
-    []
-  );
+    const sig = `${selectedMeeting.id}:${selectedMeeting.updatedAt}`;
+    if (lastHydratedSignatureRef.current === sig) return;
+    lastHydratedSignatureRef.current = sig;
+    hydrateFromMeeting(selectedMeeting);
+  }, [selectedMeeting, selectedMeetingId, hydrateFromMeeting]);
 
   useEffect(() => {
-    if (!pendingImportDraft) return;
-    applyConvocatoriaDraft(pendingImportDraft);
-    onPendingImportConsumed?.();
-  }, [pendingImportDraft, applyConvocatoriaDraft, onPendingImportConsumed]);
+    if (printMode !== 'attendance') return;
 
-  const { presentCount, totalPermilagem: totalPermilagemPresent } = useMemo(
+    const handleAfterPrint = () => {
+      setPrintMode('full');
+    };
+    window.addEventListener('afterprint', handleAfterPrint);
+
+    let raf2 = 0;
+    const raf1 = requestAnimationFrame(() => {
+      raf2 = requestAnimationFrame(() => {
+        window.print();
+      });
+    });
+
+    return () => {
+      cancelAnimationFrame(raf1);
+      if (raf2) cancelAnimationFrame(raf2);
+      window.removeEventListener('afterprint', handleAfterPrint);
+    };
+  }, [printMode]);
+
+  const quorum = useMemo(
     () =>
-      computeMeetingQuorum(
-        units.map((u) => u.id),
-        { statuses: attendance, permilagens, representatives }
-      ),
-    [units, attendance, permilagens, representatives]
+      computeQuorumSummary({
+        unitIds: units.map((u) => u.id),
+        attendance: { statuses: attendance, permilagens, representatives },
+        quorumMode,
+      }),
+    [units, attendance, permilagens, representatives, quorumMode]
   );
-
-  const quorumStatus =
-    totalPermilagemPresent > 500
-      ? 'Quórum para 1.ª Convocatória (> 500‰)'
-      : totalPermilagemPresent >= 250
-      ? 'Quórum para 2.ª Convocatória (≥ 250‰)'
-      : 'Sem quórum mínimo legal (< 250‰)';
 
   const unitIdsWithEmailCount = useMemo(() => {
     const emailSet = new Set<string>();
@@ -419,7 +363,7 @@ export default function ActaTab({
     }
 
     const payload = {
-      year,
+      year: selectedMeeting?.year || year,
       actaNumber,
       assemblyType,
       meetingDate,
@@ -431,6 +375,12 @@ export default function ActaTab({
       secretaryBy,
       newAdminNames,
       status: targetStatus,
+      quorumMode,
+      firstConvocationTime:
+        selectedMeeting?.firstConvocationTime || addMinutesToTime(startTime, -30),
+      issueDate: selectedMeeting?.issueDate || new Date().toISOString().slice(0, 10),
+      extraNote: selectedMeeting?.extraNote ?? DEFAULT_CONVOCATION_EXTRA_NOTE,
+      adminSigners: selectedMeeting?.adminSigners ?? DEFAULT_ADMIN_SIGNERS,
       regenerate: targetStatus === 'finalized',
       generalNotes,
       attendance: {
@@ -443,8 +393,10 @@ export default function ActaTab({
     };
 
     try {
-      const url = meetingId ? `/api/admin/meetings/${meetingId}` : '/api/admin/meetings';
-      const method = meetingId ? 'PUT' : 'POST';
+      const url = selectedMeetingId
+        ? `/api/admin/meetings/${selectedMeetingId}`
+        : '/api/admin/meetings';
+      const method = selectedMeetingId ? 'PUT' : 'POST';
       const res = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
@@ -457,14 +409,10 @@ export default function ActaTab({
       }
 
       const saved = data as CondoMeetingDTO;
-      setMeetingId(saved.id);
+      lastHydratedSignatureRef.current = `${saved.id}:${saved.updatedAt}`;
       setMeetingStatus(saved.status);
       setGeneratedAt(saved.generatedAt);
-
-      setSavedMeetings((prev) => {
-        const exists = prev.some((m) => m.id === saved.id);
-        return exists ? prev.map((m) => (m.id === saved.id ? saved : m)) : [saved, ...prev];
-      });
+      onMeetingSaved(saved);
 
       if (targetStatus === 'finalized') {
         setTemplateMode('filled');
@@ -493,27 +441,22 @@ export default function ActaTab({
   }
 
   async function handleDeleteCurrent() {
-    if (!meetingId) return;
+    if (!selectedMeetingId) return;
     const confirmed = window.confirm(
       `Eliminar a reunião guardada "Acta N.º ${actaNumber}"? Esta ação não pode ser anulada.`
     );
     if (!confirmed) return;
 
     try {
-      const res = await fetch(`/api/admin/meetings/${meetingId}`, { method: 'DELETE' });
+      const res = await fetch(`/api/admin/meetings/${selectedMeetingId}`, { method: 'DELETE' });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         setFeedback({ type: 'err', text: data.error || 'Erro ao eliminar reunião.' });
         return;
       }
 
-      const remaining = savedMeetings.filter((m) => m.id !== meetingId);
-      setSavedMeetings(remaining);
-      if (remaining.length > 0) {
-        hydrateFromMeeting(remaining[0]);
-      } else {
-        startNewDraft([]);
-      }
+      const deletedId = selectedMeetingId;
+      onMeetingDeleted(deletedId);
       setFeedback({ type: 'ok', text: 'Reunião eliminada com sucesso.' });
     } catch {
       setFeedback({ type: 'err', text: 'Erro ao eliminar reunião.' });
@@ -525,7 +468,7 @@ export default function ActaTab({
     setEmailFeedback(null);
 
     try {
-      let targetId = meetingId;
+      let targetId = selectedMeetingId;
       if (!targetId) {
         const saved = await saveMeeting(meetingStatus, { silentScroll: true });
         if (!saved) {
@@ -628,22 +571,22 @@ export default function ActaTab({
               <label className="text-xs font-semibold text-gray-600">Reunião guardada:</label>
               <select
                 className="input h-9 text-xs w-auto min-w-[260px]"
-                disabled={loadingMeetings}
-                value={meetingId || '__new__'}
+                value={selectedMeetingId || '__new__'}
                 onChange={(e) => {
                   const val = e.target.value;
                   if (val === '__new__') {
-                    startNewDraft(savedMeetings);
+                    startNewDraft(meetings);
                     return;
                   }
-                  const found = savedMeetings.find((m) => m.id === val);
-                  if (found) hydrateFromMeeting(found);
+                  onSelectMeetingId(val);
                 }}
               >
                 <option value="__new__">
-                  {meetingId ? '— Iniciar nova reunião (rascunho) —' : `Nova Reunião (Ata N.º ${actaNumber})`}
+                  {selectedMeetingId
+                    ? '— Iniciar nova reunião (rascunho) —'
+                    : `Nova Reunião (Acta N.º ${actaNumber})`}
                 </option>
-                {savedMeetings.map((m) => (
+                {meetings.map((m) => (
                   <option key={m.id} value={m.id}>
                     Acta N.º {m.actaNumber} ({m.assemblyType}) — {formatMeetingDateShort(m.meetingDate)} [
                     {m.status === 'finalized' ? 'Finalizada' : 'Rascunho'}]
@@ -653,13 +596,13 @@ export default function ActaTab({
 
               <button
                 type="button"
-                onClick={() => startNewDraft(savedMeetings)}
+                onClick={() => startNewDraft(meetings)}
                 className="px-3 h-9 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 text-xs font-semibold text-gray-700"
               >
                 + Nova Reunião
               </button>
 
-              {meetingId && (
+              {selectedMeetingId && (
                 <button
                   type="button"
                   onClick={handleDeleteCurrent}
@@ -670,15 +613,13 @@ export default function ActaTab({
               )}
             </div>
 
-            {convocatoriaDraft && (
-              <button
-                type="button"
-                onClick={() => applyConvocatoriaDraft(convocatoriaDraft)}
-                className="px-3 h-9 rounded-xl border border-blue-200 bg-blue-50 hover:bg-blue-100 text-xs font-semibold text-blue-800"
-              >
-                Importar Ordem de Trabalhos da Convocatória
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={onGoToConvocatoria}
+              className="px-3 h-9 rounded-xl border border-blue-200 bg-blue-50 hover:bg-blue-100 text-xs font-semibold text-blue-800"
+            >
+              Ver / Editar Convocatória
+            </button>
           </div>
 
           {feedback && (
@@ -801,12 +742,46 @@ export default function ActaTab({
           </div>
 
           {/* Interactive Attendance Selector */}
-          <div className="border border-gray-200 rounded-2xl p-4 bg-gray-50/70">
-            <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
-              <h4 className="text-sm font-bold text-gray-900">
-                Controlo de Presenças e Permilagens
-              </h4>
+          <div className="border border-gray-200 rounded-2xl p-4 bg-gray-50/70 space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex flex-wrap items-center gap-3">
+                <h4 className="text-sm font-bold text-gray-900">
+                  Controlo de Presenças
+                </h4>
+                <div className="flex rounded-xl overflow-hidden border border-gray-200 bg-white p-0.5">
+                  <button
+                    type="button"
+                    onClick={() => setQuorumMode('units')}
+                    className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-colors ${
+                      quorumMode === 'units'
+                        ? 'bg-gray-900 text-white'
+                        : 'text-gray-600 hover:bg-gray-100'
+                    }`}
+                  >
+                    Por Frações (1 voto/fração)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setQuorumMode('permilagem')}
+                    className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-colors ${
+                      quorumMode === 'permilagem'
+                        ? 'bg-gray-900 text-white'
+                        : 'text-gray-600 hover:bg-gray-100'
+                    }`}
+                  >
+                    Por Permilagem (‰)
+                  </button>
+                </div>
+              </div>
+
               <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setPrintMode('attendance')}
+                  className="px-2.5 py-1 rounded-lg bg-white border border-gray-300 text-[11px] font-bold text-gray-800 hover:bg-gray-100"
+                >
+                  Imprimir Folha de Presenças (p/ Assinar)
+                </button>
                 <button
                   type="button"
                   onClick={() => setAllAttendance('presente')}
@@ -823,13 +798,12 @@ export default function ActaTab({
                 </button>
                 <span
                   className={`px-3 py-1 rounded-full text-xs font-bold ${
-                    totalPermilagemPresent >= 250
+                    quorum.meetsSecond
                       ? 'bg-green-100 text-green-800'
                       : 'bg-amber-100 text-amber-800'
                   }`}
                 >
-                  {presentCount}/{units.length} frações • {totalPermilagemPresent.toFixed(1)}‰ (
-                  {(totalPermilagemPresent / 10).toFixed(1)}%) — {quorumStatus}
+                  {quorum.shortSummary} — {quorum.statusLabel}
                 </span>
               </div>
             </div>
@@ -848,22 +822,24 @@ export default function ActaTab({
                       <span className="font-bold text-gray-900">
                         {u.code} ({formatUnitLabel(u.code)})
                       </span>
-                      <div className="flex items-center gap-1">
-                        <input
-                          type="number"
-                          step="0.5"
-                          className="w-14 text-right border border-gray-200 rounded px-1 py-0.5 text-[11px]"
-                          value={permilagens[u.id] ?? 62.5}
-                          onChange={(e) =>
-                            setPermilagens({
-                              ...permilagens,
-                              [u.id]: parseFloat(e.target.value) || 0,
-                            })
-                          }
-                          title="Permilagem (‰)"
-                        />
-                        <span className="text-[10px] text-gray-400">‰</span>
-                      </div>
+                      {quorumMode === 'permilagem' && (
+                        <div className="flex items-center gap-1">
+                          <input
+                            type="number"
+                            step="0.5"
+                            className="w-14 text-right border border-gray-200 rounded px-1 py-0.5 text-[11px]"
+                            value={permilagens[u.id] ?? 62.5}
+                            onChange={(e) =>
+                              setPermilagens({
+                                ...permilagens,
+                                [u.id]: parseFloat(e.target.value) || 0,
+                              })
+                            }
+                            title="Permilagem (‰)"
+                          />
+                          <span className="text-[10px] text-gray-400">‰</span>
+                        </div>
+                      )}
                     </div>
                     <p className="text-[11px] text-gray-500 truncate">
                       {u.currentOwner?.name || 'N/D'}
@@ -1286,7 +1262,7 @@ export default function ActaTab({
               <strong>{discussionPoints.length}</strong> ponto(s) discutido(s) •{' '}
               <strong>{decisionsCount}</strong> decisão(ões) registada(s) •{' '}
               <strong>{actionItems.length}</strong> ação(ões) no plano •{' '}
-              Quórum: <strong>{totalPermilagemPresent.toFixed(1)}‰</strong>
+              Quórum: <strong>{quorum.shortSummary}</strong>
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <button
@@ -1344,7 +1320,10 @@ export default function ActaTab({
               </button>
               <button
                 type="button"
-                onClick={() => window.print()}
+                onClick={() => {
+                  setPrintMode('full');
+                  setTimeout(() => window.print(), 20);
+                }}
                 className="btn-primary text-xs h-9 px-4"
               >
                 Imprimir / Guardar PDF
@@ -1434,31 +1413,57 @@ export default function ActaTab({
       </div>
 
       {/* Printable Official Minutes (ACTA) */}
-      <MeetingDocumentView
-        year={year}
-        buildingName={buildingName}
-        units={units}
-        annualReport={annualReport}
-        budgetLines={budgetLines}
-        feeSimConfig={feeSimConfig}
-        templateMode={templateMode}
-        actaNumber={actaNumber}
-        assemblyType={assemblyType}
-        meetingDate={meetingDate}
-        startTime={startTime}
-        endTime={endTime}
-        convocationUsed={convocationUsed}
-        location={location}
-        presidedBy={presidedBy}
-        secretaryBy={secretaryBy}
-        newAdminNames={newAdminNames}
-        generalNotes={generalNotes}
-        attendance={attendance}
-        permilagens={permilagens}
-        representatives={representatives}
-        discussionPoints={discussionPoints}
-        actionItems={actionItems}
-      />
+      <div className={printMode === 'attendance' ? 'no-print' : ''}>
+        <MeetingDocumentView
+          year={year}
+          buildingName={buildingName}
+          units={units}
+          annualReport={annualReport}
+          budgetLines={budgetLines}
+          feeSimConfig={feeSimConfig}
+          templateMode={templateMode}
+          quorumMode={quorumMode}
+          actaNumber={actaNumber}
+          assemblyType={assemblyType}
+          meetingDate={meetingDate}
+          startTime={startTime}
+          endTime={endTime}
+          convocationUsed={convocationUsed}
+          location={location}
+          presidedBy={presidedBy}
+          secretaryBy={secretaryBy}
+          newAdminNames={newAdminNames}
+          generalNotes={generalNotes}
+          attendance={attendance}
+          permilagens={permilagens}
+          representatives={representatives}
+          discussionPoints={discussionPoints}
+          actionItems={actionItems}
+        />
+      </div>
+
+      {/* Standalone Printable Attendance Sign-in Sheet (only visible when printing attendance sheet) */}
+      {printMode === 'attendance' && (
+        <div className="hidden print:block">
+          <div className="report-container bg-white p-2 text-gray-900">
+            <AttendanceSheetView
+              buildingName={buildingName}
+              actaNumber={actaNumber}
+              assemblyType={assemblyType}
+              meetingDate={meetingDate}
+              startTime={startTime}
+              firstConvocationTime={selectedMeeting?.firstConvocationTime}
+              location={location}
+              units={units}
+              quorumMode={quorumMode}
+              attendance={attendance}
+              permilagens={permilagens}
+              representatives={representatives}
+              mode="signin"
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

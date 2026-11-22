@@ -7,6 +7,12 @@ export type AttendanceStatus = 'presente' | 'representado' | 'ausente';
 export type AssemblyType = 'Ordinária' | 'Extraordinária';
 export type ConvocationUsed = '1.ª' | '2.ª';
 export type MeetingStatus = 'draft' | 'finalized';
+export type QuorumMode = 'units' | 'permilagem';
+
+export const DEFAULT_CONVOCATION_EXTRA_NOTE =
+  'Encontra-se disponível para consulta o Balancete de Receitas e Despesas e os extratos individuais por fração.';
+export const DEFAULT_ADMIN_SIGNERS =
+  'A Administração\nCondomínio Rua Vieira da Silva, n.º 6';
 
 export interface MeetingDiscussionPoint {
   id: string;
@@ -50,6 +56,12 @@ export interface CondoMeetingDTO {
   secretaryBy: string;
   newAdminNames: string;
   status: MeetingStatus;
+  quorumMode: QuorumMode;
+  firstConvocationTime: string;
+  issueDate: string;
+  extraNote: string;
+  adminSigners: string;
+  convocationSentAt: string | null;
   attendance: MeetingAttendancePayload;
   discussionPoints: MeetingDiscussionPoint[];
   actionItems: MeetingActionItem[];
@@ -57,6 +69,21 @@ export interface CondoMeetingDTO {
   generatedAt: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface MeetingQuorumSummary {
+  quorumMode: QuorumMode;
+  totalUnits: number;
+  presentCount: number;
+  percentByUnits: number;
+  minUnitsFirst: number;
+  minUnitsSecond: number;
+  totalPermilagem: number;
+  percentByPermilagem: number;
+  meetsFirst: boolean;
+  meetsSecond: boolean;
+  statusLabel: string;
+  shortSummary: string;
 }
 
 export const VOTING_OUTCOME_OPTIONS: string[] = [
@@ -340,6 +367,12 @@ export function serializeMeeting(record: CondoMeeting): CondoMeetingDTO {
     secretaryBy: record.secretaryBy,
     newAdminNames: record.newAdminNames || '',
     status: record.status === 'finalized' ? 'finalized' : 'draft',
+    quorumMode: record.quorumMode === 'permilagem' ? 'permilagem' : 'units',
+    firstConvocationTime: record.firstConvocationTime || '21:30',
+    issueDate: record.issueDate ?? record.createdAt.toISOString().slice(0, 10),
+    extraNote: record.extraNote ?? DEFAULT_CONVOCATION_EXTRA_NOTE,
+    adminSigners: record.adminSigners ?? DEFAULT_ADMIN_SIGNERS,
+    convocationSentAt: record.convocationSentAt ? record.convocationSentAt.toISOString() : null,
     attendance: normalizeAttendance(record.attendanceJson),
     discussionPoints: normalizeDiscussionPoints(record.discussionPointsJson),
     actionItems: normalizeActionItems(record.actionItemsJson),
@@ -432,6 +465,21 @@ export function parseMeetingWriteData(
     typeof body.newAdminNames === 'string' ? body.newAdminNames.trim() || null : null;
 
   const status: MeetingStatus = body.status === 'finalized' ? 'finalized' : 'draft';
+  const quorumMode: QuorumMode = body.quorumMode === 'permilagem' ? 'permilagem' : 'units';
+
+  const firstConvocationTime =
+    typeof body.firstConvocationTime === 'string' && body.firstConvocationTime.trim()
+      ? body.firstConvocationTime.trim()
+      : '21:30';
+
+  const issueDate =
+    typeof body.issueDate === 'string' ? body.issueDate.trim() || null : null;
+
+  const extraNote =
+    typeof body.extraNote === 'string' ? body.extraNote.trim() : null;
+
+  const adminSigners =
+    typeof body.adminSigners === 'string' ? body.adminSigners.trim() : null;
 
   const attendanceJson = JSON.stringify(
     normalizeAttendance(body.attendance ?? body.attendanceJson)
@@ -459,11 +507,41 @@ export function parseMeetingWriteData(
     secretaryBy,
     newAdminNames,
     status,
+    quorumMode,
+    firstConvocationTime,
+    issueDate,
+    extraNote,
+    adminSigners,
     attendanceJson,
     discussionPointsJson,
     actionItemsJson,
     generalNotes,
   };
+}
+
+export function addMinutesToTime(hhmm: string, minutesToAdd: number): string {
+  const match = /^(\d{1,2}):(\d{2})$/.exec(hhmm.trim());
+  if (!match) return hhmm;
+  const h = Number(match[1]);
+  const m = Number(match[2]);
+  if (!Number.isInteger(h) || !Number.isInteger(m) || h < 0 || h > 23 || m < 0 || m > 59) {
+    return hhmm;
+  }
+  const total = ((h * 60 + m + minutesToAdd) % 1440 + 1440) % 1440;
+  const nextH = Math.floor(total / 60);
+  const nextM = total % 60;
+  return `${String(nextH).padStart(2, '0')}:${String(nextM).padStart(2, '0')}`;
+}
+
+export function suggestNextActaNumber(saved: Pick<CondoMeetingDTO, 'actaNumber'>[]): string {
+  let maxNum = 23;
+  for (const m of saved) {
+    const parsed = parseInt(m.actaNumber, 10);
+    if (Number.isFinite(parsed) && parsed > maxNum) {
+      maxNum = parsed;
+    }
+  }
+  return String(maxNum + 1);
 }
 
 export function computeMeetingQuorum(
@@ -486,5 +564,79 @@ export function computeMeetingQuorum(
   return {
     presentCount,
     totalPermilagem: Math.round(totalPermilagem * 100) / 100,
+  };
+}
+
+export function computeQuorumSummary({
+  unitIds,
+  attendance,
+  quorumMode,
+  defaultPermilagem = 62.5,
+}: {
+  unitIds: string[];
+  attendance: MeetingAttendancePayload;
+  quorumMode: QuorumMode;
+  defaultPermilagem?: number;
+}): MeetingQuorumSummary {
+  const totalUnits = unitIds.length;
+  const { presentCount, totalPermilagem } = computeMeetingQuorum(
+    unitIds,
+    attendance,
+    defaultPermilagem
+  );
+  const percentByUnits =
+    totalUnits > 0 ? Math.round((presentCount / totalUnits) * 1000) / 10 : 0;
+  const minUnitsFirst = totalUnits > 0 ? Math.floor(totalUnits / 2) + 1 : 1;
+  const minUnitsSecond = totalUnits > 0 ? Math.ceil(totalUnits / 4) : 1;
+  const percentByPermilagem = Math.round((totalPermilagem / 10) * 10) / 10;
+
+  if (quorumMode === 'permilagem') {
+    const meetsFirst = totalPermilagem > 500;
+    const meetsSecond = totalPermilagem >= 250;
+    const statusLabel = meetsFirst
+      ? 'Quórum para 1.ª Convocatória (> 500‰)'
+      : meetsSecond
+      ? 'Quórum para 2.ª Convocatória (≥ 250‰)'
+      : 'Sem quórum mínimo legal (< 250‰)';
+    const shortSummary = `${presentCount}/${totalUnits} frações • ${totalPermilagem.toFixed(1)}‰ (${percentByPermilagem.toFixed(1)}%)`;
+
+    return {
+      quorumMode,
+      totalUnits,
+      presentCount,
+      percentByUnits,
+      minUnitsFirst,
+      minUnitsSecond,
+      totalPermilagem,
+      percentByPermilagem,
+      meetsFirst,
+      meetsSecond,
+      statusLabel,
+      shortSummary,
+    };
+  }
+
+  const meetsFirst = totalUnits > 0 && presentCount >= minUnitsFirst;
+  const meetsSecond = totalUnits > 0 && presentCount >= minUnitsSecond;
+  const statusLabel = meetsFirst
+    ? `Quórum para 1.ª Convocatória (≥ ${minUnitsFirst} frações)`
+    : meetsSecond
+    ? `Quórum para 2.ª Convocatória (≥ ${minUnitsSecond} frações)`
+    : `Sem quórum mínimo (mín. ${minUnitsSecond} frações em 2.ª conv.)`;
+  const shortSummary = `${presentCount}/${totalUnits} frações (${percentByUnits.toFixed(1)}%)`;
+
+  return {
+    quorumMode: 'units',
+    totalUnits,
+    presentCount,
+    percentByUnits,
+    minUnitsFirst,
+    minUnitsSecond,
+    totalPermilagem,
+    percentByPermilagem,
+    meetsFirst,
+    meetsSecond,
+    statusLabel,
+    shortSummary,
   };
 }

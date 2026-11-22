@@ -353,6 +353,12 @@ model CondoMeeting {
   secretaryBy          String    @default("A designar na reunião")
   newAdminNames        String?
   status               String    @default("draft") // "draft" | "finalized"
+  quorumMode           String    @default("units") // "units" | "permilagem"
+  firstConvocationTime String    @default("21:30") // Hora 1.ª convocatória
+  issueDate            String?   // Data de emissão da convocatória ("YYYY-MM-DD")
+  extraNote            String?   // Nota adicional da convocatória
+  adminSigners         String?   // Assinatura / Administração na convocatória
+  convocationSentAt    DateTime? // Último envio da convocatória por email
   attendanceJson       String    @default("{}")
   discussionPointsJson String    @default("[]")
   actionItemsJson      String    @default("[]")

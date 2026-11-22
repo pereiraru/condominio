@@ -1,14 +1,14 @@
 'use client';
 
-import { useEffect, useState, useMemo, useCallback } from 'react';
+import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import Sidebar from '@/components/Sidebar';
 import { Budget } from '@/lib/types';
+import type { CondoMeetingDTO } from '@/lib/meetings';
 import {
   AnnualReportData,
   BudgetLineInput,
-  ConvocatoriaDraft,
   FeeSimulationConfig,
   UnitReportsPayload,
 } from './types';
@@ -31,18 +31,26 @@ export default function AdministrationCenterPage() {
   const [budgets, setBudgets] = useState<Budget[]>([]);
   const [unitReportsData, setUnitReportsData] = useState<UnitReportsPayload | null>(null);
   const [annualReport, setAnnualReport] = useState<AnnualReportData | null>(null);
+  const [meetings, setMeetings] = useState<CondoMeetingDTO[]>([]);
+  const [selectedMeetingId, setSelectedMeetingId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [convocatoriaDraft, setConvocatoriaDraft] = useState<ConvocatoriaDraft | null>(null);
-  const [pendingImportDraft, setPendingImportDraft] = useState<ConvocatoriaDraft | null>(null);
+  const initializedMeetingSelectionRef = useRef(false);
 
-  const handleTransferToActa = useCallback((draft: ConvocatoriaDraft) => {
-    setConvocatoriaDraft(draft);
-    setPendingImportDraft(draft);
-    setActiveTab('acta');
+  const handleMeetingSaved = useCallback((saved: CondoMeetingDTO) => {
+    setMeetings((prev) => {
+      const exists = prev.some((m) => m.id === saved.id);
+      return exists ? prev.map((m) => (m.id === saved.id ? saved : m)) : [saved, ...prev];
+    });
+    setSelectedMeetingId(saved.id);
+    initializedMeetingSelectionRef.current = true;
   }, []);
 
-  const handlePendingImportConsumed = useCallback(() => {
-    setPendingImportDraft(null);
+  const handleMeetingDeleted = useCallback((deletedId: string) => {
+    setMeetings((prev) => {
+      const remaining = prev.filter((m) => m.id !== deletedId);
+      setSelectedMeetingId(remaining[0]?.id || null);
+      return remaining;
+    });
   }, []);
 
   const [feeSimConfig, setFeeSimConfig] = useState<FeeSimulationConfig>({
@@ -56,10 +64,11 @@ export default function AdministrationCenterPage() {
   const fetchAllData = useCallback(async (year: number) => {
     setLoading(true);
     try {
-      const [budgetsRes, unitRepRes, annualRes] = await Promise.all([
+      const [budgetsRes, unitRepRes, annualRes, meetingsRes] = await Promise.all([
         fetch('/api/budgets'),
         fetch(`/api/admin/unit-reports?year=${year}`),
         fetch(`/api/reports/annual-report?year=${year}`),
+        fetch('/api/admin/meetings'),
       ]);
 
       if (budgetsRes.ok) {
@@ -70,6 +79,15 @@ export default function AdministrationCenterPage() {
       }
       if (annualRes.ok) {
         setAnnualReport(await annualRes.json());
+      }
+      if (meetingsRes.ok) {
+        const list = (await meetingsRes.json()) as CondoMeetingDTO[];
+        setMeetings(list);
+        if (!initializedMeetingSelectionRef.current && list.length > 0) {
+          initializedMeetingSelectionRef.current = true;
+          const matchingYear = list.find((m) => m.year === year) || list[0];
+          setSelectedMeetingId(matchingYear?.id || null);
+        }
       }
     } catch (error) {
       console.error('Error loading administration data:', error);
@@ -227,9 +245,13 @@ export default function AdministrationCenterPage() {
                 <ConvocatoriaTab
                   year={selectedYear}
                   buildingName={unitReportsData.buildingName}
+                  units={unitReportsData.units}
                   projectedAnnualImpact={feeSimSummary.annualImpact}
-                  onDraftChange={setConvocatoriaDraft}
-                  onTransferToActa={handleTransferToActa}
+                  meetings={meetings}
+                  selectedMeetingId={selectedMeetingId}
+                  onSelectMeetingId={setSelectedMeetingId}
+                  onMeetingSaved={handleMeetingSaved}
+                  onGoToActa={() => setActiveTab('acta')}
                 />
               )}
 
@@ -241,9 +263,12 @@ export default function AdministrationCenterPage() {
                   annualReport={annualReport}
                   budgetLines={nextBudgetLines}
                   feeSimConfig={feeSimConfig}
-                  convocatoriaDraft={convocatoriaDraft}
-                  pendingImportDraft={pendingImportDraft}
-                  onPendingImportConsumed={handlePendingImportConsumed}
+                  meetings={meetings}
+                  selectedMeetingId={selectedMeetingId}
+                  onSelectMeetingId={setSelectedMeetingId}
+                  onMeetingSaved={handleMeetingSaved}
+                  onMeetingDeleted={handleMeetingDeleted}
+                  onGoToConvocatoria={() => setActiveTab('convocatoria')}
                 />
               )}
 

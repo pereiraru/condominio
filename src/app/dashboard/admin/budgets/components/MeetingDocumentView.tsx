@@ -4,11 +4,13 @@ import {
   ACTION_PRIORITY_LABELS,
   ACTION_STATUS_LABELS,
   AttendanceStatus,
+  computeQuorumSummary,
   formatMeetingDateLong,
   formatMeetingDateShort,
   isPlaceholderAdminNames,
   MeetingActionItem,
   MeetingDiscussionPoint,
+  QuorumMode,
 } from '@/lib/meetings';
 import {
   AnnualReportData,
@@ -17,6 +19,7 @@ import {
   UnitReportItem,
 } from '../types';
 import { computeFeeSimulation, fmtEur, formatUnitLabel, round2 } from '../utils';
+import AttendanceSheetView from './AttendanceSheetView';
 
 interface MeetingDocumentViewProps {
   year: number;
@@ -26,6 +29,7 @@ interface MeetingDocumentViewProps {
   budgetLines: BudgetLineInput[];
   feeSimConfig: FeeSimulationConfig;
   templateMode: 'filled' | 'blank';
+  quorumMode: QuorumMode;
   actaNumber: string;
   assemblyType: 'Ordinária' | 'Extraordinária';
   meetingDate: string;
@@ -52,6 +56,7 @@ export default function MeetingDocumentView({
   budgetLines,
   feeSimConfig,
   templateMode,
+  quorumMode,
   actaNumber,
   assemblyType,
   meetingDate,
@@ -74,12 +79,11 @@ export default function MeetingDocumentView({
   const debtors = units.filter((u) => u.debtByYear.totalDebt > 0.01);
 
   const presentUnitsList = units.filter((u) => (attendance[u.id] || 'ausente') !== 'ausente');
-  const totalPermilagemPresent = round2(
-    presentUnitsList.reduce((sum, u) => sum + (permilagens[u.id] ?? u.permilagem ?? 62.5), 0)
-  );
-  const totalPermilagemBuilding = round2(
-    units.reduce((sum, u) => sum + (permilagens[u.id] ?? u.permilagem ?? 62.5), 0)
-  );
+  const quorum = computeQuorumSummary({
+    unitIds: units.map((u) => u.id),
+    attendance: { statuses: attendance, permilagens, representatives },
+    quorumMode,
+  });
 
   const budgetTotalAnnual = round2(budgetLines.reduce((s, l) => s + (l.annualAmount || 0), 0));
   const budgetTotalMonthly = round2(budgetLines.reduce((s, l) => s + (l.monthlyAmount || 0), 0));
@@ -317,7 +321,11 @@ export default function MeetingDocumentView({
       <p className="text-sm leading-relaxed text-justify">
         {templateMode === 'blank' ? (
           <>
-            Aos _____ dias do mês de ________________________ de ________, pelas ______ horas e ______ minutos, em _____ convocatória, reuniu no {location} a Assembleia Geral {assemblyType} de Condóminos do prédio constituído em regime de propriedade horizontal sito na {buildingName}. Estiveram presentes ou representados os condóminos assinantes da lista de presenças anexa, perfazendo uma permilagem total de ________‰. A reunião foi presidida por ______________________________ e secretariada por ______________________________, com a seguinte Ordem de Trabalhos:
+            Aos _____ dias do mês de ________________________ de ________, pelas ______ horas e ______ minutos, em _____ convocatória, reuniu no {location} a Assembleia Geral {assemblyType} de Condóminos do prédio constituído em regime de propriedade horizontal sito na {buildingName}. Estiveram presentes ou representados os condóminos assinantes da lista de presenças anexa, perfazendo{' '}
+            {quorumMode === 'permilagem'
+              ? 'uma permilagem total de ________‰'
+              : `____ de ${units.length} frações`}
+            . A reunião foi presidida por ______________________________ e secretariada por ______________________________, com a seguinte Ordem de Trabalhos:
           </>
         ) : (
           <>
@@ -329,8 +337,20 @@ export default function MeetingDocumentView({
                 <strong>
                   {presentUnitsList.map((u) => `${u.code} (${formatUnitLabel(u.code)})`).join(', ')}
                 </strong>
-                , perfazendo uma permilagem total de <strong>{totalPermilagemPresent.toFixed(1)}‰</strong> (
-                {(totalPermilagemPresent / 10).toFixed(1)}%).{' '}
+                , perfazendo{' '}
+                {quorumMode === 'permilagem' ? (
+                  <>
+                    uma permilagem total de <strong>{quorum.totalPermilagem.toFixed(1)}‰</strong> (
+                    {quorum.percentByPermilagem.toFixed(1)}%).{' '}
+                  </>
+                ) : (
+                  <>
+                    <strong>
+                      {quorum.presentCount} de {quorum.totalUnits} frações
+                    </strong>{' '}
+                    ({quorum.percentByUnits.toFixed(1)}%).{' '}
+                  </>
+                )}
               </>
             ) : (
               <>Verificada a lista de presenças anexa à presente ata, </>
@@ -599,83 +619,21 @@ export default function MeetingDocumentView({
       </div>
 
       {/* Attendance & Signatures Sheet */}
-      <div className="report-section-break space-y-3">
-        <h2 className="text-sm font-black uppercase border-b-2 border-gray-800 pb-1">
-          Folha de Presenças, Permilagens e Assinaturas — Acta N.º{' '}
-          {templateMode === 'blank' ? '_____' : actaNumber || '___'}
-        </h2>
-        <table className="w-full text-xs border-collapse border border-gray-400">
-          <thead>
-            <tr className="bg-gray-100 border-b border-gray-400 font-bold">
-              <th className="py-1.5 px-2 text-left border-r border-gray-300">Fração</th>
-              <th className="py-1.5 px-2 text-left border-r border-gray-300">Condómino</th>
-              <th className="py-1.5 px-2 text-right border-r border-gray-300 w-20">Perm. (‰)</th>
-              <th className="py-1.5 px-2 text-center border-r border-gray-300 w-28">Situação</th>
-              <th className="py-1.5 px-2 text-left">Assinatura</th>
-            </tr>
-          </thead>
-          <tbody>
-            {units.map((u) => {
-              const st = attendance[u.id] || 'ausente';
-              const rep = representatives[u.id];
-              return (
-                <tr key={u.id} className="border-b border-gray-300">
-                  <td className="py-2 px-2 font-bold border-r border-gray-300">
-                    {u.code} ({formatUnitLabel(u.code)})
-                  </td>
-                  <td className="py-2 px-2 border-r border-gray-300">
-                    {u.currentOwner?.name || 'N/D'}
-                    {templateMode === 'filled' && st === 'representado' && rep
-                      ? ` (Repr.: ${rep})`
-                      : ''}
-                  </td>
-                  <td className="py-2 px-2 text-right border-r border-gray-300">
-                    {(permilagens[u.id] ?? u.permilagem ?? 62.5).toFixed(1)}‰
-                  </td>
-                  <td className="py-2 px-2 text-center border-r border-gray-300">
-                    {templateMode === 'blank' ? (
-                      <span className="text-[10px] text-gray-500">☐ Pres. ☐ Repr.</span>
-                    ) : st === 'presente' ? (
-                      <span className="font-bold text-green-800">Presente</span>
-                    ) : st === 'representado' ? (
-                      <span className="font-bold text-blue-800">Representado</span>
-                    ) : (
-                      <span className="text-gray-400">Ausente</span>
-                    )}
-                  </td>
-                  <td className="py-2 px-2"></td>
-                </tr>
-              );
-            })}
-            <tr className="bg-gray-100 font-bold border-t-2 border-gray-800">
-              <td className="py-1.5 px-2 border-r border-gray-300" colSpan={2}>
-                Total Presente / Representado ({presentUnitsList.length}/{units.length} frações)
-              </td>
-              <td className="py-1.5 px-2 text-right border-r border-gray-300">
-                {templateMode === 'blank'
-                  ? `____ / ${totalPermilagemBuilding.toFixed(1)}‰`
-                  : `${totalPermilagemPresent.toFixed(1)}‰`}
-              </td>
-              <td className="py-1.5 px-2 text-center border-r border-gray-300">
-                {templateMode === 'blank' ? '____ %' : `${(totalPermilagemPresent / 10).toFixed(1)}%`}
-              </td>
-              <td className="py-1.5 px-2"></td>
-            </tr>
-          </tbody>
-        </table>
-
-        <div className="grid grid-cols-2 gap-16 pt-10 text-center text-xs">
-          <div>
-            <div className="border-t border-gray-800 pt-2 mx-auto w-60 font-bold uppercase">
-              O Presidente da Mesa / Administração
-            </div>
-          </div>
-          <div>
-            <div className="border-t border-gray-800 pt-2 mx-auto w-60 font-bold uppercase">
-              O Secretário
-            </div>
-          </div>
-        </div>
+      <div className="report-section-break">
+        <AttendanceSheetView
+          buildingName={buildingName}
+          actaNumber={actaNumber}
+          assemblyType={assemblyType}
+          meetingDate={meetingDate}
+          startTime={startTime}
+          location={location}
+          units={units}
+          quorumMode={quorumMode}
+          attendance={attendance}
+          permilagens={permilagens}
+          representatives={representatives}
+          mode={templateMode}
+        />
       </div>
     </div>
   );

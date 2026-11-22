@@ -8,28 +8,23 @@ import {
 import {
   ACTION_PRIORITY_LABELS,
   ACTION_STATUS_LABELS,
+  addMinutesToTime,
   formatMeetingDateLong,
   formatMeetingDateShort,
   isPlaceholderAdminNames,
   type CondoMeetingDTO,
 } from '@/lib/meetings';
 
-export async function sendMeetingSummaryEmail({
-  meeting,
-  buildingName,
-  presentCount,
-  totalUnits,
-  totalPermilagem,
+async function dispatchHtmlEmail({
   toEmails,
-  customNote,
+  subject,
+  html,
+  text,
 }: {
-  meeting: CondoMeetingDTO;
-  buildingName: string;
-  presentCount: number;
-  totalUnits: number;
-  totalPermilagem: number;
   toEmails: string;
-  customNote?: string;
+  subject: string;
+  html: string;
+  text: string;
 }): Promise<NotificationDispatchResult> {
   const recipients = parseEmailList(toEmails);
   if (recipients.length === 0) {
@@ -50,14 +45,58 @@ export async function sendMeetingSummaryEmail({
       };
     }
 
-    const baseUrl = process.env.NEXTAUTH_URL || 'https://condominio.pereiraru.com';
-    const formattedDate = formatMeetingDateLong(meeting.meetingDate);
-    const shortDate = formatMeetingDateShort(meeting.meetingDate);
-    const timeRange = meeting.endTime
-      ? `${meeting.startTime} às ${meeting.endTime}`
-      : `${meeting.startTime}`;
+    const transporter = buildTransport(cfg);
+    await transporter.sendMail({
+      from: `"${cfg.fromName}" <${cfg.fromEmail}>`,
+      to: recipients.length === 1 ? recipients[0] : cfg.fromEmail,
+      bcc: recipients.length > 1 ? recipients.join(', ') : undefined,
+      subject,
+      text,
+      html,
+    });
 
-    const subject = `Resumo da Reunião de Condomínio — Acta N.º ${meeting.actaNumber} (${shortDate})`;
+    return { sent: true, recipients };
+  } catch (error) {
+    console.error('Error sending meeting email:', error);
+    return {
+      sent: false,
+      recipients,
+      reason: error instanceof Error ? error.message : 'Erro ao enviar email.',
+    };
+  }
+}
+
+export async function sendMeetingSummaryEmail({
+  meeting,
+  buildingName,
+  presentCount,
+  totalUnits,
+  totalPermilagem,
+  toEmails,
+  customNote,
+}: {
+  meeting: CondoMeetingDTO;
+  buildingName: string;
+  presentCount: number;
+  totalUnits: number;
+  totalPermilagem: number;
+  toEmails: string;
+  customNote?: string;
+}): Promise<NotificationDispatchResult> {
+  const baseUrl = process.env.NEXTAUTH_URL || 'https://condominio.pereiraru.com';
+  const formattedDate = formatMeetingDateLong(meeting.meetingDate);
+  const shortDate = formatMeetingDateShort(meeting.meetingDate);
+  const timeRange = meeting.endTime
+    ? `${meeting.startTime} às ${meeting.endTime}`
+    : `${meeting.startTime}`;
+
+  const unitPercent = totalUnits > 0 ? ((presentCount / totalUnits) * 100).toFixed(1) : '0.0';
+  const quorumSummaryText =
+    meeting.quorumMode === 'permilagem'
+      ? `${presentCount}/${totalUnits} frações presentes/representadas · ${totalPermilagem.toFixed(1)}‰ (${(totalPermilagem / 10).toFixed(1)}%)`
+      : `${presentCount}/${totalUnits} frações presentes/representadas (${unitPercent}%)`;
+
+  const subject = `Resumo da Reunião de Condomínio — Acta N.º ${meeting.actaNumber} (${shortDate})`;
 
     const pointLabelById = new Map<string, string>();
     meeting.discussionPoints.forEach((pt, idx) => {
@@ -157,7 +196,7 @@ export async function sendMeetingSummaryEmail({
             </tr>
             <tr>
               <td style="padding:7px 10px;color:#6b7280;">Quórum</td>
-              <td style="padding:7px 10px;font-weight:600;">${presentCount}/${totalUnits} frações presentes/representadas · ${totalPermilagem.toFixed(1)}‰ (${(totalPermilagem / 10).toFixed(1)}%)</td>
+              <td style="padding:7px 10px;font-weight:600;">${escapeHtml(quorumSummaryText)}</td>
             </tr>
           </table>
 
@@ -202,7 +241,7 @@ export async function sendMeetingSummaryEmail({
       `Data: ${formattedDate} (${timeRange}) · ${meeting.convocationUsed} Convocatória`,
       `Local: ${meeting.location}`,
       `Mesa: Presidente ${meeting.presidedBy} | Secretário ${meeting.secretaryBy}`,
-      `Quórum: ${presentCount}/${totalUnits} frações (${totalPermilagem.toFixed(1)}‰)`,
+      `Quórum: ${quorumSummaryText}`,
       '',
     ];
 
@@ -243,23 +282,134 @@ export async function sendMeetingSummaryEmail({
     }
     textLines.push('', `Portal: ${baseUrl}`);
 
-    const transporter = buildTransport(cfg);
-    await transporter.sendMail({
-      from: `"${cfg.fromName}" <${cfg.fromEmail}>`,
-      to: recipients.length === 1 ? recipients[0] : cfg.fromEmail,
-      bcc: recipients.length > 1 ? recipients.join(', ') : undefined,
-      subject,
-      text: textLines.join('\n'),
-      html,
-    });
+  return dispatchHtmlEmail({
+    toEmails,
+    subject,
+    html,
+    text: textLines.join('\n'),
+  });
+}
 
-    return { sent: true, recipients };
-  } catch (error) {
-    console.error('Error sending meeting summary email:', error);
-    return {
-      sent: false,
-      recipients,
-      reason: error instanceof Error ? error.message : 'Erro ao enviar email.',
-    };
+export async function sendMeetingConvocatoriaEmail({
+  meeting,
+  buildingName,
+  toEmails,
+  customNote,
+}: {
+  meeting: CondoMeetingDTO;
+  buildingName: string;
+  toEmails: string;
+  customNote?: string;
+}): Promise<NotificationDispatchResult> {
+  const baseUrl = process.env.NEXTAUTH_URL || 'https://condominio.pereiraru.com';
+  const formattedDate = formatMeetingDateLong(meeting.meetingDate);
+  const shortDate = formatMeetingDateShort(meeting.meetingDate);
+  const issueFormatted = meeting.issueDate
+    ? formatMeetingDateLong(meeting.issueDate)
+    : formatMeetingDateLong(new Date().toISOString().slice(0, 10));
+  const firstTime = meeting.firstConvocationTime || '21:30';
+  const secondTime = addMinutesToTime(firstTime, 30);
+
+  const agendaTitles = meeting.discussionPoints
+    .map((p) => p.title.trim())
+    .filter(Boolean);
+
+  const subject = `Convocatória — Assembleia Geral ${meeting.assemblyType} de Condóminos (${shortDate})`;
+
+  const agendaHtml =
+    agendaTitles.length > 0
+      ? `<ol style="margin:8px 0 0;padding-left:20px;font-size:13px;color:#111827;">
+          ${agendaTitles
+            .map((t) => `<li style="margin-bottom:6px;font-weight:500;">${escapeHtml(t)}</li>`)
+            .join('')}
+        </ol>`
+      : '<p style="font-size:13px;color:#6b7280;">Sem pontos definidos.</p>';
+
+  const html = `
+    <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:720px;margin:0 auto;color:#111827;">
+      <div style="background:#111827;color:#ffffff;padding:18px 22px;border-radius:10px 10px 0 0;">
+        <p style="margin:0;font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:#9ca3af;">${escapeHtml(buildingName)}</p>
+        <h1 style="margin:4px 0 0;font-size:20px;">CONVOCATÓRIA — Assembleia Geral ${escapeHtml(meeting.assemblyType)}</h1>
+      </div>
+
+      <div style="border:1px solid #e5e7eb;border-top:none;padding:20px 22px;border-radius:0 0 10px 10px;background:#f9fafb;font-size:13px;line-height:1.6;">
+        ${
+          customNote?.trim()
+            ? `<div style="margin-bottom:16px;padding:12px 14px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;color:#1e3a8a;white-space:pre-line;">${escapeHtml(customNote.trim())}</div>`
+            : ''
+        }
+
+        <p style="margin:0 0 12px;">Exmo.(a) Senhor(a) Condómino(a),</p>
+        <p style="margin:0 0 16px;">
+          Nos termos do n.º 2 do artigo 1431.º e do n.º 1 do artigo 1432.º do Código Civil, fica V.ª Ex.ª convocado(a) para a
+          <strong>Assembleia Geral ${escapeHtml(meeting.assemblyType)} de Condóminos</strong>, a realizar no dia
+          <strong>${escapeHtml(formattedDate)}</strong>, pelas <strong>${escapeHtml(firstTime)} horas</strong> (1.ª convocatória), no
+          <strong>${escapeHtml(meeting.location)}</strong>, com a seguinte:
+        </p>
+
+        <div style="margin:16px 0;padding:14px 16px;background:#ffffff;border:1px solid #d1d5db;border-radius:8px;">
+          <div style="font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:0.05em;color:#111827;">
+            Ordem de Trabalhos
+          </div>
+          ${agendaHtml}
+        </div>
+
+        <div style="margin:14px 0;padding:12px 14px;background:#ffffff;border-left:4px solid #374151;font-size:12px;color:#374151;">
+          Caso não se verifique quórum na 1.ª convocatória às <strong>${escapeHtml(firstTime)} horas</strong>, fica desde já convocada nova reunião no
+          <strong>mesmo dia e local, 30 minutos depois (${escapeHtml(secondTime)} horas)</strong>, com a mesma ordem de trabalhos, nos termos do n.º 4 do art.º 1432.º do Código Civil.
+        </div>
+
+        ${
+          meeting.extraNote.trim()
+            ? `<p style="font-size:12px;font-style:italic;color:#374151;margin:12px 0;">${escapeHtml(meeting.extraNote.trim())}</p>`
+            : ''
+        }
+
+        <p style="margin:16px 0 4px;">Monte Abraão — Queluz, ${escapeHtml(issueFormatted)}</p>
+        <p style="margin:0;font-weight:600;white-space:pre-line;">${escapeHtml(meeting.adminSigners)}</p>
+
+        <p style="font-size:12px;color:#6b7280;margin:18px 0 0;border-top:1px solid #e5e7eb;padding-top:12px;">
+          Portal do Condomínio: <a href="${escapeHtml(baseUrl)}" style="color:#111827;">${escapeHtml(baseUrl)}</a>
+        </p>
+      </div>
+    </div>
+  `;
+
+  const textLines: string[] = [
+    `${buildingName}`,
+    `CONVOCATÓRIA — Assembleia Geral ${meeting.assemblyType} de Condóminos`,
+    '',
+  ];
+  if (customNote?.trim()) {
+    textLines.push(customNote.trim(), '');
   }
+  textLines.push(
+    'Exmo.(a) Senhor(a) Condómino(a),',
+    '',
+    `Fica V.ª Ex.ª convocado(a) para a Assembleia Geral ${meeting.assemblyType} de Condóminos a realizar no dia ${formattedDate}, pelas ${firstTime} horas (1.ª convocatória), no ${meeting.location}.`,
+    '',
+    'ORDEM DE TRABALHOS:'
+  );
+  agendaTitles.forEach((t, idx) => textLines.push(`${idx + 1}. ${t}`));
+  textLines.push(
+    '',
+    `Em 2.ª convocatória: no mesmo dia e local às ${secondTime} horas (30 minutos depois), com a mesma ordem de trabalhos (art.º 1432.º n.º 4 do Código Civil).`
+  );
+  if (meeting.extraNote.trim()) {
+    textLines.push('', meeting.extraNote.trim());
+  }
+  textLines.push(
+    '',
+    `Monte Abraão — Queluz, ${issueFormatted}`,
+    meeting.adminSigners,
+    '',
+    `Portal: ${baseUrl}`
+  );
+
+  return dispatchHtmlEmail({
+    toEmails,
+    subject,
+    html,
+    text: textLines.join('\n'),
+  });
 }
