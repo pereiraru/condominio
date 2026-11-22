@@ -196,12 +196,104 @@ export interface BudgetLine {
   sortOrder: number;
 }
 
+export interface DashboardBankAccountSummary {
+  id: string;
+  name: string;
+  accountType: string;
+  balance: number;
+  lastDate: string | null;
+}
+
+export interface DashboardAnnouncement {
+  id: string;
+  title: string;
+  message: string;
+  category: 'assembly' | 'notice' | 'maintenance';
+  dateLabel: string;
+}
+
+export interface DashboardPendingIssue {
+  id: string;
+  title: string;
+  description: string;
+  category: string;
+  status: 'pending_payment' | 'in_analysis' | 'monitoring' | 'resolved';
+  priority: 'high' | 'medium' | 'low';
+  amount?: number | null;
+  dateLabel?: string | null;
+}
+
+export interface DashboardExtraordinaryActivity {
+  id: string;
+  date: string;
+  creditorName: string;
+  category: string;
+  description: string;
+  amount: number;
+}
+
+export interface DashboardRegularService {
+  id: string;
+  name: string;
+  category: string;
+  isFixed: boolean;
+  monthlyAmount: number;
+  paidThisYear: number;
+  lastPaymentDate: string | null;
+  lastPaymentAmount: number | null;
+  status: 'regularized' | 'pending' | 'variable';
+  pendingAmount: number;
+}
+
+export interface DashboardExpenseCategoryItem {
+  category: string;
+  label: string;
+  amount: number;
+  percentage: number;
+}
+
+export interface DashboardMyUnitSummary {
+  id: string;
+  code: string;
+  description?: string | null;
+  ownerName?: string | null;
+  monthlyFee: number;
+  paidThisYear: number;
+  totalOwed: number;
+  yearDebt: number;
+  lastPaymentDate: string | null;
+  lastPaymentAmount: number | null;
+}
+
 export interface DashboardStats {
   currentBalance: number;
   balanceTrend?: number;
   monthlyIncome: number;
   monthlyExpenses: number;
   pendingPayments: number;
+  currentYear: number;
+  currentMonthLabel: string;
+  totalBankBalance: number;
+  bankAccounts: DashboardBankAccountSummary[];
+  yearSummary: {
+    yearIncome: number;
+    yearOperationalExpenses: number;
+    yearSavingsTransfers: number;
+    yearNetBalance: number;
+    pendingInvoicesTotal: number;
+    pendingInvoicesCount: number;
+  };
+  unitCompliance: {
+    totalUnits: number;
+    unitsUpToDateThisYear: number;
+    collectionRateYear: number;
+  };
+  announcements: DashboardAnnouncement[];
+  pendingIssues: DashboardPendingIssue[];
+  extraordinaryActivities: DashboardExtraordinaryActivity[];
+  regularServices: DashboardRegularService[];
+  expenseBreakdown: DashboardExpenseCategoryItem[];
+  myUnit: DashboardMyUnitSummary | null;
 }
 
 export interface UnitPaymentStatus {
