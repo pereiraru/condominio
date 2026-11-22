@@ -501,40 +501,56 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Saldo final (adds back internal savings transfer and inter-period cash timing adjustment so it reconciles 100% with bank balances)
+    // Bank account & cash-in-hand balances (Calculating current balance from snapshot + reinforcements)
+    const accountTypeOrder: Record<string, number> = { current: 0, savings: 1, cash: 2 };
+    const contasBancarias = bankAccounts
+      .map((account) => {
+        const snapshot = account.snapshots[0];
+        let balance = snapshot?.balance ?? 0;
+
+        // If it's a savings account, we might want to add reinforcements since the last snapshot
+        // but usually snapshots are end-of-period.
+        // If snapshot is from start of year, we add this year's reinforcements.
+        if (account.accountType === 'savings' && snapshot && new Date(snapshot.date) < new Date(`${year}-01-10`)) {
+          balance += totalReforcoPoupanca;
+        }
+
+        // Format snapshot date for display
+        const snapshotDate = snapshot ? snapshot.date.toISOString().split('T')[0] : null;
+
+        return {
+          id: account.id,
+          name: account.name,
+          accountType: account.accountType,
+          openingBalance: latestOpeningByAccount[account.id] ?? 0,
+          balance,
+          description: snapshot?.description ?? null,
+          snapshotDate,
+        };
+      })
+      .sort((a, b) => {
+        const oa = accountTypeOrder[a.accountType] ?? 99;
+        const ob = accountTypeOrder[b.accountType] ?? 99;
+        if (oa !== ob) return oa - ob;
+        return a.name.localeCompare(b.name, 'pt-PT');
+      });
+    const totalBankBalance = Math.round(contasBancarias.reduce((sum, c) => sum + c.balance, 0) * 100) / 100;
+
+    // Net change in physical cash accounts for this year (e.g., ATM withdrawal surplus held in cash-in-hand)
+    const cashAccountsDelta =
+      Math.round(
+        contasBancarias
+          .filter((c) => c.accountType === 'cash')
+          .reduce((sum, c) => sum + (c.balance - (c.openingBalance ?? 0)), 0) * 100
+      ) / 100;
+
+    // Saldo final (adds back internal savings transfer, inter-period cash timing adjustment, and cash-in-hand delta so it reconciles 100% with bank+cash balances)
     const saldoExercicio =
       Math.round(((receitasAnosAnteriores + receitasDesteExercicio) - totalDespesasGeral) * 100) / 100;
     const ajusteCaixaExercicio =
-      Math.round((totalDespesasOperacionais - actualBankOperationalExpenses) * 100) / 100;
+      Math.round((totalDespesasOperacionais - actualBankOperationalExpenses + cashAccountsDelta) * 100) / 100;
     const saldoFinalDisponivel =
       Math.round((saldoInicialTransitar + saldoExercicio + totalReforcoPoupanca + ajusteCaixaExercicio) * 100) / 100;
-
-    // Bank account balances (Calculating current balance from snapshot + reinforcements)
-    const contasBancarias = bankAccounts.map((account) => {
-      const snapshot = account.snapshots[0];
-      let balance = snapshot?.balance ?? 0;
-      
-      // If it's a savings account, we might want to add reinforcements since the last snapshot
-      // but usually snapshots are end-of-period. 
-      // If snapshot is from start of year, we add this year's reinforcements.
-      if (account.accountType === 'savings' && snapshot && new Date(snapshot.date) < new Date(`${year}-01-10`)) {
-        balance += totalReforcoPoupanca;
-      }
-
-      // Format snapshot date for display
-      const snapshotDate = snapshot ? snapshot.date.toISOString().split('T')[0] : null;
-
-      return {
-        id: account.id,
-        name: account.name,
-        accountType: account.accountType,
-        openingBalance: latestOpeningByAccount[account.id] ?? 0,
-        balance,
-        description: snapshot?.description ?? null,
-        snapshotDate,
-      };
-    });
-    const totalBankBalance = Math.round(contasBancarias.reduce((sum, c) => sum + c.balance, 0) * 100) / 100;
 
     // =========================================
     // SECTION 2: Valores em Débito por Fração

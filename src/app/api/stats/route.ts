@@ -216,7 +216,8 @@ export async function GET() {
       (u) => !paidUnitsThisMonth.has(u.id)
     ).length;
 
-    // 1. Bank accounts & total balance
+    // 1. Bank & cash-in-hand accounts & total balance
+    const accountTypeOrder: Record<string, number> = { current: 0, savings: 1, cash: 2 };
     const bankAccounts: DashboardBankAccountSummary[] = rawBankAccounts
       .map((acc) => {
         const snap = acc.snapshots[0];
@@ -229,8 +230,10 @@ export async function GET() {
         };
       })
       .sort((a, b) => {
-        if (a.accountType === b.accountType) return a.name.localeCompare(b.name, 'pt-PT');
-        return a.accountType === 'current' ? -1 : 1;
+        const oa = accountTypeOrder[a.accountType] ?? 99;
+        const ob = accountTypeOrder[b.accountType] ?? 99;
+        if (oa !== ob) return oa - ob;
+        return a.name.localeCompare(b.name, 'pt-PT');
       });
 
     const totalBankBalance = round2(

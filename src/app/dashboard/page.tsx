@@ -625,7 +625,9 @@ export default function Dashboard() {
                     <div>
                       <div className="flex items-center justify-between gap-2">
                         <p className="text-[11px] font-bold uppercase tracking-wider text-slate-300">
-                          Disponibilidades Bancárias Totais
+                          {stats.bankAccounts.some((a) => a.accountType === 'cash')
+                            ? 'Disponibilidades Totais (Banco & Caixa)'
+                            : 'Disponibilidades Bancárias Totais'}
                         </p>
                         {isAdmin ? (
                           <Link

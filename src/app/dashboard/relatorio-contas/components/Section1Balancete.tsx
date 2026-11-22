@@ -171,7 +171,7 @@ export default function Section1Balancete({ data, year }: Section1Props) {
         </div>
 
         <div>
-          <h4 className="font-bold text-sm mb-2 text-gray-700 underline uppercase tracking-wider">Disponibilidades Bancárias</h4>
+          <h4 className="font-bold text-sm mb-2 text-gray-700 underline uppercase tracking-wider">Disponibilidades (Banco &amp; Caixa)</h4>
           <table className="w-full text-sm">
             <tbody>
               {data.contasBancarias.map((conta, i) => (
