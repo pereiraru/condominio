@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import type { UnitReportItem } from '@/app/dashboard/admin/budgets/types';
 import { fmtEur, formatUnitLabel } from '@/app/dashboard/admin/budgets/utils';
 
@@ -25,6 +26,82 @@ export default function UnitFinancialReportCard({
   hasPageBreakBefore = false,
 }: UnitFinancialReportCardProps) {
   const notesValue = customNote ?? unit.autoNotes;
+  const defaultUnitEmail = unit.defaultEmail || unit.currentOwner?.email || unit.email || '';
+
+  const [emailPanelOpen, setEmailPanelOpen] = useState(false);
+  const [emailInput, setEmailInput] = useState(defaultUnitEmail);
+  const [saveAsDefaultEmail, setSaveAsDefaultEmail] = useState(!defaultUnitEmail);
+  const [sendingEmail, setSendingEmail] = useState(false);
+  const [emailFeedback, setEmailFeedback] = useState<{
+    type: 'ok' | 'err';
+    text: string;
+  } | null>(null);
+
+  useEffect(() => {
+    const fallback = unit.defaultEmail || unit.currentOwner?.email || unit.email || '';
+    setEmailInput(fallback);
+    setSaveAsDefaultEmail(!fallback);
+    setEmailFeedback(null);
+  }, [unit.id, unit.defaultEmail, unit.currentOwner?.email, unit.email]);
+
+  async function handleSendSingleEmail(e: React.FormEvent) {
+    e.preventDefault();
+    if (!emailInput.trim()) {
+      setEmailFeedback({
+        type: 'err',
+        text: 'Indique pelo menos um endereço de email válido.',
+      });
+      return;
+    }
+
+    setSendingEmail(true);
+    setEmailFeedback(null);
+    try {
+      const res = await fetch('/api/admin/unit-reports/send-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          year,
+          items: [
+            {
+              unitId: unit.id,
+              email: emailInput.trim(),
+              customNote: isAdmin ? notesValue : undefined,
+              saveAsDefaultEmail,
+            },
+          ],
+        }),
+      });
+
+      const data = await res.json();
+      const firstResult = data.results?.[0];
+      if (res.ok && firstResult?.sent) {
+        setEmailFeedback({
+          type: 'ok',
+          text: `Situação financeira enviada com sucesso para ${firstResult.recipients.join(', ')}.${
+            firstResult.savedDefaultEmail
+              ? ` (${firstResult.savedDefaultEmail} guardado como email padrão da fração ${unit.code})`
+              : ''
+          }`,
+        });
+      } else {
+        setEmailFeedback({
+          type: 'err',
+          text:
+            firstResult?.reason ||
+            data.error ||
+            'Não foi possível enviar o email.',
+        });
+      }
+    } catch {
+      setEmailFeedback({
+        type: 'err',
+        text: 'Erro de ligação ao enviar o relatório por email.',
+      });
+    } finally {
+      setSendingEmail(false);
+    }
+  }
 
   return (
     <div
@@ -32,8 +109,19 @@ export default function UnitFinancialReportCard({
         hasPageBreakBefore ? 'report-section-break mt-8 print:mt-0' : ''
       }`}
     >
-      {showPrintButton && (
-        <div className="no-print flex justify-end mb-4">
+      <div className="no-print flex flex-wrap items-center justify-end gap-2.5 mb-4">
+        <button
+          type="button"
+          onClick={() => setEmailPanelOpen((prev) => !prev)}
+          className="btn-secondary text-xs h-[36px] px-4"
+        >
+          <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+          </svg>
+          <span>Enviar por Email</span>
+        </button>
+
+        {showPrintButton && (
           <button
             type="button"
             onClick={() => window.print()}
@@ -44,7 +132,73 @@ export default function UnitFinancialReportCard({
             </svg>
             <span>Imprimir / PDF</span>
           </button>
-        </div>
+        )}
+      </div>
+
+      {emailPanelOpen && (
+        <form
+          onSubmit={handleSendSingleEmail}
+          className="no-print mb-5 p-4 rounded-xl bg-gray-50 border border-gray-200 space-y-3"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <p className="text-xs font-bold text-gray-900">
+                Enviar Situação Financeira — Fração {unit.code}
+              </p>
+              <p className="text-[11px] text-gray-500">
+                {defaultUnitEmail
+                  ? `Email padrão da fração: ${defaultUnitEmail}`
+                  : 'Esta fração ainda não tem email padrão definido. Introduza manualmente abaixo.'}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setEmailPanelOpen(false)}
+              className="text-xs text-gray-500 hover:text-gray-800 font-semibold"
+            >
+              Fechar
+            </button>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3">
+            <input
+              type="text"
+              className="input h-10 text-xs flex-1 min-w-[240px] bg-white"
+              placeholder="email@exemplo.com (pode separar vários por vírgula)"
+              value={emailInput}
+              onChange={(e) => setEmailInput(e.target.value)}
+            />
+            <button
+              type="submit"
+              disabled={sendingEmail}
+              className="btn-primary h-10 text-xs px-5"
+            >
+              {sendingEmail ? 'A enviar...' : 'Enviar Agora'}
+            </button>
+          </div>
+
+          <label className="flex items-center gap-2 text-[11px] text-gray-700 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={saveAsDefaultEmail}
+              onChange={(e) => setSaveAsDefaultEmail(e.target.checked)}
+              className="rounded border-gray-300"
+            />
+            <span>Guardar este email como endereço padrão da fração {unit.code}</span>
+          </label>
+
+          {emailFeedback && (
+            <div
+              className={`p-2.5 rounded-lg border text-xs font-medium ${
+                emailFeedback.type === 'ok'
+                  ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                  : 'bg-red-50 border-red-200 text-red-700'
+              }`}
+            >
+              {emailFeedback.text}
+            </div>
+          )}
+        </form>
       )}
 
       {/* Header */}

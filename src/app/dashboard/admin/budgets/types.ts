@@ -44,6 +44,8 @@ export interface UnitReportItem {
   code: string;
   floor: number | null;
   description: string | null;
+  email?: string | null;
+  defaultEmail?: string | null;
   monthlyFee: number;
   permilagem: number;
   currentOwner: {

@@ -70,7 +70,7 @@ export function parseEmailList(raw: string | null | undefined): string[] {
   return Array.from(unique);
 }
 
-function escapeHtml(value: string): string {
+export function escapeHtml(value: string): string {
   return value
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
@@ -88,7 +88,7 @@ function fmtDate(d: Date | null | undefined): string {
   });
 }
 
-async function resolveTransportConfig() {
+export async function resolveTransportConfig() {
   const dbCfg = await prisma.notificationConfig.findUnique({
     where: { id: 'default' },
   });
@@ -117,7 +117,7 @@ async function resolveTransportConfig() {
   };
 }
 
-function buildTransport(cfg: Awaited<ReturnType<typeof resolveTransportConfig>>) {
+export function buildTransport(cfg: Awaited<ReturnType<typeof resolveTransportConfig>>) {
   return nodemailer.createTransport({
     host: cfg.smtpHost,
     port: cfg.smtpPort,
