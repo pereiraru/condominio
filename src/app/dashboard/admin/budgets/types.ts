@@ -39,6 +39,20 @@ export interface UnitReportPayment {
   }[];
 }
 
+export interface UnitReportIncidentItem {
+  id: string;
+  code: string;
+  title: string;
+  location: string;
+  priority: string;
+  status: string;
+  visibility: string;
+  reportedAt: string;
+  plannedDate?: string | null;
+  resolvedAt?: string | null;
+  assignedTo?: string | null;
+}
+
 export interface UnitReportItem {
   id: string;
   code: string;
@@ -81,6 +95,8 @@ export interface UnitReportItem {
   yearsGrid: UnitYearGrid[];
   payments: UnitReportPayment[];
   autoNotes: string;
+  unitIncidents?: UnitReportIncidentItem[];
+  globalIncidents?: UnitReportIncidentItem[];
 }
 
 export interface UnitReportsPayload {

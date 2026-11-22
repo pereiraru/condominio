@@ -1,6 +1,10 @@
 import { prisma } from '@/lib/prisma';
 import { getTotalFeeForMonth, FeeHistoryRecord, ExtraChargeRecord } from '@/lib/feeHistory';
-import type { UnitReportItem, UnitReportsPayload } from '@/app/dashboard/admin/budgets/types';
+import type {
+  UnitReportIncidentItem,
+  UnitReportItem,
+  UnitReportsPayload,
+} from '@/app/dashboard/admin/budgets/types';
 
 const MONTH_NAMES_PT = [
   'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
@@ -32,6 +36,7 @@ export async function buildUnitReportsData({
     expenseAllocations,
     supplierInvoices,
     savingsTxs,
+    allIncidents,
   ] = await Promise.all([
     prisma.unit.findMany({
       where: targetUnitId ? { id: targetUnitId } : undefined,
@@ -90,7 +95,40 @@ export async function buildUnitReportsData({
           },
         })
       : Promise.resolve([]),
+    prisma.incident.findMany({
+      orderBy: [{ reportedAt: 'desc' }, { createdAt: 'desc' }],
+      select: {
+        id: true,
+        code: true,
+        title: true,
+        location: true,
+        priority: true,
+        status: true,
+        visibility: true,
+        reportedByUnitId: true,
+        reportedAt: true,
+        plannedDate: true,
+        resolvedAt: true,
+        assignedTo: true,
+      },
+    }),
   ]);
+
+  const toIncidentItem = (
+    inc: (typeof allIncidents)[number]
+  ): UnitReportIncidentItem => ({
+    id: inc.id,
+    code: inc.code,
+    title: inc.title,
+    location: inc.location,
+    priority: inc.priority,
+    status: inc.status,
+    visibility: inc.visibility,
+    reportedAt: inc.reportedAt.toISOString().slice(0, 10),
+    plannedDate: inc.plannedDate ? inc.plannedDate.toISOString().slice(0, 10) : null,
+    resolvedAt: inc.resolvedAt ? inc.resolvedAt.toISOString().slice(0, 10) : null,
+    assignedTo: inc.assignedTo,
+  });
 
   const gridYears: number[] = [];
   for (let y = 2024; y <= targetYear; y++) {
@@ -281,6 +319,15 @@ export async function buildUnitReportsData({
         })),
       })),
       autoNotes: autoNotes.join('\n'),
+      unitIncidents: allIncidents
+        .filter((inc) => inc.reportedByUnitId === unit.id)
+        .map(toIncidentItem),
+      globalIncidents: allIncidents
+        .filter(
+          (inc) => inc.visibility !== 'unit_private' && inc.reportedByUnitId !== unit.id
+        )
+        .slice(0, 15)
+        .map(toIncidentItem),
     };
   });
 

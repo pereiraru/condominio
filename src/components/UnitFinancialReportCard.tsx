@@ -1,8 +1,9 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import type { UnitReportItem } from '@/app/dashboard/admin/budgets/types';
+import type { UnitReportIncidentItem, UnitReportItem } from '@/app/dashboard/admin/budgets/types';
 import { fmtEur, formatUnitLabel } from '@/app/dashboard/admin/budgets/utils';
+import { LOCATION_LABEL_MAP, STATUS_STYLE_MAP } from '@/lib/incidentConstants';
 
 interface UnitFinancialReportCardProps {
   unit: UnitReportItem;
@@ -428,6 +429,66 @@ export default function UnitFinancialReportCard({
             </table>
           </div>
         )}
+      </div>
+
+      {/* Incidents: Unit + Global */}
+      <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+        {[
+          {
+            title: `Anomalias da Fração ${unit.code}`,
+            emptyText: 'Sem anomalias registadas por esta fração.',
+            items: unit.unitIncidents || [],
+          },
+          {
+            title: 'Anomalias Globais do Edifício',
+            emptyText: 'Sem outras anomalias públicas registadas no edifício.',
+            items: unit.globalIncidents || [],
+          },
+        ].map((section) => (
+          <div key={section.title} className="rounded-xl border border-gray-200 p-4 bg-gray-50/40">
+            <h3 className="text-xs font-bold text-gray-800 uppercase tracking-wider mb-2.5">
+              {section.title} ({section.items.length})
+            </h3>
+            {section.items.length === 0 ? (
+              <p className="text-xs text-gray-500 italic">{section.emptyText}</p>
+            ) : (
+              <div className="space-y-2">
+                {section.items.map((inc: UnitReportIncidentItem) => {
+                  const statusMeta = STATUS_STYLE_MAP[inc.status] || STATUS_STYLE_MAP.open;
+                  return (
+                    <div
+                      key={inc.id}
+                      className="bg-white rounded-lg border border-gray-200 px-3 py-2 text-xs"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <span className="font-mono text-[10px] font-bold px-1.5 py-0.5 rounded bg-gray-100 text-gray-700">
+                            {inc.code}
+                          </span>
+                          <span className="font-bold text-gray-900 truncate">{inc.title}</span>
+                        </div>
+                        <span
+                          className={`text-[10px] font-bold px-2 py-0.5 rounded-full border shrink-0 ${statusMeta.pillClass}`}
+                        >
+                          {statusMeta.label}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-gray-500 mt-1">
+                        {LOCATION_LABEL_MAP[inc.location] || inc.location} ·{' '}
+                        {inc.assignedTo || 'Administração'} ·{' '}
+                        {inc.resolvedAt
+                          ? `Resolvido em ${inc.resolvedAt}`
+                          : inc.plannedDate
+                            ? `Previsto: ${inc.plannedDate}`
+                            : `Reporte: ${inc.reportedAt}`}
+                      </p>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        ))}
       </div>
     </div>
   );

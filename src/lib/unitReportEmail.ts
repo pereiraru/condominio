@@ -5,8 +5,51 @@ import {
   resolveTransportConfig,
   type NotificationDispatchResult,
 } from '@/lib/incidentNotifications';
-import type { UnitReportItem } from '@/app/dashboard/admin/budgets/types';
+import type { UnitReportIncidentItem, UnitReportItem } from '@/app/dashboard/admin/budgets/types';
 import { fmtEur, formatUnitLabel } from '@/app/dashboard/admin/budgets/utils';
+import { LOCATION_LABEL_MAP, STATUS_STYLE_MAP } from '@/lib/incidentConstants';
+
+function renderIncidentsEmailSection(
+  heading: string,
+  emptyText: string,
+  items: UnitReportIncidentItem[]
+): string {
+  const rowsHtml =
+    items.length > 0
+      ? items
+          .map((inc) => {
+            const locLabel = LOCATION_LABEL_MAP[inc.location] || inc.location;
+            const statusLabel = STATUS_STYLE_MAP[inc.status]?.label || inc.status;
+            const dateDetail = inc.resolvedAt
+              ? `Resolvido: ${inc.resolvedAt}`
+              : inc.plannedDate
+                ? `Previsto: ${inc.plannedDate}`
+                : `Reporte: ${inc.reportedAt}`;
+            return `<tr>
+              <td style="padding:5px 8px;border:1px solid #e5e7eb;font-size:11px;font-family:monospace;white-space:nowrap;">${escapeHtml(inc.code)}</td>
+              <td style="padding:5px 8px;border:1px solid #e5e7eb;font-size:11px;"><strong>${escapeHtml(inc.title)}</strong><br/><span style="color:#6b7280;font-size:10px;">${escapeHtml(locLabel)} · ${escapeHtml(inc.assignedTo || 'Administração')}</span></td>
+              <td style="padding:5px 8px;border:1px solid #e5e7eb;font-size:11px;white-space:nowrap;">${escapeHtml(statusLabel)}</td>
+              <td style="padding:5px 8px;border:1px solid #e5e7eb;font-size:11px;color:#4b5563;white-space:nowrap;">${escapeHtml(dateDetail)}</td>
+            </tr>`;
+          })
+          .join('')
+      : `<tr><td colspan="4" style="padding:8px;border:1px solid #e5e7eb;text-align:center;color:#6b7280;font-size:11px;">${escapeHtml(emptyText)}</td></tr>`;
+
+  return `
+    <h3 style="font-size:12px;text-transform:uppercase;color:#374151;margin:0 0 8px;">${escapeHtml(heading)} (${items.length})</h3>
+    <table style="width:100%;border-collapse:collapse;margin-bottom:16px;">
+      <thead>
+        <tr>
+          <th style="padding:6px 8px;border:1px solid #d1d5db;background:#f9fafb;text-align:left;font-size:11px;width:95px;">Código</th>
+          <th style="padding:6px 8px;border:1px solid #d1d5db;background:#f9fafb;text-align:left;font-size:11px;">Assunto / Zona / Responsável</th>
+          <th style="padding:6px 8px;border:1px solid #d1d5db;background:#f9fafb;text-align:left;font-size:11px;width:105px;">Estado</th>
+          <th style="padding:6px 8px;border:1px solid #d1d5db;background:#f9fafb;text-align:left;font-size:11px;width:130px;">Data</th>
+        </tr>
+      </thead>
+      <tbody>${rowsHtml}</tbody>
+    </table>
+  `;
+}
 
 export async function sendUnitFinancialReportEmail({
   unit,
@@ -156,6 +199,20 @@ export async function sendUnitFinancialReportEmail({
             .join('')
         : `<tr><td colspan="4" style="padding:10px;border:1px solid #e5e7eb;text-align:center;color:#6b7280;font-size:12px;">Sem pagamentos registados entre 2024 e ${year}.</td></tr>`;
 
+    const unitIncidents = unit.unitIncidents || [];
+    const globalIncidents = unit.globalIncidents || [];
+    const incidentsHtml =
+      renderIncidentsEmailSection(
+        `Anomalias da Fração ${unit.code}`,
+        'Sem anomalias registadas por esta fração.',
+        unitIncidents
+      ) +
+      renderIncidentsEmailSection(
+        'Anomalias Globais do Edifício',
+        'Sem outras anomalias públicas registadas no edifício.',
+        globalIncidents
+      );
+
     const html = `
       <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:780px;margin:0 auto;color:#111827;">
         <div style="background:#111827;color:#ffffff;padding:18px 24px;border-radius:12px 12px 0 0;">
@@ -201,6 +258,8 @@ export async function sendUnitFinancialReportEmail({
           </table>
           ${unit.payments.length > 25 ? `<p style="font-size:11px;color:#6b7280;margin:0 0 14px;">A mostrar os 25 pagamentos mais recentes de ${unit.payments.length}. Consulte o histórico completo no portal.</p>` : ''}
 
+          ${incidentsHtml}
+
           <div style="margin-top:16px;">
             <a href="${escapeHtml(unitUrl)}" style="display:inline-block;background:#111827;color:#ffffff;text-decoration:none;padding:10px 18px;border-radius:8px;font-size:13px;font-weight:600;">
               Ver Fração ${escapeHtml(unit.code)} no Portal
@@ -209,6 +268,17 @@ export async function sendUnitFinancialReportEmail({
         </div>
       </div>
     `;
+
+    const formatIncidentsText = (label: string, items: UnitReportIncidentItem[]) => [
+      `${label} (${items.length}):`,
+      ...(items.length > 0
+        ? items.map(
+            (i) =>
+              `- [${i.code}] ${i.title} (${STATUS_STYLE_MAP[i.status]?.label || i.status}) — ${i.assignedTo || 'Administração'}`
+          )
+        : ['- Nenhuma registada.']),
+      '',
+    ];
 
     const text = [
       `Situação Financeira — Fração ${unit.code} (${unitLabel})`,
@@ -222,6 +292,8 @@ export async function sendUnitFinancialReportEmail({
       'Esclarecimentos:',
       notesText,
       '',
+      ...formatIncidentsText(`Anomalias da Fração ${unit.code}`, unitIncidents),
+      ...formatIncidentsText('Anomalias Globais do Edifício', globalIncidents),
       `Portal: ${unitUrl}`,
     ].join('\n');
 
