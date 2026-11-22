@@ -392,7 +392,7 @@ export default function ConvocatoriaTab({
   );
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 print:space-y-0">
       {/* Editor Controls (hidden on print) */}
       <div className="no-print card space-y-5">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
@@ -785,8 +785,8 @@ export default function ConvocatoriaTab({
 
       {/* Standalone Printable Attendance Sign-in Sheet (only visible when printing attendance sheet) */}
       {printMode === 'attendance' && (
-        <div className="hidden print:block">
-          <div className="report-container bg-white p-2 text-gray-900">
+        <div className="hidden print:block print:mt-0">
+          <div className="report-container bg-white p-2 print:p-0 text-gray-900">
             <AttendanceSheetView
               buildingName={buildingName}
               actaNumber={actaNumber}
