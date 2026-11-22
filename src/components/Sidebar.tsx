@@ -58,7 +58,7 @@ const adminItems = [
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
     </svg>
   )},
-  { href: '/dashboard/admin/budgets', label: 'Orçamentos', icon: (
+  { href: '/dashboard/admin/budgets', label: 'Administração', icon: (
     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" />
     </svg>
@@ -76,7 +76,7 @@ export default function Sidebar() {
   const visibleItems = menuItems.filter((item) => !item.adminOnly || isAdmin);
 
   return (
-    <aside className="sidebar">
+    <aside className="sidebar print:hidden">
       <div className="p-6">
         <h1 className="text-xl font-semibold text-white">Condominio</h1>
         <p className="text-xs text-gray-500 mt-1">Gestao de Condominio</p>

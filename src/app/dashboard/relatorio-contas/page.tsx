@@ -39,9 +39,9 @@ export default function RelatorioContasPage() {
   }, [year]);
 
   return (
-    <div className="flex min-h-screen">
+    <div className="print-page-wrapper flex min-h-screen">
       <Sidebar />
-      <main className="flex-1 p-8 print:p-4">
+      <main className="flex-1 p-8 print:p-0">
         {/* Controls - hidden on print */}
         <div className="no-print mb-6 flex items-center justify-between">
           <div className="flex items-center gap-4">

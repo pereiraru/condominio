@@ -88,47 +88,73 @@ th {
   font-weight: 500;
 }
 
-/* Print styles for Relatório de Contas */
+/* Print styles for Relatório de Contas and Administration documents */
 @media print {
-  .sidebar {
-    display: none !important;
-  }
-
-  .no-print {
-    display: none !important;
-  }
-
+  html,
   body {
+    height: auto !important;
+    min-height: 0 !important;
     background: white !important;
+    overflow: visible !important;
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
   }
 
-  main {
+  .sidebar,
+  .no-print {
+    display: none !important;
+  }
+
+  .print-page-wrapper,
+  body .flex.min-h-screen {
+    display: block !important;
+    min-height: 0 !important;
+    height: auto !important;
+    width: 100% !important;
+    overflow: visible !important;
+  }
+
+  .print-page-wrapper > main,
+  body .flex.min-h-screen > main {
+    display: block !important;
+    position: static !important;
+    width: 100% !important;
+    min-height: 0 !important;
+    height: auto !important;
+    overflow: visible !important;
     padding: 0 !important;
     margin: 0 !important;
   }
 
   .report-container {
+    display: block !important;
     box-shadow: none !important;
+    border: none !important;
     border-radius: 0 !important;
     padding: 0 !important;
+    margin: 0 !important;
+    width: 100% !important;
+    overflow: visible !important;
+    background: white !important;
   }
 
   .report-section-break {
+    break-before: page;
     page-break-before: always;
   }
 
   tr {
+    break-inside: avoid;
     page-break-inside: avoid;
   }
 
   table {
+    break-inside: auto;
     page-break-inside: auto;
   }
 
   @page {
-    margin: 1.5cm;
+    margin: 1.2cm;
     size: A4;
   }
 }
