@@ -34,7 +34,7 @@ export default function ConvocatoriaTab({
     `Apresentação e aprovação do orçamento para ${nextYear} e revisão/atualização das quotas mensais${
       projectedAnnualImpact > 0 ? ` (impacto previsto +${fmtEur(projectedAnnualImpact)}/ano)` : ''
     }.`,
-    'Outros assuntos de interesse geral (manutenção do edifício, elevadores, limpeza e eventuais obras/pintura).',
+    'Outros assuntos de interesse geral (manutenção do edifício, elevadores e limpeza).',
     `Eleição da Administração para o exercício de ${nextYear}.`,
   ]);
   const [extraNote, setExtraNote] = useState<string>(

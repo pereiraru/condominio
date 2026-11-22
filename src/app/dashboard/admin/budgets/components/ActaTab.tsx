@@ -45,7 +45,7 @@ export default function ActaTab({
     'Aprovado por maioria dos presentes, entrando os novos valores em vigor no mês seguinte / janeiro.'
   );
   const [ponto4Notes, setPonto4Notes] = useState<string>(
-    '- Análise de orçamentos e planeamento de manutenção/pintura do edifício.\n' +
+    '- Conservação geral e manutenção das partes comuns do edifício.\n' +
       '- Ponto de situação sobre a limpeza do prédio e eventual regularização de limpeza de vidros.\n' +
       '- Verificação do funcionamento dos elevadores, bomba de água e portão da garagem.'
   );

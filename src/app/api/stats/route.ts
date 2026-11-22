@@ -401,7 +401,7 @@ export async function GET() {
       {
         id: 'assembly-upcoming',
         title: `Assembleia Ordinária de Condóminos (${currentYear}/${currentYear + 1})`,
-        message: `Ordem de trabalhos prevista: apresentação de contas de ${currentYear}, orçamento e eventual revisão de quotas para ${currentYear + 1}, planeamento da pintura/manutenção do edifício e eleição da Administração.`,
+        message: `Ordem de trabalhos prevista: apresentação de contas de ${currentYear}, orçamento e eventual revisão de quotas para ${currentYear + 1}, assuntos gerais do edifício e eleição da Administração.`,
         category: 'assembly',
         dateLabel: 'Convocatória em preparação',
       },
@@ -446,17 +446,6 @@ export async function GET() {
 
     // 6. Pending issues & building anomalies feed (no unpaid supplier invoices)
     const pendingIssues: DashboardPendingIssue[] = [
-      {
-        id: 'issue-painting',
-        title: 'Pintura e Conservação do Edifício',
-        description:
-          'Recolha de orçamentos e avaliação da fachada e zonas comuns para deliberação na próxima Assembleia.',
-        category: 'Conservação',
-        status: 'in_analysis',
-        priority: 'high',
-        amount: null,
-        dateLabel: 'Para Assembleia',
-      },
       {
         id: 'issue-equipments',
         title: 'Elevadores, Bomba de Água e Portão da Garagem',
