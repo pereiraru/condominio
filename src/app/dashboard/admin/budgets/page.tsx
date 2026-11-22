@@ -17,8 +17,9 @@ import UnitReportTab from './components/UnitReportTab';
 import ConvocatoriaTab from './components/ConvocatoriaTab';
 import ActaTab from './components/ActaTab';
 import NotificationConfigTab from './components/NotificationConfigTab';
+import UsersManagerPanel from '@/components/UsersManagerPanel';
 
-type AdminTab = 'budgets' | 'units' | 'convocatoria' | 'acta' | 'notificacoes';
+type AdminTab = 'budgets' | 'units' | 'convocatoria' | 'acta' | 'notificacoes' | 'utilizadores';
 
 export default function AdministrationCenterPage() {
   const { data: session, status } = useSession();
@@ -161,6 +162,7 @@ export default function AdministrationCenterPage() {
                 { id: 'units' as const, label: 'Relatório por Fração' },
                 { id: 'convocatoria' as const, label: 'Convocatória' },
                 { id: 'acta' as const, label: 'Ata da Reunião' },
+                { id: 'utilizadores' as const, label: 'Utilizadores & Acessos' },
                 { id: 'notificacoes' as const, label: 'Notificações & Email' },
               ].map((tab) => (
                 <button
@@ -226,6 +228,8 @@ export default function AdministrationCenterPage() {
                   feeSimConfig={feeSimConfig}
                 />
               )}
+
+              {activeTab === 'utilizadores' && <UsersManagerPanel />}
 
               {activeTab === 'notificacoes' && <NotificationConfigTab />}
             </>

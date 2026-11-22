@@ -7,6 +7,7 @@ declare module 'next-auth' {
     unitId: string | null;
     unitCode?: string;
     ownerId?: string | null;
+    mustChangePassword?: boolean;
   }
 
   interface Session {
@@ -18,6 +19,7 @@ declare module 'next-auth' {
       unitId: string | null;
       unitCode?: string;
       ownerId?: string | null;
+      mustChangePassword?: boolean;
     };
   }
 }
@@ -29,5 +31,6 @@ declare module 'next-auth/jwt' {
     unitId: string | null;
     unitCode?: string;
     ownerId?: string | null;
+    mustChangePassword?: boolean;
   }
 }

@@ -3,6 +3,13 @@ import { getServerSession } from 'next-auth';
 import bcrypt from 'bcrypt';
 import { prisma } from '@/lib/prisma';
 import { authOptions } from '@/lib/auth';
+import {
+  generateInitialPassword,
+  isPlaceholderEmail,
+  sendAccountCredentialsEmail,
+} from '@/lib/accountEmails';
+
+export const dynamic = 'force-dynamic';
 
 // GET /api/users - List all users (admin only)
 export async function GET() {
@@ -20,15 +27,18 @@ export async function GET() {
         name: true,
         role: true,
         unitId: true,
+        mustChangePassword: true,
         lastLogin: true,
         createdAt: true,
         unit: {
           select: {
+            id: true,
             code: true,
+            email: true,
           },
         },
       },
-      orderBy: { createdAt: 'desc' },
+      orderBy: [{ role: 'asc' }, { createdAt: 'desc' }],
     });
 
     return NextResponse.json(users);
@@ -48,44 +58,65 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { email, password, name, role, unitId } = body;
+    const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : '';
+    const { name, role, unitId } = body;
+    const mustChangePassword =
+      body.mustChangePassword !== undefined ? Boolean(body.mustChangePassword) : true;
+    const sendCredentialsEmail = Boolean(body.sendCredentialsEmail);
+    const notifyEmail =
+      typeof body.notifyEmail === 'string' && body.notifyEmail.trim()
+        ? body.notifyEmail.trim().toLowerCase()
+        : null;
 
-    if (!email || !password) {
-      return NextResponse.json(
-        { error: 'Email and password are required' },
-        { status: 400 }
-      );
+    if (!email) {
+      return NextResponse.json({ error: 'O email de login é obrigatório.' }, { status: 400 });
     }
 
-    // Check if email already exists
     const existing = await prisma.user.findUnique({ where: { email } });
     if (existing) {
-      return NextResponse.json(
-        { error: 'Email already exists' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: 'Este email já está registado.' }, { status: 400 });
     }
 
-    // Check if unit already has a user
+    let unitCode: string | null = null;
     if (unitId) {
-      const unitUser = await prisma.user.findUnique({ where: { unitId } });
-      if (unitUser) {
+      const unitRecord = await prisma.unit.findUnique({
+        where: { id: unitId },
+        include: { user: { select: { id: true } } },
+      });
+      if (!unitRecord) {
+        return NextResponse.json({ error: 'Fração não encontrada.' }, { status: 404 });
+      }
+      if (unitRecord.user) {
         return NextResponse.json(
-          { error: 'This unit already has a user assigned' },
+          { error: 'Esta fração já tem um utilizador associado.' },
           { status: 400 }
         );
       }
+      unitCode = unitRecord.code;
     }
 
-    const passwordHash = await bcrypt.hash(password, 10);
+    const rawPassword =
+      typeof body.password === 'string' && body.password.trim()
+        ? body.password.trim()
+        : generateInitialPassword(unitCode);
+
+    if (rawPassword.length < 6) {
+      return NextResponse.json(
+        { error: 'A password inicial deve ter pelo menos 6 caracteres.' },
+        { status: 400 }
+      );
+    }
+
+    const passwordHash = await bcrypt.hash(rawPassword, 10);
 
     const user = await prisma.user.create({
       data: {
         email,
         passwordHash,
-        name: name || null,
-        role: role || 'user',
+        name: typeof name === 'string' && name.trim() ? name.trim() : null,
+        role: role === 'admin' ? 'admin' : 'user',
         unitId: unitId || null,
+        mustChangePassword,
       },
       select: {
         id: true,
@@ -93,16 +124,39 @@ export async function POST(request: NextRequest) {
         name: true,
         role: true,
         unitId: true,
+        mustChangePassword: true,
+        lastLogin: true,
         createdAt: true,
         unit: {
           select: {
+            id: true,
             code: true,
+            email: true,
           },
         },
       },
     });
 
-    return NextResponse.json(user, { status: 201 });
+    let notification = null;
+    const deliveryTarget = notifyEmail || (!isPlaceholderEmail(email) ? email : null);
+    if (sendCredentialsEmail && deliveryTarget) {
+      notification = await sendAccountCredentialsEmail({
+        toEmail: deliveryTarget,
+        loginEmail: user.email,
+        temporaryPassword: rawPassword,
+        userName: user.name,
+        unitCode: user.unit?.code || null,
+      });
+    }
+
+    return NextResponse.json(
+      {
+        ...user,
+        generatedPassword: rawPassword,
+        notification,
+      },
+      { status: 201 }
+    );
   } catch (error) {
     console.error('Error creating user:', error);
     return NextResponse.json({ error: 'Failed to create user' }, { status: 500 });

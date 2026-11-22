@@ -6,6 +6,15 @@ export default withAuth(
     const token = req.nextauth.token;
     const pathname = req.nextUrl.pathname;
 
+    // Force password change on first login
+    if (
+      token?.mustChangePassword &&
+      pathname !== '/change-password' &&
+      !pathname.startsWith('/api/')
+    ) {
+      return NextResponse.redirect(new URL('/change-password', req.url));
+    }
+
     // Admin-only routes
     const adminRoutes = ['/dashboard/admin', '/api/users'];
     const isAdminRoute = adminRoutes.some((route) => pathname.startsWith(route));
@@ -25,5 +34,5 @@ export default withAuth(
 );
 
 export const config = {
-  matcher: ['/dashboard/:path*', '/api/users/:path*'],
+  matcher: ['/dashboard/:path*', '/change-password', '/api/users/:path*'],
 };
