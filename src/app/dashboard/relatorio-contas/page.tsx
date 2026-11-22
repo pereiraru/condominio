@@ -39,11 +39,12 @@ export default function RelatorioContasPage() {
   }, [year]);
 
   return (
-    <div className="print-page-wrapper flex min-h-screen">
+    <div className="print-page-wrapper app-shell">
       <Sidebar />
-      <main className="flex-1 p-8 print:p-0">
+      <main className="app-main">
+        <div className="app-container-doc">
         {/* Controls - hidden on print */}
-        <div className="no-print mb-6 flex items-center justify-between">
+        <div className="no-print mb-6 flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-4">
             <button
               onClick={() => setYear(year - 1)}
@@ -93,7 +94,7 @@ export default function RelatorioContasPage() {
 
         {/* Report Content */}
         {data && !loading && (
-          <div className="report-container bg-white print:shadow-none rounded-lg shadow-sm p-8 print:p-0">
+          <div className="report-container bg-white print:shadow-none rounded-2xl border border-slate-200/80 shadow-sm p-4 sm:p-8 print:p-0 overflow-x-auto print:overflow-visible">
             <ReportHeader
               buildingName={data.buildingName}
               title="BALANCETE DE RECEITAS E DESPESAS"
@@ -149,6 +150,7 @@ export default function RelatorioContasPage() {
             </div>
           </div>
         )}
+        </div>
       </main>
     </div>
   );

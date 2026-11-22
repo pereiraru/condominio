@@ -75,19 +75,25 @@ export default function DocumentsPage() {
   };
 
   return (
-    <div className="flex min-h-screen">
+    <div className="app-shell">
       <Sidebar />
 
-      <main className="flex-1 p-8">
-        <div className="flex justify-between items-center mb-6">
-          <h1 className="text-2xl font-semibold text-gray-900">Documentos</h1>
-          <button
-            onClick={() => setShowUpload(!showUpload)}
-            className="btn-primary"
-          >
-            + Carregar Documento
-          </button>
-        </div>
+      <main className="app-main">
+        <div className="app-container space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight">Documentos</h1>
+              <p className="text-sm text-slate-500 mt-1">
+                Ficheiros carregados na categoria <strong className="text-slate-700">Ata</strong> ficam automaticamente acessíveis para consulta aos condóminos em <strong className="text-slate-700">Atas</strong>.
+              </p>
+            </div>
+            <button
+              onClick={() => setShowUpload(!showUpload)}
+              className="btn-primary self-start sm:self-auto"
+            >
+              + Carregar Documento
+            </button>
+          </div>
 
         {showUpload && (
           <form onSubmit={handleUpload} className="card mb-6">
@@ -202,6 +208,7 @@ export default function DocumentsPage() {
             )}
           </div>
         )}
+        </div>
       </main>
     </div>
   );

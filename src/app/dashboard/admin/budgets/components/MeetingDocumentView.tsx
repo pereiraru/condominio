@@ -109,6 +109,7 @@ export default function MeetingDocumentView({
           </p>
           {annualReport ? (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="overflow-x-auto print:overflow-visible">
               <table className="w-full border-collapse border border-gray-300">
                 <thead>
                   <tr className="bg-gray-100 border-b border-gray-300 font-bold">
@@ -139,7 +140,9 @@ export default function MeetingDocumentView({
                   </tr>
                 </tbody>
               </table>
+              </div>
 
+              <div className="overflow-x-auto print:overflow-visible">
               <table className="w-full border-collapse border border-gray-300">
                 <thead>
                   <tr className="bg-gray-100 border-b border-gray-300 font-bold">
@@ -172,6 +175,7 @@ export default function MeetingDocumentView({
                   </tr>
                 </tbody>
               </table>
+              </div>
             </div>
           ) : (
             <p className="italic text-gray-500">Resumo de contas não carregado.</p>
@@ -197,6 +201,7 @@ export default function MeetingDocumentView({
               <p className="leading-relaxed text-justify">
                 Foram analisados e validados os valores em dívida registados à data por fração autónoma, discriminados por período:
               </p>
+              <div className="overflow-x-auto print:overflow-visible">
               <table className="w-full border-collapse border border-gray-300">
                 <thead>
                   <tr className="bg-gray-100 border-b border-gray-300 font-bold">
@@ -233,6 +238,7 @@ export default function MeetingDocumentView({
                   </tr>
                 </tbody>
               </table>
+              </div>
             </>
           )}
           <p className="text-[11px] italic text-gray-700 leading-relaxed">
@@ -262,6 +268,7 @@ export default function MeetingDocumentView({
             </strong>
             ):
           </p>
+          <div className="overflow-x-auto print:overflow-visible">
           <table className="w-full border-collapse border border-gray-300">
             <thead>
               <tr className="bg-gray-100 border-b border-gray-300 font-bold">
@@ -284,6 +291,7 @@ export default function MeetingDocumentView({
               ))}
             </tbody>
           </table>
+          </div>
         </div>
       );
     }
@@ -303,7 +311,7 @@ export default function MeetingDocumentView({
   const hasCustomAdmin = !isPlaceholderAdminNames(newAdminNames);
 
   return (
-    <div className="report-container bg-white rounded-2xl shadow-sm p-10 print:p-2 border border-gray-200 print:border-none max-w-4xl mx-auto text-gray-900 space-y-6">
+    <div className="report-container bg-white rounded-2xl shadow-sm p-4 sm:p-8 lg:p-10 print:p-2 border border-gray-200 print:border-none max-w-4xl mx-auto text-gray-900 space-y-6">
       {/* Title */}
       <div className="text-center border-b-2 border-gray-800 pb-4">
         <p className="text-xs font-bold uppercase tracking-widest text-gray-600">
@@ -442,6 +450,7 @@ export default function MeetingDocumentView({
         <h2 className="text-sm font-black uppercase border-b-2 border-gray-800 pb-1">
           Quadro Resumo das Decisões Tomadas
         </h2>
+        <div className="overflow-x-auto print:overflow-visible">
         <table className="w-full text-xs border-collapse border border-gray-300">
           <thead>
             <tr className="bg-gray-100 border-b border-gray-300 font-bold">
@@ -490,6 +499,7 @@ export default function MeetingDocumentView({
             )}
           </tbody>
         </table>
+        </div>
       </div>
 
       {/* Action Plan & Responsibilities */}
@@ -498,6 +508,7 @@ export default function MeetingDocumentView({
           Plano de Ações e Responsabilidades
         </h2>
         {templateMode === 'blank' ? (
+          <div className="overflow-x-auto print:overflow-visible">
           <table className="w-full text-xs border-collapse border border-gray-300">
             <thead>
               <tr className="bg-gray-100 border-b border-gray-300 font-bold">
@@ -522,11 +533,13 @@ export default function MeetingDocumentView({
               ))}
             </tbody>
           </table>
+          </div>
         ) : actionItems.length === 0 ? (
           <p className="text-xs italic text-gray-600">
             Não foram registadas ações operacionais pendentes nesta sessão.
           </p>
         ) : (
+          <div className="overflow-x-auto print:overflow-visible">
           <table className="w-full text-xs border-collapse border border-gray-300">
             <thead>
               <tr className="bg-gray-100 border-b border-gray-300 font-bold">
@@ -576,6 +589,7 @@ export default function MeetingDocumentView({
               })}
             </tbody>
           </table>
+          </div>
         )}
       </div>
 

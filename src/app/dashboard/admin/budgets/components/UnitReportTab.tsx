@@ -130,7 +130,7 @@ export default function UnitReportTab({ units, year, buildingName }: UnitReportT
           <div>
             <label className="label text-xs">Selecionar Fração</label>
             <select
-              className="input h-10 text-sm w-64"
+              className="input h-10 text-sm w-full sm:w-72"
               value={selectedCode}
               onChange={(e) => setSelectedCode(e.target.value)}
             >

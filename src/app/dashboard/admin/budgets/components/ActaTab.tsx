@@ -127,6 +127,7 @@ export default function ActaTab({
   const [feedback, setFeedback] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
   const [generatedBanner, setGeneratedBanner] = useState<string | null>(null);
   const [printMode, setPrintMode] = useState<'full' | 'attendance'>('full');
+  const [viewMode, setViewMode] = useState<'both' | 'editor' | 'preview'>('both');
 
   const [showEmailPanel, setShowEmailPanel] = useState(false);
   const [emailMode, setEmailMode] = useState<'all_units' | 'custom'>('all_units');
@@ -416,6 +417,7 @@ export default function ActaTab({
 
       if (targetStatus === 'finalized') {
         setTemplateMode('filled');
+        setViewMode((prev) => (prev === 'editor' ? 'both' : prev));
         const msg = `Reunião / Ata N.º ${saved.actaNumber} gerada e guardada com sucesso (${discussionPoints.length} pontos discutidos, ${decisionsCount} decisões, ${actionItems.length} ações).`;
         setGeneratedBanner(msg);
         setFeedback({ type: 'ok', text: msg });
@@ -526,6 +528,24 @@ export default function ActaTab({
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
+              <div className="flex rounded-xl overflow-hidden border border-slate-200 bg-slate-100 p-0.5">
+                {[
+                  { id: 'both' as const, label: 'Editar & Ata' },
+                  { id: 'editor' as const, label: 'Só Edição' },
+                  { id: 'preview' as const, label: 'Só Ata Final' },
+                ].map((vm) => (
+                  <button
+                    key={vm.id}
+                    type="button"
+                    onClick={() => setViewMode(vm.id)}
+                    className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition-colors ${
+                      viewMode === vm.id ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600'
+                    }`}
+                  >
+                    {vm.label}
+                  </button>
+                ))}
+              </div>
               <div className="flex rounded-xl overflow-hidden border border-gray-200 bg-gray-100 p-0.5">
                 <button
                   type="button"
@@ -570,7 +590,7 @@ export default function ActaTab({
             <div className="flex flex-wrap items-center gap-2">
               <label className="text-xs font-semibold text-gray-600">Reunião guardada:</label>
               <select
-                className="input h-9 text-xs w-auto min-w-[260px]"
+                className="input h-9 text-xs w-full sm:w-auto sm:min-w-[260px]"
                 value={selectedMeetingId || '__new__'}
                 onChange={(e) => {
                   const val = e.target.value;
@@ -635,7 +655,8 @@ export default function ActaTab({
           )}
         </div>
 
-        {/* Section 1: Metadata + Attendance */}
+        {/* Section 1: Metadata + Attendance (hidden in preview-only mode) */}
+        <div className={viewMode === 'preview' ? 'hidden' : 'space-y-6'}>
         <div className="card space-y-5">
           <h3 className="text-base font-bold text-gray-900">1. Dados da Sessão e Presenças</h3>
 
@@ -1284,10 +1305,14 @@ export default function ActaTab({
             </div>
           </div>
         </div>
+        </div>
       </div>
 
       {/* Generated Document Toolbar & Email Panel (hidden on print) */}
-      <div ref={documentSectionRef} className="no-print max-w-4xl mx-auto space-y-3">
+      <div
+        ref={documentSectionRef}
+        className={viewMode === 'editor' ? 'hidden' : 'no-print max-w-4xl mx-auto space-y-3'}
+      >
         {generatedBanner && (
           <div className="px-4 py-3 rounded-2xl bg-emerald-50 border border-emerald-300 text-emerald-900 text-xs font-semibold">
             {generatedBanner}
@@ -1413,7 +1438,15 @@ export default function ActaTab({
       </div>
 
       {/* Printable Official Minutes (ACTA) */}
-      <div className={printMode === 'attendance' ? 'no-print' : ''}>
+      <div
+        className={
+          printMode === 'attendance'
+            ? 'no-print'
+            : viewMode === 'editor'
+            ? 'hidden print:block'
+            : ''
+        }
+      >
         <MeetingDocumentView
           year={year}
           buildingName={buildingName}

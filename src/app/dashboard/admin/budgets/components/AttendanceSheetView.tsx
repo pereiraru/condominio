@@ -104,6 +104,7 @@ export default function AttendanceSheetView({
         </h2>
       )}
 
+      <div className="overflow-x-auto print:overflow-visible">
       <table className="w-full text-xs border-collapse border border-gray-400">
         <thead>
           <tr className="bg-gray-100 border-b border-gray-400 font-bold">
@@ -180,8 +181,9 @@ export default function AttendanceSheetView({
           </tr>
         </tbody>
       </table>
+      </div>
 
-      <div className="grid grid-cols-2 gap-16 pt-8 text-center text-xs">
+      <div className="grid grid-cols-1 sm:grid-cols-2 print:grid-cols-2 gap-8 sm:gap-16 print:gap-16 pt-8 text-center text-xs">
         <div>
           <div className="border-t border-gray-800 pt-2 mx-auto w-60 font-bold uppercase">
             O Presidente da Mesa / Administração

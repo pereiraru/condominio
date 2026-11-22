@@ -3,8 +3,8 @@ import './globals.css';
 import AuthProvider from '@/components/AuthProvider';
 
 export const metadata: Metadata = {
-  title: 'Condominio - Gestao de Condominio',
-  description: 'Sistema de gestao de condominio - despesas, pagamentos e documentos',
+  title: 'Condomínio — Rua Vieira da Silva, n.º 6',
+  description: 'Portal de gestão do condomínio — situação financeira, anomalias, atas e administração',
 };
 
 export default function RootLayout({

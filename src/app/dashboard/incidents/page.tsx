@@ -88,11 +88,11 @@ function IncidentsPageContent() {
   ).length;
 
   return (
-    <div className="flex min-h-screen bg-gray-50/50">
+    <div className="app-shell">
       <Sidebar />
 
-      <main className="flex-1 p-6 md:p-8">
-        <div className="max-w-7xl mx-auto">
+      <main className="app-main">
+        <div className="app-container">
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
             <div>
               <h1 className="text-3xl font-bold text-gray-900 tracking-tight">
@@ -145,7 +145,7 @@ function IncidentsPageContent() {
               />
             </div>
 
-            <div className="flex flex-wrap gap-1.5 bg-gray-200/70 p-1 rounded-xl w-fit">
+            <div className="flex gap-1.5 bg-slate-200/70 p-1 rounded-xl overflow-x-auto max-w-full">
               {[
                 { id: 'all' as const, label: `Todos (${incidents.length})` },
                 { id: 'active' as const, label: `Em Aberto (${activeCount})` },
@@ -157,10 +157,10 @@ function IncidentsPageContent() {
                   key={tab.id}
                   type="button"
                   onClick={() => setStatusFilter(tab.id)}
-                  className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                  className={`px-3.5 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-all ${
                     statusFilter === tab.id
-                      ? 'bg-white text-gray-900 shadow-sm'
-                      : 'text-gray-600 hover:text-gray-900'
+                      ? 'bg-white text-slate-900 shadow-sm'
+                      : 'text-slate-600 hover:text-slate-900'
                   }`}
                 >
                   {tab.label}

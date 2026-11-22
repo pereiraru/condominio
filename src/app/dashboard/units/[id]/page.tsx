@@ -383,7 +383,7 @@ export default function UnitDetailV2Page() {
     }, 100);
   };
 
-  if (loading) return <div className="flex min-h-screen"><Sidebar /><main className="flex-1 p-8 text-gray-500">A carregar...</main></div>;
+  if (loading) return <div className="app-shell"><Sidebar /><main className="app-main text-slate-500">A carregar...</main></div>;
   if (!unit) return null;
 
   const currentOwnerLocal = owners.find(o => !o.endMonth) || owners[0];
@@ -404,11 +404,11 @@ export default function UnitDetailV2Page() {
   ];
 
   return (
-    <div className="print-page-wrapper flex min-h-screen bg-gray-50/50">
+    <div className="print-page-wrapper app-shell">
       <Sidebar />
 
-      <main className="flex-1 p-8 print:p-0">
-        <div className="max-w-7xl mx-auto print:max-w-none">
+      <main className="app-main">
+        <div className="app-container">
           {/* Header */}
           <div className="no-print flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
             <div className="flex items-center gap-4">
@@ -437,7 +437,7 @@ export default function UnitDetailV2Page() {
                 </svg>
                 Voltar
               </button>
-              {isAdmin && (
+              {isAdmin && (activeTab === 'geral' || activeTab === 'config') && (
                 <button 
                   onClick={handleSave}
                   disabled={saving}
@@ -450,15 +450,15 @@ export default function UnitDetailV2Page() {
           </div>
 
           {/* Navigation Tabs */}
-          <div className="no-print flex flex-wrap gap-1 mb-8 bg-gray-200/50 p-1.5 rounded-2xl w-fit">
+          <div className="no-print flex gap-1 mb-6 sm:mb-8 bg-slate-200/70 p-1.5 rounded-2xl overflow-x-auto max-w-full">
             {visibleTabs.map((tab) => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id as TabType)}
-                className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-sm font-bold transition-all duration-200 ${
+                className={`flex items-center gap-2 px-4 sm:px-5 py-2.5 rounded-xl text-xs sm:text-sm font-bold whitespace-nowrap transition-all duration-200 ${
                   activeTab === tab.id 
-                    ? 'bg-white text-primary-600 shadow-sm' 
-                    : 'text-gray-500 hover:text-gray-700 hover:bg-white/50'
+                    ? 'bg-white text-slate-900 shadow-sm' 
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
                 }`}
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -733,13 +733,13 @@ export default function UnitDetailV2Page() {
               {extrasSummary.length > 0 && (
                 <div className="flex flex-wrap gap-4">
                   {extrasSummary.map(extra => (
-                    <div key={extra.id} className={`flex-1 min-w-[200px] card border-l-4 ${extra.remaining === 0 ? 'border-l-green-500 bg-green-50/30' : 'border-l-yellow-500 bg-yellow-50/30'}`}>
-                      <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">{extra.description}</p>
-                      <p className={`text-lg font-bold ${extra.remaining === 0 ? 'text-green-700' : 'text-yellow-800'}`}>
-                        {extra.totalPaid.toFixed(2)}€ / {extra.totalExpected.toFixed(2)}€
+                    <div key={extra.id} className={`flex-1 min-w-[200px] card border-l-4 ${extra.remaining === 0 ? 'border-l-emerald-500 bg-emerald-50/30' : 'border-l-amber-500 bg-amber-50/30'}`}>
+                      <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">{extra.description}</p>
+                      <p className={`text-lg font-bold ${extra.remaining === 0 ? 'text-emerald-700' : 'text-amber-800'}`}>
+                        {extra.totalPaid.toFixed(2)} € / {extra.totalExpected.toFixed(2)} €
                       </p>
-                      <p className="text-[10px] font-medium text-gray-400 mt-1">
-                        {extra.remaining === 0 ? 'Totalmente Pago' : `Faltam ${extra.remaining.toFixed(2)}€`}
+                      <p className="text-[10px] font-medium text-slate-500 mt-1">
+                        {extra.remaining === 0 ? 'Totalmente Pago' : `Faltam ${extra.remaining.toFixed(2)} €`}
                       </p>
                     </div>
                   ))}
@@ -1214,7 +1214,7 @@ export default function UnitDetailV2Page() {
           {/* Overlays / Panels */}
           {historyPanelOpen && (
             <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm z-50 flex justify-end">
-              <div className="w-full max-w-md bg-white h-full shadow-2xl animate-in slide-in-from-right duration-300">
+              <div className="w-full max-w-md bg-white h-full shadow-2xl">
                 <HistoryEditPanel
                   key={historyPanelMonth}
                   unitId={id}
@@ -1230,7 +1230,7 @@ export default function UnitDetailV2Page() {
 
           {selectedTx && (
             <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm z-50 flex justify-end">
-              <div className="w-full max-w-md bg-white h-full shadow-2xl animate-in slide-in-from-right duration-300 overflow-y-auto">
+              <div className="w-full max-w-md bg-white h-full shadow-2xl overflow-y-auto">
                 <TransactionEditPanel
                   transaction={selectedTx}
                   units={allUnits}

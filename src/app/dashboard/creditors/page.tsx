@@ -129,11 +129,11 @@ export default function CreditorsPage() {
   const currentMonthLabel = rawMonth.charAt(0).toUpperCase() + rawMonth.slice(1);
 
   return (
-    <div className="flex min-h-screen bg-gray-50/50">
+    <div className="app-shell">
       <Sidebar />
 
-      <main className="flex-1 p-8">
-        <div className="max-w-7xl mx-auto">
+      <main className="app-main">
+        <div className="app-container">
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
             <div>
               <h1 className="text-3xl font-bold text-gray-900 tracking-tight">Credores</h1>
@@ -356,7 +356,7 @@ export default function CreditorsPage() {
         {/* Modal */}
         {showModal && (
           <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-xl max-h-[90vh] overflow-hidden flex flex-col animate-in fade-in zoom-in duration-200">
+            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-xl max-h-[90vh] overflow-hidden flex flex-col">
               <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
                 <h2 className="text-xl font-bold text-gray-900">Novo Credor</h2>
                 <button onClick={() => setShowModal(false)} className="p-2 hover:bg-gray-200 rounded-full transition-colors">

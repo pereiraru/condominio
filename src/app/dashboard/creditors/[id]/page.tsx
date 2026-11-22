@@ -183,15 +183,15 @@ export default function CreditorDetailPage() {
     finally { setUploadingFile(false); }
   }
 
-  if (loading) return <div className="flex min-h-screen"><Sidebar /><main className="flex-1 p-8 text-gray-500">A carregar...</main></div>;
+  if (loading) return <div className="app-shell"><Sidebar /><main className="app-main text-slate-500">A carregar...</main></div>;
   if (!creditor) return null;
 
   return (
-    <div className="flex min-h-screen bg-gray-50/50">
+    <div className="app-shell">
       <Sidebar />
 
-      <main className="flex-1 p-8">
-        <div className="max-w-7xl mx-auto">
+      <main className="app-main">
+        <div className="app-container">
           {/* Header */}
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
             <div className="flex items-center gap-4">
@@ -510,7 +510,7 @@ export default function CreditorDetailPage() {
 
           {selectedTx && (
             <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm z-50 flex justify-end">
-              <div className="w-full max-w-md bg-white h-full shadow-2xl animate-in slide-in-from-right duration-300 overflow-y-auto">
+              <div className="w-full max-w-md bg-white h-full shadow-2xl overflow-y-auto">
                 <TransactionEditPanel
                   transaction={selectedTx}
                   units={[]}

@@ -890,7 +890,7 @@ function TransactionsContent() {
 
   return (
 
-    <div className="flex min-h-screen">
+    <div className="app-shell">
 
       <Sidebar />
 
@@ -900,7 +900,7 @@ function TransactionsContent() {
 
       {showMappingsPanel && (
 
-        <div className="w-80 bg-white border-r border-gray-100 p-4 overflow-y-auto">
+        <div className="fixed inset-y-0 left-0 z-40 w-80 max-w-[85vw] bg-white border-r border-slate-200 p-4 overflow-y-auto shadow-2xl lg:static lg:z-auto lg:shadow-none">
 
           <div className="flex justify-between items-center mb-4">
 
@@ -1072,7 +1072,8 @@ function TransactionsContent() {
 
 
 
-      <main className="flex-1 p-8">
+      <main className="app-main">
+        <div className="app-container">
 
         <div className="flex justify-between items-center mb-6">
 
@@ -1398,6 +1399,7 @@ function TransactionsContent() {
             </div>
           </div>
         )}
+        </div>
       </main>
     </div>
   );

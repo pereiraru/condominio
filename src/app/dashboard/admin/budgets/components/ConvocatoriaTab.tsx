@@ -451,7 +451,7 @@ export default function ConvocatoriaTab({
           <div className="flex flex-wrap items-center gap-2">
             <label className="text-xs font-semibold text-gray-600">Reunião associada:</label>
             <select
-              className="input h-9 text-xs w-auto min-w-[260px]"
+              className="input h-9 text-xs w-full sm:w-auto sm:min-w-[260px]"
               value={selectedMeetingId || '__new__'}
               onChange={(e) => {
                 const val = e.target.value;
@@ -719,7 +719,7 @@ export default function ConvocatoriaTab({
 
       {/* Printable Official Convocatória Document */}
       <div className={printMode === 'attendance' ? 'no-print' : ''}>
-        <div className="report-container bg-white rounded-2xl shadow-sm p-10 print:p-2 border border-gray-200 print:border-none max-w-4xl mx-auto text-gray-900">
+        <div className="report-container bg-white rounded-2xl shadow-sm p-5 sm:p-10 print:p-2 border border-gray-200 print:border-none max-w-4xl mx-auto text-gray-900">
           <div className="text-center border-b-2 border-gray-800 pb-4 mb-8">
             <p className="text-xs font-bold uppercase tracking-widest text-gray-600">
               Condomínio do Prédio sito na

@@ -3,10 +3,10 @@
 @tailwind utilities;
 
 :root {
-  --foreground-rgb: 0, 0, 0;
-  --background-rgb: 245, 245, 245;
-  --sidebar-bg: 40, 40, 40;
-  --sidebar-text: 200, 200, 200;
+  --foreground-rgb: 15, 23, 42;
+  --background-rgb: 248, 250, 252;
+  --sidebar-bg: 15, 23, 42;
+  --sidebar-text: 203, 213, 225;
   --sidebar-active: 255, 255, 255;
 }
 
@@ -18,44 +18,60 @@ body {
 
 @layer components {
   .btn-primary {
-    @apply inline-flex items-center justify-center gap-2 whitespace-nowrap bg-gray-900 text-white px-5 py-2.5 rounded-xl hover:bg-gray-800 transition-all font-medium shadow-sm h-[42px];
+    @apply inline-flex items-center justify-center gap-2 whitespace-nowrap bg-slate-900 text-white px-5 py-2.5 rounded-xl hover:bg-slate-800 transition-all font-medium shadow-sm h-[42px] disabled:opacity-50;
   }
 
   .btn-secondary {
-    @apply inline-flex items-center justify-center gap-2 whitespace-nowrap bg-white text-gray-700 px-5 py-2.5 rounded-xl hover:bg-gray-50 transition-all font-medium border border-gray-200 shadow-sm h-[42px];
+    @apply inline-flex items-center justify-center gap-2 whitespace-nowrap bg-white text-slate-700 px-5 py-2.5 rounded-xl hover:bg-slate-50 transition-all font-medium border border-slate-200 shadow-sm h-[42px] disabled:opacity-50;
   }
 
   .btn-ghost {
-    @apply inline-flex items-center justify-center gap-2 whitespace-nowrap text-gray-600 px-4 py-2 rounded-xl hover:bg-gray-100 transition-all font-medium;
+    @apply inline-flex items-center justify-center gap-2 whitespace-nowrap text-slate-600 px-4 py-2 rounded-xl hover:bg-slate-100 transition-all font-medium;
   }
 
   .card {
-    @apply bg-white rounded-2xl shadow-sm p-6;
+    @apply bg-white rounded-2xl border border-slate-200/80 shadow-sm p-4 sm:p-6;
   }
 
   .card-hover {
-    @apply bg-white rounded-2xl shadow-sm p-6 transition-all hover:shadow-md cursor-pointer;
+    @apply bg-white rounded-2xl border border-slate-200/80 shadow-sm p-4 sm:p-6 transition-all hover:shadow-md cursor-pointer;
   }
 
   .input {
-    @apply w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-gray-900 focus:border-gray-900 focus:bg-white outline-none transition-all h-[42px];
+    @apply w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-slate-900 focus:border-slate-900 focus:bg-white outline-none transition-all h-[42px];
   }
 
   .label {
-    @apply block text-sm font-medium text-gray-600 mb-1.5;
+    @apply block text-sm font-medium text-slate-600 mb-1.5;
+  }
+
+  .app-shell {
+    @apply flex min-h-screen bg-slate-50;
+  }
+
+  .app-main {
+    @apply flex-1 min-w-0 pt-[68px] pb-24 px-4 sm:px-6 md:pb-8 lg:pt-8 lg:px-8 print:p-0;
+  }
+
+  .app-container {
+    @apply w-full max-w-[1440px] 2xl:max-w-[1640px] mx-auto print:max-w-none;
+  }
+
+  .app-container-doc {
+    @apply w-full max-w-5xl mx-auto print:max-w-none;
   }
 
   .sidebar {
-    @apply w-64 min-h-screen flex flex-col shrink-0;
+    @apply hidden lg:flex lg:sticky lg:top-0 lg:h-screen lg:overflow-y-auto w-64 flex-col shrink-0;
     background: rgb(var(--sidebar-bg));
   }
 
   .sidebar-item {
-    @apply flex items-center gap-3 px-4 py-3 rounded-xl transition-all text-gray-400 hover:text-white hover:bg-white/10;
+    @apply flex items-center gap-3 px-3.5 py-2.5 rounded-xl transition-all text-slate-300 hover:text-white hover:bg-white/10 text-sm;
   }
 
   .sidebar-item-active {
-    @apply flex items-center gap-3 px-4 py-3 rounded-xl transition-all bg-white/10 text-white font-medium;
+    @apply flex items-center gap-3 px-3.5 py-2.5 rounded-xl transition-all bg-white/15 text-white font-semibold text-sm shadow-sm;
   }
 }
 
@@ -115,6 +131,7 @@ th {
   }
 
   .print-page-wrapper > main,
+  .app-shell > main.app-main,
   body .flex.min-h-screen > main {
     display: block !important;
     position: static !important;

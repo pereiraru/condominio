@@ -19,12 +19,12 @@ export default function TransactionList({ transactions, onRowClick, selectedId }
     <div className="overflow-x-auto">
       <table className="w-full">
         <thead>
-          <tr className="text-left text-sm text-gray-400">
-            <th className="pb-4 font-medium">Data</th>
-            <th className="pb-4 font-medium">Descrição</th>
-            <th className="pb-4 font-medium">Fração/Credor</th>
-            <th className="pb-4 font-medium text-center">Estado</th>
-            <th className="pb-4 font-medium text-right">Valor</th>
+          <tr className="text-left text-xs uppercase tracking-wider text-slate-500 border-b border-slate-200">
+            <th className="pb-3 font-semibold">Data</th>
+            <th className="pb-3 font-semibold">Descrição</th>
+            <th className="pb-3 font-semibold">Fração/Credor</th>
+            <th className="pb-3 font-semibold text-center">Estado</th>
+            <th className="pb-3 font-semibold text-right">Valor</th>
           </tr>
         </thead>
         <tbody>
@@ -36,40 +36,40 @@ export default function TransactionList({ transactions, onRowClick, selectedId }
             return (
               <tr
                 key={tx.id}
-                className={`hover:bg-gray-50 transition-colors ${onRowClick ? 'cursor-pointer' : ''} ${selectedId === tx.id ? 'bg-gray-100' : ''} ${i !== transactions.length - 1 ? 'border-b border-gray-100' : ''}`}
+                className={`hover:bg-slate-50 transition-colors ${onRowClick ? 'cursor-pointer' : ''} ${selectedId === tx.id ? 'bg-slate-100' : ''} ${i !== transactions.length - 1 ? 'border-b border-slate-100' : ''}`}
                 onClick={() => onRowClick?.(tx)}
               >
-                <td className="py-4 text-sm text-gray-500">
+                <td className="py-4 text-sm text-slate-500 whitespace-nowrap pr-3">
                   {new Date(tx.date).toLocaleDateString('pt-PT')}
                 </td>
-                <td className="py-4 text-sm text-gray-900 font-medium">{tx.description}</td>
-                <td className="py-4 text-sm text-gray-500">
-                  {tx.unit?.code ?? tx.creditor?.name ?? (isSavings ? 'Poupança' : '-')}
+                <td className="py-4 text-sm text-slate-900 font-medium pr-3">{tx.description}</td>
+                <td className="py-4 text-sm text-slate-500 pr-3">
+                  {tx.unit?.code ?? tx.creditor?.name ?? (isSavings ? 'Poupança' : '—')}
                 </td>
                 <td className="py-4 text-center">
                   {isUnassigned ? (
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-100 text-amber-700">
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-100 text-amber-800">
                       <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
                       Sem atribuição
                     </span>
                   ) : !hasAllocations && !isSavings ? (
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-gray-100 text-gray-500">
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 text-slate-600">
                       Sem alocação
                     </span>
                   ) : (
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-green-50 text-green-600">
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700">
                       <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
                       OK
                     </span>
                   )}
                 </td>
                 <td
-                  className={`py-4 text-sm text-right font-semibold ${
-                    tx.amount >= 0 ? 'text-green-600' : 'text-red-500'
+                  className={`py-4 text-sm text-right font-semibold whitespace-nowrap ${
+                    tx.amount >= 0 ? 'text-emerald-600' : 'text-red-600'
                   }`}
                 >
                   {tx.amount >= 0 ? '+' : ''}
-                  {tx.amount.toFixed(2)} EUR
+                  {tx.amount.toLocaleString('pt-PT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €
                 </td>
               </tr>
             );

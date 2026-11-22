@@ -432,43 +432,44 @@ export default function ReportsPage() {
   const totalExpenses = filteredMonthlyData.reduce((sum, d) => sum + d.expenses, 0);
 
   return (
-    <div className="flex min-h-screen">
+    <div className="app-shell">
       <Sidebar />
 
-      <main className="flex-1 p-8">
-        <h1 className="text-2xl font-semibold text-gray-900 mb-6">Relatórios</h1>
+      <main className="app-main">
+        <div className="app-container">
+        <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 mb-6 tracking-tight">Relatórios</h1>
 
         {/* Tabs */}
-        <div className="flex gap-1 mb-6 bg-gray-100 p-1 rounded-xl w-fit">
+        <div className="flex gap-1 mb-6 bg-slate-200/70 p-1 rounded-xl w-fit max-w-full overflow-x-auto">
           <button
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+            className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all ${
               activeTab === 'visao'
-                ? 'bg-white text-gray-900 shadow-sm'
-                : 'text-gray-500 hover:text-gray-700'
+                ? 'bg-white text-slate-900 shadow-sm font-semibold'
+                : 'text-slate-600 hover:text-slate-900'
             }`}
             onClick={() => setActiveTab('visao')}
           >
             Visão Geral
           </button>
           <button
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+            className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all ${
               activeTab === 'resumo'
-                ? 'bg-white text-gray-900 shadow-sm'
-                : 'text-gray-500 hover:text-gray-700'
+                ? 'bg-white text-slate-900 shadow-sm font-semibold'
+                : 'text-slate-600 hover:text-slate-900'
             }`}
             onClick={() => setActiveTab('resumo')}
           >
             Resumo Mensal
           </button>
           <button
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+            className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all ${
               activeTab === 'dividas'
-                ? 'bg-white text-gray-900 shadow-sm'
-                : 'text-gray-500 hover:text-gray-700'
+                ? 'bg-white text-slate-900 shadow-sm font-semibold'
+                : 'text-slate-600 hover:text-slate-900'
             }`}
             onClick={() => setActiveTab('dividas')}
           >
-            Dividas
+            Dívidas
           </button>
         </div>
 
@@ -483,32 +484,31 @@ export default function ReportsPage() {
                 {/* Summary cards */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                   <div className="card">
-                    <h3 className="text-sm font-medium text-gray-500">Total Esperado</h3>
-                    <p className="text-2xl font-bold text-gray-900">{debtData.grandTotalExpected.toFixed(2)} EUR</p>
+                    <h3 className="text-sm font-medium text-slate-500">Total Esperado</h3>
+                    <p className="text-2xl font-bold text-slate-900">{debtData.grandTotalExpected.toFixed(2)} €</p>
                   </div>
                   <div className="card">
-                    <h3 className="text-sm font-medium text-gray-500">Total Pago</h3>
-                    <p className="text-2xl font-bold text-green-600">{debtData.grandTotalPaid.toFixed(2)} EUR</p>
+                    <h3 className="text-sm font-medium text-slate-500">Total Pago</h3>
+                    <p className="text-2xl font-bold text-emerald-600">{debtData.grandTotalPaid.toFixed(2)} €</p>
                   </div>
                   <div className="card">
-                    <h3 className="text-sm font-medium text-gray-500">Divida Total</h3>
-                    <p className={`text-2xl font-bold ${debtData.grandTotalDebt > 0 ? 'text-red-600' : 'text-gray-400'}`}>
-                      {debtData.grandTotalDebt.toFixed(2)} EUR
+                    <h3 className="text-sm font-medium text-slate-500">Dívida Total</h3>
+                    <p className={`text-2xl font-bold ${debtData.grandTotalDebt > 0 ? 'text-red-600' : 'text-slate-400'}`}>
+                      {debtData.grandTotalDebt.toFixed(2)} €
                     </p>
                   </div>
                 </div>
 
                 {/* Debt table */}
-                <div className="card border border-gray-200 overflow-hidden !p-0">
-                  <div className="bg-gray-50 border-b border-gray-200 px-6 py-4 flex justify-between items-center">
-                    <h2 className="text-lg font-bold text-gray-900">Divida por Ano</h2>
-                    <span className="text-[10px] text-gray-400">v2.0</span>
+                <div className="card border border-slate-200 overflow-hidden !p-0">
+                  <div className="bg-slate-50 border-b border-slate-200 px-6 py-4 flex justify-between items-center">
+                    <h2 className="text-lg font-bold text-slate-900">Dívida por Ano</h2>
                   </div>
                   <div className="overflow-x-auto">
                     <table className="w-full text-[13px] border-collapse">
                       <thead>
                         {/* Expected breakdown header rows */}
-                        <tr className="text-gray-400 text-[10px] bg-gray-50/30 uppercase tracking-widest">
+                        <tr className="text-slate-500 text-[10px] bg-slate-50/50 uppercase tracking-widest">
                           <th className="py-2 px-4 font-normal text-left">Esperado</th>
                           {debtData.years.map((year) => {
                             // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -642,17 +642,17 @@ export default function ReportsPage() {
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
               <div className="card">
-                <h3 className="text-sm text-gray-500 mb-1">Total Receitas {resumoYear !== 'all' ? resumoYear : ''}</h3>
-                <p className="text-2xl font-semibold text-green-600">{totalIncome.toFixed(2)} EUR</p>
+                <h3 className="text-sm text-slate-500 mb-1">Total Receitas {resumoYear !== 'all' ? resumoYear : ''}</h3>
+                <p className="text-2xl font-semibold text-emerald-600">{totalIncome.toFixed(2)} €</p>
               </div>
               <div className="card">
-                <h3 className="text-sm text-gray-500 mb-1">Total Despesas {resumoYear !== 'all' ? resumoYear : ''}</h3>
-                <p className="text-2xl font-semibold text-red-600">{totalExpenses.toFixed(2)} EUR</p>
+                <h3 className="text-sm text-slate-500 mb-1">Total Despesas {resumoYear !== 'all' ? resumoYear : ''}</h3>
+                <p className="text-2xl font-semibold text-red-600">{totalExpenses.toFixed(2)} €</p>
               </div>
               <div className="card">
-                <h3 className="text-sm text-gray-500 mb-1">Saldo Total {resumoYear !== 'all' ? resumoYear : ''}</h3>
-                <p className={`text-2xl font-semibold ${totalIncome - totalExpenses >= 0 ? 'text-gray-900' : 'text-red-600'}`}>
-                  {(totalIncome - totalExpenses).toFixed(2)} EUR
+                <h3 className="text-sm text-slate-500 mb-1">Saldo Total {resumoYear !== 'all' ? resumoYear : ''}</h3>
+                <p className={`text-2xl font-semibold ${totalIncome - totalExpenses >= 0 ? 'text-slate-900' : 'text-red-600'}`}>
+                  {(totalIncome - totalExpenses).toFixed(2)} €
                 </p>
               </div>
             </div>
@@ -684,11 +684,11 @@ export default function ReportsPage() {
                   <tbody className="divide-y divide-gray-200">
                     {filteredMonthlyData.map((d) => (
                       <tr key={d.month} className="hover:bg-blue-50/30 transition-colors">
-                        <td className="py-4 px-6 text-sm font-bold text-gray-900">{formatMonth(d.month)}</td>
-                        <td className="py-4 px-6 text-sm text-right text-green-600 font-bold">+{d.income.toFixed(2)} EUR</td>
-                        <td className="py-4 px-6 text-sm text-right text-red-500 font-bold">-{d.expenses.toFixed(2)} EUR</td>
-                        <td className={`py-4 px-6 text-sm text-right font-black ${d.balance >= 0 ? 'text-gray-900' : 'text-red-600'}`}>
-                          {d.balance >= 0 ? '+' : ''}{d.balance.toFixed(2)} EUR
+                        <td className="py-4 px-6 text-sm font-bold text-slate-900">{formatMonth(d.month)}</td>
+                        <td className="py-4 px-6 text-sm text-right text-emerald-600 font-bold">+{d.income.toFixed(2)} €</td>
+                        <td className="py-4 px-6 text-sm text-right text-red-600 font-bold">-{d.expenses.toFixed(2)} €</td>
+                        <td className={`py-4 px-6 text-sm text-right font-black ${d.balance >= 0 ? 'text-slate-900' : 'text-red-600'}`}>
+                          {d.balance >= 0 ? '+' : ''}{d.balance.toFixed(2)} €
                         </td>
                       </tr>
                     ))}
@@ -721,28 +721,28 @@ export default function ReportsPage() {
             </div>
 
             {overviewData && (
-              <div className={`flex gap-6`}>
-                <div className={`flex-1 space-y-6 ${panelOpen ? 'max-w-[calc(100%-340px)]' : ''}`}>
+              <div className="flex gap-6 items-start">
+                <div className={`flex-1 min-w-0 space-y-6 ${panelOpen ? 'xl:max-w-[calc(100%-340px)]' : ''}`}>
                   {/* Totals */}
-                  <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
                     <div className="card">
-                      <h3 className="text-sm font-medium text-gray-500">Total Receitas {selectedYear}</h3>
-                      <p className="text-2xl font-bold text-green-600">{overviewData.totals.receitas.toFixed(2)} EUR</p>
+                      <h3 className="text-sm font-medium text-slate-500">Total Receitas {selectedYear}</h3>
+                      <p className="text-2xl font-bold text-emerald-600">{overviewData.totals.receitas.toFixed(2)} €</p>
                     </div>
                     <div className="card">
-                      <h3 className="text-sm font-medium text-gray-500">Total Despesas {selectedYear}</h3>
-                      <p className="text-2xl font-bold text-red-600">{overviewData.totals.despesas.toFixed(2)} EUR</p>
+                      <h3 className="text-sm font-medium text-slate-500">Total Despesas {selectedYear}</h3>
+                      <p className="text-2xl font-bold text-red-600">{overviewData.totals.despesas.toFixed(2)} €</p>
                     </div>
                     <div className="card">
-                      <h3 className="text-sm font-medium text-gray-500">Saldo {selectedYear}</h3>
-                      <p className={`text-2xl font-bold ${overviewData.totals.saldo >= 0 ? 'text-primary-600' : 'text-red-600'}`}>
-                        {overviewData.totals.saldo.toFixed(2)} EUR
+                      <h3 className="text-sm font-medium text-slate-500">Saldo {selectedYear}</h3>
+                      <p className={`text-2xl font-bold ${overviewData.totals.saldo >= 0 ? 'text-blue-700' : 'text-red-600'}`}>
+                        {overviewData.totals.saldo.toFixed(2)} €
                       </p>
                     </div>
                     <div className="card">
-                      <h3 className="text-sm font-medium text-gray-500">Dívida Total Acumulada</h3>
-                      <p className={`text-2xl font-bold ${overviewData.totals.totalDebt > 0 ? 'text-red-600' : 'text-gray-400'}`}>
-                        {overviewData.totals.totalDebt > 0 ? `${overviewData.totals.totalDebt.toFixed(2)} EUR` : '0.00 EUR'}
+                      <h3 className="text-sm font-medium text-slate-500">Dívida Total Acumulada</h3>
+                      <p className={`text-2xl font-bold ${overviewData.totals.totalDebt > 0 ? 'text-red-600' : 'text-slate-400'}`}>
+                        {overviewData.totals.totalDebt > 0 ? `${overviewData.totals.totalDebt.toFixed(2)} €` : '0.00 €'}
                       </p>
                     </div>
                   </div>
@@ -938,23 +938,31 @@ export default function ReportsPage() {
                   </div>
 
                   {/* Legend */}
-                  <div className="flex flex-wrap gap-4 text-xs text-gray-500">
+                  <div className="flex flex-wrap gap-4 text-xs text-slate-600">
                     <span className="flex items-center gap-1">
-                      <span className="w-4 h-4 rounded bg-green-100 border border-green-300"></span> Pago
+                      <span className="w-4 h-4 rounded bg-emerald-100 border border-emerald-300"></span> Pago
                     </span>
                     <span className="flex items-center gap-1">
-                      <span className="w-4 h-4 rounded bg-yellow-100 border border-yellow-300"></span> Parcial
+                      <span className="w-4 h-4 rounded bg-amber-100 border border-amber-300"></span> Parcial
                     </span>
                     <span className="flex items-center gap-1">
-                      <span className="w-4 h-4 rounded bg-white border border-gray-300"></span> Sem pagamento
+                      <span className="w-4 h-4 rounded bg-white border border-slate-300"></span> Sem pagamento
                     </span>
                   </div>
                 </div>
 
+                {/* Side Panel Backdrop on < xl */}
+                {panelOpen && (
+                  <div
+                    className="xl:hidden fixed inset-0 bg-slate-950/50 backdrop-blur-sm z-30"
+                    onClick={closePanel}
+                  />
+                )}
+
                 {/* Side Panel */}
                 {panelOpen && (
-                  <div className="w-80 shrink-0">
-                    <div className="card sticky top-8">
+                  <div className="fixed inset-y-0 right-0 z-40 w-full max-w-sm bg-white shadow-2xl p-4 overflow-y-auto xl:static xl:z-auto xl:w-80 xl:shrink-0 xl:bg-transparent xl:shadow-none xl:p-0 xl:overflow-visible">
+                    <div className="xl:card xl:sticky xl:top-8">
                       <div className="flex justify-between items-center mb-4">
                         <h3 className="text-lg font-bold">
                           {panelMode === 'edit'
@@ -984,11 +992,11 @@ export default function ReportsPage() {
 
                         {panelMode === 'edit' ? (
                           <>
-                            <div className="p-3 bg-gray-50 rounded-lg">
-                              <p className="text-xs text-gray-500 mb-1">Valor da transação</p>
-                              <p className="text-lg font-bold text-gray-900">{panelFullAmount.toFixed(2)} EUR</p>
-                              <p className="text-xs text-gray-500 mt-1">{panelDescription}</p>
-                              <p className="text-xs text-gray-400">{new Date(panelDate).toLocaleDateString('pt-PT')}</p>
+                            <div className="p-3 bg-slate-50 rounded-lg">
+                              <p className="text-xs text-slate-500 mb-1">Valor da transação</p>
+                              <p className="text-lg font-bold text-slate-900">{panelFullAmount.toFixed(2)} €</p>
+                              <p className="text-xs text-slate-500 mt-1">{panelDescription}</p>
+                              <p className="text-xs text-slate-500">{new Date(panelDate).toLocaleDateString('pt-PT')}</p>
                             </div>
 
                             <div>
@@ -1005,12 +1013,12 @@ export default function ReportsPage() {
                             {panelSelectedMonths.length > 0 && (
                               <div className="space-y-2">
                                 <div className="flex items-center justify-between">
-                                  <span className="text-sm text-gray-600">
-                                    {panelSelectedMonths.length} mês(es) &mdash; {(panelFullAmount / panelSelectedMonths.length).toFixed(2)} EUR/mês
+                                  <span className="text-sm text-slate-600">
+                                    {panelSelectedMonths.length} mês(es) &mdash; {(panelFullAmount / panelSelectedMonths.length).toFixed(2)} €/mês
                                   </span>
                                   <button
                                     type="button"
-                                    className={`text-xs px-2 py-1 rounded ${panelShowCustom ? 'bg-primary-100 text-primary-700' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                                    className={`text-xs px-2 py-1 rounded ${panelShowCustom ? 'bg-primary-100 text-primary-700' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
                                     onClick={() => {
                                       setPanelShowCustom(!panelShowCustom);
                                       if (!panelShowCustom) {
@@ -1026,10 +1034,10 @@ export default function ReportsPage() {
                                 </div>
 
                                 {panelShowCustom && (
-                                  <div className="space-y-1 p-2 bg-gray-50 rounded-lg">
+                                  <div className="space-y-1 p-2 bg-slate-50 rounded-lg">
                                     {panelSelectedMonths.map((month) => (
                                       <div key={month} className="flex items-center gap-2">
-                                        <span className="text-xs text-gray-500 w-16">{month}</span>
+                                        <span className="text-xs text-slate-500 w-16">{month}</span>
                                         <input
                                           type="number"
                                           step="0.01"
@@ -1037,11 +1045,11 @@ export default function ReportsPage() {
                                           value={panelCustomAmounts[month] || ''}
                                           onChange={(e) => setPanelCustomAmounts({ ...panelCustomAmounts, [month]: e.target.value })}
                                         />
-                                        <span className="text-xs text-gray-400">EUR</span>
+                                        <span className="text-xs text-slate-500">€</span>
                                       </div>
                                     ))}
-                                    <div className={`text-xs mt-1 ${getPanelAllocationTotal() > panelFullAmount + 0.01 ? 'text-red-500' : 'text-gray-500'}`}>
-                                      Total: {getPanelAllocationTotal().toFixed(2)} / {panelFullAmount.toFixed(2)} EUR
+                                    <div className={`text-xs mt-1 ${getPanelAllocationTotal() > panelFullAmount + 0.01 ? 'text-red-500' : 'text-slate-500'}`}>
+                                      Total: {getPanelAllocationTotal().toFixed(2)} / {panelFullAmount.toFixed(2)} €
                                       {getPanelAllocationTotal() > panelFullAmount + 0.01 && ' (excede o valor!)'}
                                     </div>
                                   </div>
@@ -1078,7 +1086,7 @@ export default function ReportsPage() {
                             </div>
 
                             <div>
-                              <label className="label">Valor (EUR) *</label>
+                              <label className="label">Valor (€) *</label>
                               <input
                                 type="number"
                                 step="0.01"
@@ -1122,8 +1130,8 @@ export default function ReportsPage() {
 
         {/* Transaction Selection Modal */}
         {showTxModal && txModalContext && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-xl p-6 w-full max-w-md">
+          <div className="fixed inset-0 bg-slate-950/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-2xl border border-slate-200">
               <h2 className="text-lg font-bold mb-4">Selecionar Transação</h2>
               <p className="text-sm text-gray-500 mb-4">
                 Existem {txModalTransactions.length} transações para {txModalContext.targetName} em {formatMonth(txModalContext.month)}:
@@ -1176,6 +1184,7 @@ export default function ReportsPage() {
             </div>
           </div>
         )}
+        </div>
       </main>
     </div>
   );

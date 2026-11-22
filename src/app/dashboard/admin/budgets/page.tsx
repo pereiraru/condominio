@@ -1,9 +1,11 @@
 'use client';
 
-import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSession } from 'next-auth/react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Sidebar from '@/components/Sidebar';
+import BankAccountsManagerPanel from '@/components/BankAccountsManagerPanel';
+import UsersManagerPanel from '@/components/UsersManagerPanel';
 import { Budget } from '@/lib/types';
 import type { CondoMeetingDTO } from '@/lib/meetings';
 import {
@@ -18,15 +20,35 @@ import UnitReportTab from './components/UnitReportTab';
 import ConvocatoriaTab from './components/ConvocatoriaTab';
 import ActaTab from './components/ActaTab';
 import NotificationConfigTab from './components/NotificationConfigTab';
-import UsersManagerPanel from '@/components/UsersManagerPanel';
 
-type AdminTab = 'budgets' | 'units' | 'convocatoria' | 'acta' | 'notificacoes' | 'utilizadores';
+type AdminTab =
+  | 'budgets'
+  | 'units'
+  | 'convocatoria'
+  | 'acta'
+  | 'contas'
+  | 'utilizadores'
+  | 'notificacoes';
 
-export default function AdministrationCenterPage() {
+const VALID_TABS = new Set<AdminTab>([
+  'budgets',
+  'units',
+  'convocatoria',
+  'acta',
+  'contas',
+  'utilizadores',
+  'notificacoes',
+]);
+
+function AdministrationCenterContent() {
   const { data: session, status } = useSession();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const tabParam = searchParams.get('tab') as AdminTab | null;
 
-  const [activeTab, setActiveTab] = useState<AdminTab>('budgets');
+  const [activeTab, setActiveTab] = useState<AdminTab>(() =>
+    tabParam && VALID_TABS.has(tabParam) ? tabParam : 'budgets'
+  );
   const [selectedYear, setSelectedYear] = useState<number>(() => new Date().getFullYear());
   const [budgets, setBudgets] = useState<Budget[]>([]);
   const [unitReportsData, setUnitReportsData] = useState<UnitReportsPayload | null>(null);
@@ -35,6 +57,12 @@ export default function AdministrationCenterPage() {
   const [selectedMeetingId, setSelectedMeetingId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const initializedMeetingSelectionRef = useRef(false);
+
+  useEffect(() => {
+    if (tabParam && VALID_TABS.has(tabParam)) {
+      setActiveTab(tabParam);
+    }
+  }, [tabParam]);
 
   const handleMeetingSaved = useCallback((saved: CondoMeetingDTO) => {
     setMeetings((prev) => {
@@ -134,40 +162,40 @@ export default function AdministrationCenterPage() {
   }
 
   return (
-    <div className="print-page-wrapper flex min-h-screen bg-gray-50">
+    <div className="print-page-wrapper app-shell">
       <Sidebar />
 
-      <main className="flex-1 p-8 print:p-0">
-        <div className="max-w-7xl mx-auto print:max-w-none">
+      <main className="app-main">
+        <div className="app-container">
           {/* Header & Tabs (hidden on print) */}
-          <div className="no-print mb-8 space-y-6">
+          <div className="no-print mb-6 sm:mb-8 space-y-5">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
               <div>
-                <h1 className="text-3xl font-bold text-gray-900 tracking-tight">
+                <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight">
                   Administração
                 </h1>
-                <p className="text-sm text-gray-500 mt-1">
-                  Orçamentos anuais, simulação de quotas, extratos por fração, convocatória e ata de assembleia
+                <p className="text-sm text-slate-500 mt-1">
+                  Orçamentos, extratos em massa, convocatória, atas, contas bancárias, utilizadores e notificações
                 </p>
               </div>
 
-              <div className="flex items-center gap-3">
-                <div className="flex items-center bg-white border border-gray-200 rounded-xl px-2 py-1 shadow-sm">
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="flex items-center bg-white border border-slate-200 rounded-xl px-2 py-1 shadow-sm">
                   <button
                     type="button"
                     onClick={() => setSelectedYear((y) => Math.max(2024, y - 1))}
-                    className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-600"
+                    className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-600"
                     title="Ano anterior"
                   >
                     ‹
                   </button>
-                  <span className="px-3 text-sm font-bold text-gray-900">
+                  <span className="px-3 text-sm font-bold text-slate-900">
                     Exercício {selectedYear}
                   </span>
                   <button
                     type="button"
                     onClick={() => setSelectedYear((y) => y + 1)}
-                    className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-600"
+                    className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-600"
                     title="Ano seguinte"
                   >
                     ›
@@ -187,12 +215,13 @@ export default function AdministrationCenterPage() {
             </div>
 
             {/* Tab Bar */}
-            <div className="flex flex-wrap gap-1.5 bg-gray-200/70 p-1.5 rounded-2xl w-fit">
+            <div className="flex gap-1.5 bg-slate-200/70 p-1.5 rounded-2xl overflow-x-auto max-w-full">
               {[
-                { id: 'budgets' as const, label: 'Orçamento & Aumento de Quotas' },
-                { id: 'units' as const, label: 'Relatório por Fração' },
+                { id: 'budgets' as const, label: 'Orçamento & Quotas' },
+                { id: 'units' as const, label: 'Extratos & Envios' },
                 { id: 'convocatoria' as const, label: 'Convocatória' },
                 { id: 'acta' as const, label: 'Reunião & Ata' },
+                { id: 'contas' as const, label: 'Contas Bancárias' },
                 { id: 'utilizadores' as const, label: 'Utilizadores & Acessos' },
                 { id: 'notificacoes' as const, label: 'Notificações & Email' },
               ].map((tab) => (
@@ -200,10 +229,10 @@ export default function AdministrationCenterPage() {
                   key={tab.id}
                   type="button"
                   onClick={() => setActiveTab(tab.id)}
-                  className={`px-5 py-2.5 rounded-xl text-sm font-bold transition-all ${
+                  className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-bold whitespace-nowrap transition-all ${
                     activeTab === tab.id
-                      ? 'bg-white text-gray-900 shadow-sm'
-                      : 'text-gray-600 hover:text-gray-900 hover:bg-white/50'
+                      ? 'bg-white text-slate-900 shadow-sm'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
                   }`}
                 >
                   {tab.label}
@@ -212,10 +241,16 @@ export default function AdministrationCenterPage() {
             </div>
           </div>
 
-          {loading || !unitReportsData ? (
+          {activeTab === 'contas' ? (
+            <BankAccountsManagerPanel />
+          ) : activeTab === 'utilizadores' ? (
+            <UsersManagerPanel />
+          ) : activeTab === 'notificacoes' ? (
+            <NotificationConfigTab />
+          ) : loading || !unitReportsData ? (
             <div className="no-print flex items-center justify-center py-24">
-              <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-gray-900"></div>
-              <span className="ml-3 text-gray-500 font-medium">
+              <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-slate-900"></div>
+              <span className="ml-3 text-slate-500 font-medium">
                 A carregar dados de administração...
               </span>
             </div>
@@ -271,14 +306,25 @@ export default function AdministrationCenterPage() {
                   onGoToConvocatoria={() => setActiveTab('convocatoria')}
                 />
               )}
-
-              {activeTab === 'utilizadores' && <UsersManagerPanel />}
-
-              {activeTab === 'notificacoes' && <NotificationConfigTab />}
             </>
           )}
         </div>
       </main>
     </div>
+  );
+}
+
+export default function AdministrationCenterPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="app-shell">
+          <Sidebar />
+          <main className="app-main" />
+        </div>
+      }
+    >
+      <AdministrationCenterContent />
+    </Suspense>
   );
 }

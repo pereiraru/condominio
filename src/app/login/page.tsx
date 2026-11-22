@@ -41,12 +41,19 @@ function LoginFormContent() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
+    <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4">
       <div className="w-full max-w-md">
-        <div className="bg-white rounded-2xl shadow-lg p-8">
+        <div className="bg-white rounded-2xl border border-slate-200/80 shadow-lg p-6 sm:p-8">
           <div className="text-center mb-8">
-            <h1 className="text-2xl font-bold text-gray-900">Condomínio</h1>
-            <p className="text-gray-500 mt-2">Entre na sua conta</p>
+            <p className="text-[11px] font-bold uppercase tracking-widest text-slate-500">
+              Portal do Condomínio
+            </p>
+            <h1 className="text-2xl font-bold text-slate-900 mt-1">
+              Rua Vieira da Silva, n.º 6
+            </h1>
+            <p className="text-sm text-slate-500 mt-1">
+              Monte Abraão · Entre na sua conta
+            </p>
           </div>
 
           {resetSuccess && (

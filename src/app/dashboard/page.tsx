@@ -94,11 +94,11 @@ export default function Dashboard() {
     : 0;
 
   return (
-    <div className="flex min-h-screen bg-gray-50/50">
+    <div className="app-shell">
       <Sidebar />
 
-      <main className="flex-1 p-5 md:p-6">
-        <div className="max-w-7xl mx-auto">
+      <main className="app-main">
+        <div className="app-container">
           {/* Header */}
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-5">
             <div>

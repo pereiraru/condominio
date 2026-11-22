@@ -1,181 +1,399 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useSession, signOut } from 'next-auth/react';
 
-const menuItems = [
-  { href: '/dashboard', label: 'Dashboard', icon: (
-    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+interface NavItem {
+  href: string;
+  label: string;
+  icon: React.ReactNode;
+}
+
+const ICONS = {
+  portal: (
+    <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={1.6}
+        d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"
+      />
     </svg>
-  ), adminOnly: false },
-  { href: '/dashboard/incidents', label: 'Anomalias', icon: (
-    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+  ),
+  unit: (
+    <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={1.6}
+        d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
+      />
     </svg>
-  ), adminOnly: false },
-  { href: '/dashboard/transactions', label: 'Transacoes', icon: (
-    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+  ),
+  incidents: (
+    <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={1.6}
+        d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+      />
     </svg>
-  ), adminOnly: true },
-  { href: '/dashboard/units', label: 'Fracoes', icon: (
-    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+  ),
+  atas: (
+    <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={1.6}
+        d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"
+      />
     </svg>
-  ), adminOnly: true },
-  { href: '/dashboard/creditors', label: 'Credores', icon: (
-    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+  ),
+  transactions: (
+    <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={1.6}
+        d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+      />
     </svg>
-  ), adminOnly: true },
-  { href: '/dashboard/payments', label: 'Pagamentos', icon: (
-    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+  ),
+  creditors: (
+    <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={1.6}
+        d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
+      />
     </svg>
-  ), adminOnly: true },
-  { href: '/dashboard/documents', label: 'Documentos', icon: (
-    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+  ),
+  reports: (
+    <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={1.6}
+        d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
+      />
     </svg>
-  ), adminOnly: true },
-  { href: '/dashboard/reports', label: 'Relatorios', icon: (
-    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+  ),
+  annualReport: (
+    <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={1.6}
+        d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+      />
     </svg>
-  ), adminOnly: true },
-  { href: '/dashboard/relatorio-contas', label: 'Rel. Contas', icon: (
-    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+  ),
+  documents: (
+    <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={1.6}
+        d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"
+      />
     </svg>
-  ), adminOnly: true },
+  ),
+  admin: (
+    <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={1.6}
+        d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
+      />
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={1.6}
+        d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+      />
+    </svg>
+  ),
+};
+
+const financeItems: NavItem[] = [
+  { href: '/dashboard/transactions', label: 'Transações', icon: ICONS.transactions },
+  { href: '/dashboard/units', label: 'Frações', icon: ICONS.unit },
+  { href: '/dashboard/creditors', label: 'Credores', icon: ICONS.creditors },
+  { href: '/dashboard/reports', label: 'Relatórios', icon: ICONS.reports },
+  { href: '/dashboard/relatorio-contas', label: 'Rel. Contas', icon: ICONS.annualReport },
+  { href: '/dashboard/documents', label: 'Documentos', icon: ICONS.documents },
 ];
 
-const adminItems = [
-  { href: '/dashboard/admin/users', label: 'Utilizadores', icon: (
-    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
-    </svg>
-  )},
-  { href: '/dashboard/admin/bank-accounts', label: 'Contas Bancárias', icon: (
-    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
-    </svg>
-  )},
-  { href: '/dashboard/admin/budgets', label: 'Administração', icon: (
-    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" />
-    </svg>
-  )},
+const adminItems: NavItem[] = [
+  { href: '/dashboard/admin/budgets', label: 'Administração', icon: ICONS.admin },
 ];
+
+function isRouteActive(pathname: string, href: string): boolean {
+  if (href === '/dashboard') return pathname === '/dashboard';
+  return pathname === href || pathname.startsWith(`${href}/`);
+}
 
 export default function Sidebar() {
   const pathname = usePathname();
   const { data: session } = useSession();
+  const [mobileOpen, setMobileOpen] = useState(false);
 
   const isAdmin = session?.user?.role === 'admin';
   const userUnitId = session?.user?.unitId;
 
-  // Filter menu items based on user role
-  const visibleItems = menuItems.filter((item) => !item.adminOnly || isAdmin);
+  useEffect(() => {
+    setMobileOpen(false);
+  }, [pathname]);
 
-  return (
-    <aside className="sidebar print:hidden">
-      <div className="p-6">
-        <h1 className="text-xl font-semibold text-white">Condominio</h1>
-        <p className="text-xs text-gray-500 mt-1">Gestao de Condominio</p>
-      </div>
+  useEffect(() => {
+    if (!mobileOpen) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setMobileOpen(false);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [mobileOpen]);
 
-      <nav className="px-3 space-y-1 flex-1">
-        {visibleItems.map((item) => {
-          const isActive = pathname === item.href ||
-            (item.href !== '/dashboard' && pathname.startsWith(item.href));
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={isActive ? 'sidebar-item-active' : 'sidebar-item'}
-            >
-              {item.icon}
-              <span>{item.label}</span>
-            </Link>
-          );
-        })}
+  const portalItems: NavItem[] = [
+    { href: '/dashboard', label: 'Portal', icon: ICONS.portal },
+    ...(!isAdmin && userUnitId
+      ? [{ href: `/dashboard/units/${userUnitId}`, label: 'Minha Fração', icon: ICONS.unit }]
+      : []),
+    { href: '/dashboard/incidents', label: 'Anomalias', icon: ICONS.incidents },
+    { href: '/dashboard/atas', label: 'Atas', icon: ICONS.atas },
+  ];
 
-        {/* Minha Fração link for non-admin users */}
-        {!isAdmin && userUnitId && (
-          <Link
-            href={`/dashboard/units/${userUnitId}`}
-            className={pathname.startsWith('/dashboard/units/') ? 'sidebar-item-active' : 'sidebar-item'}
+  const bottomNavItems: NavItem[] = isAdmin
+    ? [
+        { href: '/dashboard', label: 'Portal', icon: ICONS.portal },
+        { href: '/dashboard/incidents', label: 'Anomalias', icon: ICONS.incidents },
+        { href: '/dashboard/units', label: 'Frações', icon: ICONS.unit },
+        { href: '/dashboard/admin/budgets', label: 'Admin', icon: ICONS.admin },
+      ]
+    : [
+        { href: '/dashboard', label: 'Portal', icon: ICONS.portal },
+        ...(userUnitId
+          ? [{ href: `/dashboard/units/${userUnitId}`, label: 'Fração', icon: ICONS.unit }]
+          : []),
+        { href: '/dashboard/incidents', label: 'Anomalias', icon: ICONS.incidents },
+        { href: '/dashboard/atas', label: 'Atas', icon: ICONS.atas },
+      ];
+
+  const renderSidebarContent = (showCloseButton: boolean) => (
+    <>
+      <div className="p-5 flex items-center justify-between gap-2 border-b border-white/10">
+        <div className="min-w-0">
+          <h1 className="text-lg font-bold text-white tracking-tight truncate">Condomínio</h1>
+          <p className="text-xs text-slate-400 mt-0.5 truncate">Rua Vieira da Silva, n.º 6</p>
+        </div>
+        {showCloseButton && (
+          <button
+            type="button"
+            onClick={() => setMobileOpen(false)}
+            aria-label="Fechar menu"
+            className="p-2 rounded-lg text-slate-300 hover:text-white hover:bg-white/10"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
-            <span>Minha Fracao</span>
-          </Link>
+          </button>
         )}
+      </div>
 
-        {/* Admin section */}
+      <nav className="px-3 py-4 space-y-5 flex-1 overflow-y-auto">
+        <div>
+          <p className="px-3.5 pb-1.5 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+            Portal
+          </p>
+          <div className="space-y-1">
+            {portalItems.map((item) => (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={isRouteActive(pathname, item.href) ? 'sidebar-item-active' : 'sidebar-item'}
+              >
+                {item.icon}
+                <span>{item.label}</span>
+              </Link>
+            ))}
+          </div>
+        </div>
+
         {isAdmin && (
-          <>
-            <div className="pt-4 pb-2">
-              <p className="px-3 text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Admin
-              </p>
-            </div>
-            {adminItems.map((item) => {
-              const isActive = pathname.startsWith(item.href);
-              return (
+          <div>
+            <p className="px-3.5 pb-1.5 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+              Gestão Financeira
+            </p>
+            <div className="space-y-1">
+              {financeItems.map((item) => (
                 <Link
                   key={item.href}
                   href={item.href}
-                  className={isActive ? 'sidebar-item-active' : 'sidebar-item'}
+                  className={isRouteActive(pathname, item.href) ? 'sidebar-item-active' : 'sidebar-item'}
                 >
                   {item.icon}
                   <span>{item.label}</span>
                 </Link>
-              );
-            })}
-          </>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {isAdmin && (
+          <div>
+            <p className="px-3.5 pb-1.5 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+              Administração
+            </p>
+            <div className="space-y-1">
+              {adminItems.map((item) => (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={isRouteActive(pathname, item.href) ? 'sidebar-item-active' : 'sidebar-item'}
+                >
+                  {item.icon}
+                  <span>{item.label}</span>
+                </Link>
+              ))}
+            </div>
+          </div>
         )}
       </nav>
 
-      <div className="p-3 mt-auto">
-        <div className="border-t border-gray-700 pt-3">
-          {/* User info */}
-          {session?.user && (
-            <div className="px-3 py-2 mb-2">
-              <p className="text-sm font-medium text-white truncate">
-                {session.user.name || session.user.email}
-              </p>
-              <p className="text-xs text-gray-500">
-                {isAdmin ? 'Administrador' : session.user.unitCode || 'Utilizador'}
-              </p>
-            </div>
-          )}
+      <div className="p-3 mt-auto border-t border-white/10">
+        {session?.user && (
+          <div className="px-3 py-2 mb-2">
+            <p className="text-sm font-medium text-white truncate">
+              {session.user.name || session.user.email}
+            </p>
+            <p className="text-xs text-slate-400">
+              {isAdmin ? 'Administrador' : session.user.unitCode || 'Condómino'}
+            </p>
+          </div>
+        )}
 
-          <Link
-            href="/change-password"
-            className={pathname === '/change-password' ? 'sidebar-item-active mb-1' : 'sidebar-item mb-1'}
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-            </svg>
-            <span>Alterar Password</span>
-          </Link>
+        <Link
+          href="/change-password"
+          className={pathname === '/change-password' ? 'sidebar-item-active mb-1' : 'sidebar-item mb-1'}
+        >
+          <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={1.6}
+              d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
+            />
+          </svg>
+          <span>Alterar Password</span>
+        </Link>
 
-          <button
-            onClick={() => signOut({ callbackUrl: '/login' })}
-            className="sidebar-item w-full text-left"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-            </svg>
-            <span>Sair</span>
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={() => signOut({ callbackUrl: '/login' })}
+          className="sidebar-item w-full text-left"
+        >
+          <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={1.6}
+              d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
+            />
+          </svg>
+          <span>Sair</span>
+        </button>
       </div>
-    </aside>
+    </>
+  );
+
+  const mobileColsClass =
+    bottomNavItems.length === 3 && !isAdmin
+      ? 'grid-cols-3'
+      : bottomNavItems.length === 4 && !isAdmin
+      ? 'grid-cols-4'
+      : 'grid-cols-5';
+
+  return (
+    <>
+      {/* Desktop Sticky Sidebar */}
+      <aside className="sidebar print:hidden">{renderSidebarContent(false)}</aside>
+
+      {/* Mobile / Tablet Fixed Top Bar */}
+      <header className="lg:hidden print:hidden fixed top-0 inset-x-0 h-14 z-30 bg-slate-900 text-white px-4 flex items-center justify-between shadow-sm">
+        <div className="flex items-center gap-3 min-w-0">
+          <button
+            type="button"
+            onClick={() => setMobileOpen(true)}
+            aria-label="Abrir menu"
+            className="p-2 -ml-2 rounded-lg text-slate-200 hover:text-white hover:bg-white/10"
+          >
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M4 6h16M4 12h16M4 18h16" />
+            </svg>
+          </button>
+          <Link href="/dashboard" className="font-bold text-base tracking-tight truncate">
+            Condomínio
+          </Link>
+        </div>
+
+        {session?.user && (
+          <span className="text-[11px] font-semibold px-2.5 py-1 rounded-full bg-white/10 text-slate-200 shrink-0">
+            {isAdmin ? 'Admin' : session.user.unitCode || 'Condómino'}
+          </span>
+        )}
+      </header>
+
+      {/* Mobile / Tablet Slide-Over Drawer */}
+      {mobileOpen && (
+        <div className="lg:hidden print:hidden fixed inset-0 z-50 flex">
+          <div
+            className="fixed inset-0 bg-slate-950/60 backdrop-blur-[1px]"
+            onClick={() => setMobileOpen(false)}
+          />
+          <aside className="relative w-72 max-w-[82vw] h-full bg-slate-900 flex flex-col shadow-2xl">
+            {renderSidebarContent(true)}
+          </aside>
+        </div>
+      )}
+
+      {/* Mobile Fixed Bottom Navigation Bar */}
+      <nav
+        aria-label="Navegação rápida"
+        className={`md:hidden print:hidden fixed bottom-0 inset-x-0 h-16 z-30 bg-white/95 backdrop-blur border-t border-slate-200 grid ${mobileColsClass}`}
+      >
+        {bottomNavItems.map((item) => {
+          const active = isRouteActive(pathname, item.href);
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              className={`flex flex-col items-center justify-center gap-0.5 text-[11px] font-medium transition-colors ${
+                active ? 'text-slate-900 font-bold' : 'text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              {item.icon}
+              <span className="truncate max-w-[70px]">{item.label}</span>
+            </Link>
+          );
+        })}
+        {isAdmin && (
+          <button
+            type="button"
+            onClick={() => setMobileOpen(true)}
+            className="flex flex-col items-center justify-center gap-0.5 text-[11px] font-medium text-slate-500 hover:text-slate-800"
+          >
+            <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.6} d="M4 6h16M4 12h16M4 18h16" />
+            </svg>
+            <span>Menu</span>
+          </button>
+        )}
+      </nav>
+    </>
   );
 }
