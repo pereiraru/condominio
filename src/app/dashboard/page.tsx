@@ -1,10 +1,12 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import Sidebar from '@/components/Sidebar';
+import IncidentReportModal from '@/components/IncidentReportModal';
+import IncidentDetailModal from '@/components/IncidentDetailModal';
 import type { DashboardStats } from '@/lib/types';
 
 function formatEur(value: number): string {
@@ -56,26 +58,30 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showAllActivities, setShowAllActivities] = useState(false);
+  const [reportOpen, setReportOpen] = useState(false);
+  const [selectedIncidentId, setSelectedIncidentId] = useState<string | null>(null);
+  const [reportBanner, setReportBanner] = useState<string | null>(null);
+
+  const fetchData = useCallback(async () => {
+    try {
+      const res = await fetch('/api/stats');
+      if (!res.ok) {
+        setError('Não foi possível carregar os dados do condomínio.');
+        return;
+      }
+      const data: DashboardStats = await res.json();
+      setStats(data);
+    } catch (err) {
+      console.error('Error fetching dashboard data:', err);
+      setError('Erro de ligação ao carregar o dashboard.');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    async function fetchData() {
-      try {
-        const res = await fetch('/api/stats');
-        if (!res.ok) {
-          setError('Não foi possível carregar os dados do condomínio.');
-          return;
-        }
-        const data: DashboardStats = await res.json();
-        setStats(data);
-      } catch (err) {
-        console.error('Error fetching dashboard data:', err);
-        setError('Erro de ligação ao carregar o dashboard.');
-      } finally {
-        setLoading(false);
-      }
-    }
     fetchData();
-  }, []);
+  }, [fetchData]);
 
   const displayedActivities = stats
     ? showAllActivities
@@ -106,6 +112,16 @@ export default function Dashboard() {
             </div>
 
             <div className="flex flex-wrap items-center gap-2.5">
+              <button
+                type="button"
+                onClick={() => setReportOpen(true)}
+                className="btn-secondary h-[38px] px-4 text-sm border-amber-300 bg-amber-50/70 text-amber-900 hover:bg-amber-100"
+              >
+                <svg className="w-4 h-4 shrink-0 text-amber-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+                <span>Reportar Anomalia</span>
+              </button>
               {isAdmin ? (
                 <>
                   <Link href="/dashboard/admin/budgets" className="btn-secondary h-[38px] px-4 text-sm">
@@ -419,21 +435,59 @@ export default function Dashboard() {
                         {openIssuesCount} em aberto
                       </span>
                     </div>
+                    <div className="flex items-center gap-3">
+                      <button
+                        type="button"
+                        onClick={() => setReportOpen(true)}
+                        className="text-[11px] font-bold text-amber-800 hover:text-amber-950"
+                      >
+                        + Reportar
+                      </button>
+                      <Link
+                        href="/dashboard/incidents"
+                        className="text-[11px] font-semibold text-gray-600 hover:text-gray-900"
+                      >
+                        Ver todas →
+                      </Link>
+                    </div>
                   </div>
+
+                  {reportBanner && (
+                    <div className="mb-2.5 px-3.5 py-2 rounded-xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-800 flex items-center justify-between">
+                      <span>{reportBanner}</span>
+                      <button
+                        type="button"
+                        onClick={() => setReportBanner(null)}
+                        className="font-bold ml-2"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  )}
 
                   <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
                     <div className="divide-y divide-gray-100">
                       {stats.pendingIssues.map((issue) => {
                         const statusConfig = {
+                          open: {
+                            label: 'Registado',
+                            pill: 'bg-amber-50 text-amber-800 border-amber-200',
+                            iconBg: 'bg-amber-50 text-amber-600',
+                          },
                           pending_payment: {
                             label: 'Pendente',
                             pill: 'bg-red-50 text-red-700 border-red-100',
                             iconBg: 'bg-red-50 text-red-600',
                           },
                           in_analysis: {
-                            label: 'Em análise',
-                            pill: 'bg-amber-50 text-amber-800 border-amber-200',
-                            iconBg: 'bg-amber-50 text-amber-600',
+                            label: 'Em Tratamento',
+                            pill: 'bg-blue-50 text-blue-700 border-blue-200',
+                            iconBg: 'bg-blue-50 text-blue-600',
+                          },
+                          scheduled: {
+                            label: 'Agendado',
+                            pill: 'bg-purple-50 text-purple-700 border-purple-200',
+                            iconBg: 'bg-purple-50 text-purple-600',
                           },
                           monitoring: {
                             label: 'Acompanhamento',
@@ -448,7 +502,17 @@ export default function Dashboard() {
                         }[issue.status];
 
                         return (
-                          <div key={issue.id} className="px-4 py-3">
+                          <div
+                            key={issue.id}
+                            onClick={() => {
+                              if (issue.incidentId) {
+                                setSelectedIncidentId(issue.incidentId);
+                              }
+                            }}
+                            className={`px-4 py-3 ${
+                              issue.incidentId ? 'hover:bg-gray-50/80 cursor-pointer transition-colors' : ''
+                            }`}
+                          >
                             <div className="flex items-start justify-between gap-3">
                               <div className="flex items-start gap-2.5 min-w-0">
                                 <div
@@ -466,6 +530,11 @@ export default function Dashboard() {
                                 </div>
                                 <div className="min-w-0">
                                   <div className="flex items-center gap-1.5 flex-wrap">
+                                    {issue.code && (
+                                      <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-gray-100 text-gray-700">
+                                        {issue.code}
+                                      </span>
+                                    )}
                                     <h3 className="text-xs font-bold text-gray-900">
                                       {issue.title}
                                     </h3>
@@ -473,7 +542,7 @@ export default function Dashboard() {
                                       {issue.category}
                                     </span>
                                   </div>
-                                  <p className="text-[11px] text-gray-500 mt-0.5 leading-snug">
+                                  <p className="text-[11px] text-gray-500 mt-0.5 leading-snug line-clamp-2">
                                     {issue.description}
                                   </p>
                                 </div>
@@ -499,12 +568,14 @@ export default function Dashboard() {
 
                     <div className="bg-gray-50/80 px-4 py-2.5 border-t border-gray-100 flex items-center justify-between gap-2 text-[11px] text-gray-500">
                       <span>
-                        Brevemente: registo de anomalias por ticket (ex.: botão do elevador,
-                        iluminação).
+                        Detetou uma avaria? Registe uma anomalia para a Administração acompanhar.
                       </span>
-                      <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-gray-200/70 text-gray-600 shrink-0">
-                        Tickets em breve
-                      </span>
+                      <Link
+                        href="/dashboard/incidents"
+                        className="text-[11px] font-bold text-gray-800 hover:underline shrink-0"
+                      >
+                        Abrir Anomalias →
+                      </Link>
                     </div>
                   </div>
                 </div>
@@ -723,6 +794,25 @@ export default function Dashboard() {
           )}
         </div>
       </main>
+
+      <IncidentReportModal
+        isOpen={reportOpen}
+        onClose={() => setReportOpen(false)}
+        onCreated={(inc, reason) => {
+          setReportBanner(
+            reason
+              ? `Anomalia ${inc.code} registada (${reason}).`
+              : `Anomalia ${inc.code} registada e notificações enviadas.`
+          );
+          fetchData();
+        }}
+      />
+
+      <IncidentDetailModal
+        incidentId={selectedIncidentId}
+        onClose={() => setSelectedIncidentId(null)}
+        onUpdated={() => fetchData()}
+      />
     </div>
   );
 }

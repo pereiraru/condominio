@@ -41,6 +41,7 @@ model Unit {
   feeHistory          FeeHistory[]
   extraCharges        ExtraCharge[]
   descriptionMappings DescriptionMapping[]
+  incidents           Incident[]
   createdAt           DateTime      @default(now())
   updatedAt           DateTime      @updatedAt
 }
@@ -78,6 +79,7 @@ model Creditor {
   descriptionMappings DescriptionMapping[]
   supplierInvoices    SupplierInvoice[]
   discrepancyResolutions CreditorDiscrepancyResolution[]
+  incidents           Incident[]
   createdAt           DateTime             @default(now())
   updatedAt           DateTime             @updatedAt
 }
@@ -218,6 +220,7 @@ model SupplierInvoice {
   isPaid        Boolean      @default(false)
   transactionId String?
   transaction   Transaction? @relation(fields: [transactionId], references: [id], onDelete: SetNull)
+  incidents     Incident[]
   createdAt     DateTime     @default(now())
   updatedAt     DateTime     @updatedAt
 }
@@ -261,4 +264,73 @@ model CreditorDiscrepancyResolution {
   notes          String?
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
+}
+
+// Building incident / anomaly management (simplified ITIL)
+model Incident {
+  id                String               @id @default(cuid())
+  code              String               @unique // e.g., "INC-2026-001"
+  title             String
+  description       String
+  immediateAction   String?
+  location          String               @default("other") // "elevator" | "garage" | "lighting" | "door" | "water" | "roof" | "cleaning" | "other"
+  priority          String               @default("normal") // "low" | "normal" | "urgent"
+  visibility        String               @default("public") // "public" | "unit_private"
+  status            String               @default("open") // "open" | "in_progress" | "scheduled" | "resolved" | "closed"
+  reportedByUnitId  String?
+  reportedByUnit    Unit?                @relation(fields: [reportedByUnitId], references: [id], onDelete: SetNull)
+  reportedByName    String
+  reportedByEmail   String?
+  notifyEmails      String?              // Comma-separated personal notification emails
+  reportedAt        DateTime             @default(now())
+  assignedTo        String?
+  plannedDate       DateTime?
+  resolvedAt        DateTime?
+  resolutionNotes   String?
+  expenseAmount     Float?
+  creditorId        String?
+  creditor          Creditor?            @relation(fields: [creditorId], references: [id], onDelete: SetNull)
+  supplierInvoiceId String?
+  supplierInvoice   SupplierInvoice?     @relation(fields: [supplierInvoiceId], references: [id], onDelete: SetNull)
+  attachments       IncidentAttachment[]
+  logs              IncidentLog[]
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+}
+
+model IncidentAttachment {
+  id         String   @id @default(cuid())
+  incidentId String
+  incident   Incident @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  phase      String   @default("report") // "report" | "resolution"
+  name       String
+  filename   String
+  mimeType   String
+  size       Int
+  uploadedAt DateTime @default(now())
+}
+
+model IncidentLog {
+  id         String   @id @default(cuid())
+  incidentId String
+  incident   Incident @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  actorName  String
+  actorRole  String   @default("user") // "admin" | "user" | "system"
+  actionType String   // "created" | "status_change" | "assignment" | "comment" | "resolution" | "attachment"
+  message    String
+  createdAt  DateTime @default(now())
+}
+
+model NotificationConfig {
+  id          String   @id @default("default")
+  enabled     Boolean  @default(false)
+  adminEmails String?  // Comma-separated emails for administration alerts
+  smtpHost    String?
+  smtpPort    Int?     @default(587)
+  smtpSecure  Boolean  @default(false)
+  smtpUser    String?
+  smtpPass    String?
+  fromName    String?  @default("Condomínio Rua Vieira da Silva, 6")
+  fromEmail   String?
+  updatedAt   DateTime @updatedAt
 }

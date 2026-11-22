@@ -27,6 +27,8 @@ export async function GET(request: NextRequest) {
       '.jpg': 'image/jpeg',
       '.jpeg': 'image/jpeg',
       '.png': 'image/png',
+      '.webp': 'image/webp',
+      '.gif': 'image/gif',
       '.doc': 'application/msword',
       '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
     };

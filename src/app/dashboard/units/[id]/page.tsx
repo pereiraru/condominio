@@ -9,9 +9,12 @@ import TransactionEditPanel from '@/components/TransactionEditPanel';
 import HistoryEditPanel from '@/components/HistoryEditPanel';
 import FeeHistoryManager from '@/components/FeeHistoryManager';
 import ExtraChargesManager from '@/components/ExtraChargesManager';
-import { Unit, Transaction, Creditor, MonthPaymentStatus, FeeHistory, ExtraCharge, Owner, MonthExpectedBreakdown, DescriptionMapping } from '@/lib/types';
+import IncidentReportModal from '@/components/IncidentReportModal';
+import IncidentDetailModal from '@/components/IncidentDetailModal';
+import { LOCATION_LABEL_MAP, PRIORITY_STYLE_MAP, STATUS_STYLE_MAP } from '@/lib/incidentConstants';
+import { Unit, Transaction, Creditor, MonthPaymentStatus, FeeHistory, ExtraCharge, Owner, MonthExpectedBreakdown, DescriptionMapping, Incident } from '@/lib/types';
 
-type TabType = 'geral' | 'historico' | 'config';
+type TabType = 'geral' | 'historico' | 'anomalias' | 'config';
 
 interface EnhancedUnit extends Unit {
   transactions?: Transaction[];
@@ -93,11 +96,24 @@ export default function UnitDetailV2Page() {
   // Extras summary
   const [extrasSummary, setExtrasSummary] = useState<{ id: string; description: string; totalExpected: number; totalPaid: number; remaining: number }[]>([]);
 
+  // Unit incidents state
+  const [unitIncidents, setUnitIncidents] = useState<Incident[]>([]);
+  const [incidentReportOpen, setIncidentReportOpen] = useState(false);
+  const [selectedIncidentId, setSelectedIncidentId] = useState<string | null>(null);
+
+  async function fetchUnitIncidents() {
+    try {
+      const res = await fetch(`/api/incidents?unitId=${id}`);
+      if (res.ok) setUnitIncidents(await res.json());
+    } catch (error) { console.error(error); }
+  }
+
   useEffect(() => {
     fetchUnit();
     fetchPaymentHistory();
     fetchFeeHistory();
     fetchExtraCharges();
+    fetchUnitIncidents();
     if (isAdmin) {
       fetchAllUnits();
       fetchCreditors();
@@ -385,10 +401,11 @@ export default function UnitDetailV2Page() {
           </div>
 
           {/* Navigation Tabs */}
-          <div className="flex gap-1 mb-8 bg-gray-200/50 p-1.5 rounded-2xl w-fit">
+          <div className="flex flex-wrap gap-1 mb-8 bg-gray-200/50 p-1.5 rounded-2xl w-fit">
             {[
               { id: 'geral', label: 'Dados Gerais', icon: 'M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z' },
               { id: 'historico', label: 'Histórico de Pagamentos', icon: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01' },
+              { id: 'anomalias', label: `Anomalias Registadas (${unitIncidents.length})`, icon: 'M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z' },
               { id: 'config', label: 'Configurações', icon: 'M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z M15 12a3 3 0 11-6 0 3 3 0 016 0z' }
             ].map((tab) => (
               <button
@@ -804,6 +821,76 @@ export default function UnitDetailV2Page() {
             </div>
           )}
 
+          {/* TAB: ANOMALIAS REGISTADAS */}
+          {activeTab === 'anomalias' && (
+            <div className="space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-3 bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+                <div>
+                  <h2 className="text-lg font-bold text-gray-900">
+                    Anomalias Registadas pela Fração {unit.code}
+                  </h2>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    Acompanhe aqui o estado de resolução, responsável, datas e despesas associadas às ocorrências reportadas.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIncidentReportOpen(true)}
+                  className="btn-primary text-sm"
+                >
+                  + Reportar Anomalia
+                </button>
+              </div>
+
+              {unitIncidents.length === 0 ? (
+                <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-10 text-center text-sm text-gray-500">
+                  Esta fração ainda não tem anomalias registadas.
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {unitIncidents.map((inc) => {
+                    const statusMeta = STATUS_STYLE_MAP[inc.status] || STATUS_STYLE_MAP.open;
+                    const priorityMeta = PRIORITY_STYLE_MAP[inc.priority] || PRIORITY_STYLE_MAP.normal;
+                    return (
+                      <div
+                        key={inc.id}
+                        onClick={() => setSelectedIncidentId(inc.id)}
+                        className="group bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-md hover:border-gray-300 transition-all cursor-pointer px-5 py-3.5"
+                      >
+                        <div className="flex flex-wrap items-center justify-between gap-4">
+                          <div className="flex items-center gap-3 min-w-0">
+                            <span className="text-[11px] font-mono font-bold px-2 py-0.5 rounded bg-gray-100 text-gray-700">
+                              {inc.code}
+                            </span>
+                            <h3 className="text-sm font-bold text-gray-900">{inc.title}</h3>
+                            <span className="text-[11px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">
+                              {LOCATION_LABEL_MAP[inc.location] || inc.location}
+                            </span>
+                            <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full border ${priorityMeta.badgeClass}`}>
+                              {priorityMeta.label}
+                            </span>
+                          </div>
+                          <span className={`text-xs font-bold px-3 py-1 rounded-full border ${statusMeta.pillClass}`}>
+                            {statusMeta.label}
+                          </span>
+                        </div>
+                        <div className="mt-2 pt-2 border-t border-gray-100 flex flex-wrap items-center justify-between gap-3 text-xs text-gray-500">
+                          <span>
+                            Reportado em {new Date(inc.reportedAt).toLocaleDateString('pt-PT')} · Responsável:{' '}
+                            <strong className="text-gray-700">{inc.assignedTo || 'Administração'}</strong>
+                            {inc.plannedDate && ` · Previsto: ${new Date(inc.plannedDate).toLocaleDateString('pt-PT')}`}
+                            {inc.resolvedAt && ` · Resolvido: ${new Date(inc.resolvedAt).toLocaleDateString('pt-PT')}`}
+                          </span>
+                          <span className="text-gray-700 font-semibold">Acompanhar →</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* TAB 3: CONFIGURAÇÕES */}
           {activeTab === 'config' && (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
@@ -1079,6 +1166,19 @@ export default function UnitDetailV2Page() {
               </div>
             </div>
           )}
+
+          <IncidentReportModal
+            isOpen={incidentReportOpen}
+            onClose={() => setIncidentReportOpen(false)}
+            defaultUnitId={id}
+            onCreated={() => fetchUnitIncidents()}
+          />
+
+          <IncidentDetailModal
+            incidentId={selectedIncidentId}
+            onClose={() => setSelectedIncidentId(null)}
+            onUpdated={() => fetchUnitIncidents()}
+          />
         </div>
       </main>
     </div>

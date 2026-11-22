@@ -16,8 +16,9 @@ import BudgetAndFeeSimulatorTab from './components/BudgetAndFeeSimulatorTab';
 import UnitReportTab from './components/UnitReportTab';
 import ConvocatoriaTab from './components/ConvocatoriaTab';
 import ActaTab from './components/ActaTab';
+import NotificationConfigTab from './components/NotificationConfigTab';
 
-type AdminTab = 'budgets' | 'units' | 'convocatoria' | 'acta';
+type AdminTab = 'budgets' | 'units' | 'convocatoria' | 'acta' | 'notificacoes';
 
 export default function AdministrationCenterPage() {
   const { data: session, status } = useSession();
@@ -160,6 +161,7 @@ export default function AdministrationCenterPage() {
                 { id: 'units' as const, label: 'Relatório por Fração' },
                 { id: 'convocatoria' as const, label: 'Convocatória' },
                 { id: 'acta' as const, label: 'Ata da Reunião' },
+                { id: 'notificacoes' as const, label: 'Notificações & Email' },
               ].map((tab) => (
                 <button
                   key={tab.id}
@@ -224,6 +226,8 @@ export default function AdministrationCenterPage() {
                   feeSimConfig={feeSimConfig}
                 />
               )}
+
+              {activeTab === 'notificacoes' && <NotificationConfigTab />}
             </>
           )}
         </div>

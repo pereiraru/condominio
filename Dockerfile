@@ -64,8 +64,8 @@ COPY --from=builder /app/node_modules/xlsx ./node_modules/xlsx
 # Copy Excel data files for import
 COPY --from=builder /app/extrato.xlsx ./
 
-# Create data directory for SQLite
-RUN mkdir -p /app/data && chown nextjs:nodejs /app/data
+# Create data and upload directories
+RUN mkdir -p /app/data /app/public/uploads/attachments && chown -R nextjs:nodejs /app/data /app/public/uploads
 
 USER nextjs
 

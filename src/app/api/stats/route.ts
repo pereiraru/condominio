@@ -8,6 +8,7 @@ import {
   FeeHistoryRecord,
   ExtraChargeRecord,
 } from '@/lib/feeHistory';
+import { canViewerSeeIncident } from '@/lib/incidents';
 import type {
   DashboardAnnouncement,
   DashboardBankAccountSummary,
@@ -84,6 +85,7 @@ export async function GET() {
       units,
       creditors,
       allExtraordinaryTxs,
+      rawIncidents,
     ] = await Promise.all([
       prisma.transaction.findFirst({
         orderBy: { date: 'desc' },
@@ -155,6 +157,10 @@ export async function GET() {
         where: { amount: { lt: 0 } },
         include: { creditor: true },
         orderBy: { date: 'desc' },
+      }),
+      prisma.incident.findMany({
+        orderBy: [{ reportedAt: 'desc' }, { createdAt: 'desc' }],
+        take: 20,
       }),
     ]);
 
@@ -444,13 +450,67 @@ export async function GET() {
           amount: round2(Math.abs(t.amount)),
         }));
 
-    // 6. Pending issues & building anomalies feed (no unpaid supplier invoices)
+    // 6. Pending issues & building anomalies feed (real Incident records + technical tracking)
+    const incidentLocationLabels: Record<string, string> = {
+      elevator: 'Elevadores',
+      garage: 'Garagem',
+      lighting: 'Iluminação',
+      door: 'Porta / Campainhas',
+      water: 'Água / Canalizações',
+      roof: 'Cobertura / Fachada',
+      cleaning: 'Limpeza',
+      other: 'Geral',
+    };
+
+    const viewer = {
+      role: session.user?.role,
+      unitId: session.user?.unitId,
+      email: session.user?.email,
+    };
+
+    const incidentIssues: DashboardPendingIssue[] = rawIncidents
+      .filter((inc) => canViewerSeeIncident(inc, viewer))
+      .slice(0, 6)
+      .map((inc) => {
+        const statusMap: Record<string, DashboardPendingIssue['status']> = {
+          open: 'open',
+          in_progress: 'in_analysis',
+          scheduled: 'scheduled',
+          resolved: 'resolved',
+          closed: 'resolved',
+        };
+        const priorityMap: Record<string, DashboardPendingIssue['priority']> = {
+          urgent: 'high',
+          normal: 'medium',
+          low: 'low',
+        };
+        return {
+          id: `inc-${inc.id}`,
+          incidentId: inc.id,
+          code: inc.code,
+          title: inc.title,
+          description: inc.description,
+          category: incidentLocationLabels[inc.location] || 'Geral',
+          status: statusMap[inc.status] || 'open',
+          priority: priorityMap[inc.priority] || 'medium',
+          amount: null,
+          dateLabel: inc.plannedDate
+            ? `Previsto: ${formatShortDatePt(inc.plannedDate)}`
+            : inc.resolvedAt
+              ? `Resolvido: ${formatShortDatePt(inc.resolvedAt)}`
+              : formatShortDatePt(inc.reportedAt),
+        };
+      });
+
     const pendingIssues: DashboardPendingIssue[] = [
+      ...incidentIssues,
       {
         id: 'issue-equipments',
+        incidentId: null,
+        code: null,
         title: 'Elevadores, Bomba de Água e Portão da Garagem',
         description:
-          'Acompanhamento técnico contínuo dos equipamentos comuns. Brevemente será possível reportar anomalias (ex.: botão do elevador, iluminação) por ticket.',
+          'Acompanhamento técnico contínuo dos equipamentos comuns. Utilize o botão "Reportar Anomalia" caso detete alguma avaria.',
         category: 'Equipamentos',
         status: 'monitoring',
         priority: 'low',

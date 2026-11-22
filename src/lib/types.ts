@@ -214,10 +214,12 @@ export interface DashboardAnnouncement {
 
 export interface DashboardPendingIssue {
   id: string;
+  incidentId?: string | null;
+  code?: string | null;
   title: string;
   description: string;
   category: string;
-  status: 'pending_payment' | 'in_analysis' | 'monitoring' | 'resolved';
+  status: 'open' | 'pending_payment' | 'in_analysis' | 'scheduled' | 'monitoring' | 'resolved';
   priority: 'high' | 'medium' | 'low';
   amount?: number | null;
   dateLabel?: string | null;
@@ -310,4 +312,82 @@ export interface DescriptionMapping {
   unitId?: string | null;
   creditorId?: string | null;
   createdAt: string;
+}
+
+export type IncidentStatus = 'open' | 'in_progress' | 'scheduled' | 'resolved' | 'closed';
+export type IncidentPriority = 'low' | 'normal' | 'urgent';
+export type IncidentVisibility = 'public' | 'unit_private';
+export type IncidentLocation =
+  | 'elevator'
+  | 'garage'
+  | 'lighting'
+  | 'door'
+  | 'water'
+  | 'roof'
+  | 'cleaning'
+  | 'other';
+
+export interface IncidentAttachment {
+  id: string;
+  incidentId: string;
+  phase: 'report' | 'resolution';
+  name: string;
+  filename: string;
+  mimeType: string;
+  size: number;
+  uploadedAt: string;
+}
+
+export interface IncidentLog {
+  id: string;
+  incidentId: string;
+  actorName: string;
+  actorRole: string;
+  actionType: string;
+  message: string;
+  createdAt: string;
+}
+
+export interface Incident {
+  id: string;
+  code: string;
+  title: string;
+  description: string;
+  immediateAction?: string | null;
+  location: IncidentLocation | string;
+  priority: IncidentPriority | string;
+  visibility: IncidentVisibility | string;
+  status: IncidentStatus | string;
+  reportedByUnitId?: string | null;
+  reportedByUnit?: { id: string; code: string; description?: string | null } | null;
+  reportedByName: string;
+  reportedByEmail?: string | null;
+  notifyEmails?: string | null;
+  reportedAt: string;
+  assignedTo?: string | null;
+  plannedDate?: string | null;
+  resolvedAt?: string | null;
+  resolutionNotes?: string | null;
+  expenseAmount?: number | null;
+  creditorId?: string | null;
+  creditor?: { id: string; name: string; category: string } | null;
+  supplierInvoiceId?: string | null;
+  supplierInvoice?: { id: string; description: string; amountDue: number; isPaid: boolean } | null;
+  attachments?: IncidentAttachment[];
+  logs?: IncidentLog[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface NotificationConfigData {
+  id: string;
+  enabled: boolean;
+  adminEmails: string;
+  smtpHost: string;
+  smtpPort: number;
+  smtpSecure: boolean;
+  smtpUser: string;
+  smtpPass: string;
+  fromName: string;
+  fromEmail: string;
 }
